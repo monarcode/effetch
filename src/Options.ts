@@ -124,6 +124,10 @@ export interface BaseOptions<
 	/**
 	 * Decodes the 2xx JSON body with this schema. Without it, the call
 	 * succeeds with the raw `HttpClientResponse`.
+	 *
+	 * An empty body (204, HEAD, …) is decoded as JSON `null`: use
+	 * `Schema.Void` for endpoints that return nothing. Non-2xx responses,
+	 * 3xx included, fail with an `HttpError` before this runs.
 	 */
 	readonly output?: O;
 	/** Decodes non-2xx bodies into `HttpError.body`. Overrides the client's. */

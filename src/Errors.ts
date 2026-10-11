@@ -40,13 +40,21 @@ export class NetworkError extends Schema.TaggedError<NetworkError>()(
 /**
  * The server answered with a non-2xx status.
  *
+ * Only 2xx counts as success, as in `fetch`'s `response.ok`. 3xx is an
+ * error too: `fetch` follows redirects itself, so a 3xx only reaches you
+ * with `redirect: "manual"` or a conditional request answered with
+ * `304 Not Modified`. Catch it by `status` if you expect one.
+ *
+ * - `url` is the request URL without its query string, so secrets in query
+ *   parameters stay out of logs.
  * - `headers` are the response headers. They're Effect `Headers`, so
  *   sensitive ones (`set-cookie`, `authorization`, …) print as
  *   `<redacted>` when the error is logged or serialised.
  * - `text` is always the raw response body (`""` if it couldn't be read).
  * - `body` is the body decoded with the call's (or client's) `error` schema,
  *   or `undefined` if it didn't match. Without an `error` schema, `body` is
- *   the parsed JSON when `text` is valid JSON, else `undefined`.
+ *   the parsed JSON when `text` is valid JSON, else `undefined`. An empty
+ *   body is always `undefined`. Reading `body` never fails the call.
  *
  * Use {@link HttpError.With} for the type of an `HttpError` whose `body` was
  * decoded with a known schema.
@@ -121,8 +129,16 @@ export declare namespace HttpError {
  * A 2xx response body didn't match the call's `output` schema, wasn't valid
  * JSON, or couldn't be read.
  *
- * `issue` is the schema issue (or the read failure) and `message` is a
- * readable summary of it.
+ * `issue` is what went wrong and `message` is a readable summary of it:
+ *
+ * - the schema issue when the body doesn't match `output`,
+ * - the `SyntaxError` when the body isn't valid JSON,
+ * - the `HttpClientError` when the body couldn't be read.
+ *
+ * An empty body (204, HEAD, …) is decoded as JSON `null`, so it only
+ * passes schemas that accept nothing, such as `Schema.Void`.
+ *
+ * `url` is the request URL without its query string.
  *
  * @example
  * ```ts
