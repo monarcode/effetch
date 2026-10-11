@@ -49,6 +49,7 @@
 		"prepare": "husky",
 		"lint": "oxlint .",
 		"lint:fix": "oxlint --fix .",
+		"lint:effect": "effect-language-service diagnostics --project tsconfig.json --format text",
 		"format": "oxfmt --write .",
 		"format:check": "oxfmt --check .",
 		"build": "tsdown",
@@ -58,7 +59,7 @@
 		"test:watch": "vitest",
 		"check:package": "publint --strict && attw --pack . --profile esm-only",
 		"smoke": "bash scripts/smoke.sh",
-		"check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm test && pnpm run build && pnpm run check:package && pnpm run smoke",
+		"check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run lint:effect && pnpm test && pnpm run build && pnpm run check:package && pnpm run smoke",
 		"prepublishOnly": "pnpm run check"
 	},
 	"devDependencies": {

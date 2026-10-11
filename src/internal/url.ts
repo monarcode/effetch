@@ -16,3 +16,12 @@ export const joinUrl = (base: string | undefined, path: string): string =>
 	base === undefined || isAbsoluteUrl(path)
 		? path
 		: base.replace(/\/+$/, "") + "/" + path.replace(/^\/+/, "");
+
+/**
+ * `url` without its query string or fragment, so secrets such as
+ * `?api_key=…` never reach error messages or logs.
+ */
+export const errorUrl = (url: string): string => url.split(/[?#]/, 1)[0] ?? "";
+
+/** True if `url` contains a query string or a fragment. */
+export const hasQueryOrFragment = (url: string): boolean => /[?#]/.test(url);

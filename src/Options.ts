@@ -1,6 +1,7 @@
 import type * as Effect from "effect/Effect";
 import type * as Headers from "effect/http/Headers";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import type * as HttpMethod from "effect/http/HttpMethod";
 import type * as UrlParams from "effect/http/UrlParams";
 import type * as Schema from "effect/Schema";
 
@@ -124,6 +125,9 @@ export interface BaseOptions<
 	/**
 	 * Decodes the 2xx JSON body with this schema. Without it, the call
 	 * succeeds with the raw `HttpClientResponse`.
+	 *
+	 * With an `output`, the request carries `Accept: application/json`,
+	 * unless an `accept` header is set on the call or the client.
 	 *
 	 * An empty body (204, HEAD, …) is decoded as JSON `null`: use
 	 * `Schema.Void` for endpoints that return nothing. Non-2xx responses,
@@ -291,8 +295,7 @@ export type CallError<
 
 /**
  * The services a call requires: those needed to decode `output` and
- * `error` and to encode `input`. Plugin services are resolved by `make`,
- * so they're not here.
+ * `error` and to encode `input`.
  *
  * @example
  * ```ts
@@ -317,6 +320,38 @@ export type CallServices<
 	| (O extends AnySchema ? O["DecodingServices"] : never)
 	| EB["DecodingServices"]
 	| I["EncodingServices"];
+
+/**
+ * The Effect a call returns: it succeeds with {@link Success}, fails with
+ * {@link CallError} and requires {@link CallServices}.
+ *
+ * - `O`: the `output` schema, or `undefined` for the raw response.
+ * - `EB`: the `error` schema for non-2xx bodies.
+ * - `I`: the `input` schema (`Schema.Unknown` when the call has none).
+ * - `Ps`: the client's plugins.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * type Call = Fetch.CallEffect<
+ *   Schema.Struct<{ id: Schema.Number }>,
+ *   Schema.Unknown,
+ *   Schema.Unknown,
+ *   []
+ * >;
+ * //   ^? Effect<{ readonly id: number }, NetworkError | HttpError.With<unknown> | DecodeError, never>
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type CallEffect<
+	O extends AnySchema | undefined,
+	EB extends AnySchema,
+	I extends AnySchema,
+	Ps extends ReadonlyArray<Plugin.Any>,
+> = Effect.Effect<Success<O>, CallError<O, EB, Ps>, CallServices<O, EB, I>>;
 
 /**
  * The signature of `get`, `head` and `options`: no `body` or `input`.
@@ -348,11 +383,7 @@ export interface NoBodyMethod<
 	>(
 		path: P,
 		...args: Args<P, NoBodyRequestOptions<P, O, EB, Ps>>
-	): Effect.Effect<
-		Success<O>,
-		CallError<O, EB, Ps>,
-		CallServices<O, EB, Schema.Unknown>
-	>;
+	): CallEffect<O, EB, Schema.Unknown, Ps>;
 }
 
 /**
@@ -391,5 +422,45 @@ export interface BodyMethod<
 	>(
 		path: P,
 		...args: Args<P, RequestOptions<P, O, EB, I, Ps>>
-	): Effect.Effect<Success<O>, CallError<O, EB, Ps>, CallServices<O, EB, I>>;
+	): CallEffect<O, EB, I, Ps>;
+}
+
+/**
+ * The signature of `request`: any HTTP method, `body` allowed, typed by
+ * `input` when given.
+ *
+ * - `Ps`: the client's plugins.
+ * - `DefaultEB`: the client's `error` schema, used when a call has none.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * declare const request: Fetch.RequestMethod<[], Schema.Unknown>;
+ *
+ * const Todo = Schema.Struct({ id: Schema.Number, done: Schema.Boolean });
+ * const updated = request("PATCH", "/todos/:id", {
+ *   params: { id: 1 },
+ *   body: { done: true },
+ *   output: Todo,
+ * });
+ * ```
+ *
+ * @since 0.1.0
+ */
+export interface RequestMethod<
+	Ps extends ReadonlyArray<Plugin.Any>,
+	DefaultEB extends AnySchema,
+> {
+	<
+		P extends string,
+		O extends AnySchema | undefined = undefined,
+		EB extends AnySchema = DefaultEB,
+		I extends AnySchema = Schema.Unknown,
+	>(
+		method: HttpMethod.HttpMethod,
+		path: P,
+		...args: Args<P, RequestOptions<P, O, EB, I, Ps>>
+	): CallEffect<O, EB, I, Ps>;
 }

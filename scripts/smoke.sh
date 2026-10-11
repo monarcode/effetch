@@ -54,7 +54,11 @@ npm install --silent --no-audit --no-fund --no-package-lock \
 	"$tarball" "effect@$effect_version" "typescript@$typescript_version"
 
 cat >consumer.ts <<'TS'
+import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Schema from "effect/Schema";
 import * as Fetch from "@monarcode/effetch";
 import * as Plugins from "@monarcode/effetch/plugins";
 
@@ -91,6 +95,48 @@ if (!Fetch.isFetchError(error) || JSON.stringify(error).includes("secret")) {
 if (typeof Plugins !== "object") {
 	throw new Error("@monarcode/effetch/plugins did not load");
 }
+
+const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
+
+const seen: Array<string> = [];
+const mock = HttpClient.make((request, url) => {
+	seen.push(`${request.method} ${url.href}`);
+	return Effect.succeed(
+		HttpClientResponse.fromWeb(
+			request,
+			new Response(JSON.stringify({ id: 1, title: "Write docs" }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			}),
+		),
+	);
+});
+
+const program = Effect.gen(function* () {
+	const api = yield* Fetch.make({ baseUrl: "https://api.test" });
+	return yield* api.get("/todos/:id", {
+		params: { id: 1 },
+		query: { expand: "owner" },
+		output: Todo,
+	});
+}).pipe(Effect.provideService(HttpClient.HttpClient, mock));
+
+const todo = await Effect.runPromise(program);
+const typed: { readonly id: number; readonly title: string } = todo;
+if (typed.id !== 1 || typed.title !== "Write docs") {
+	throw new Error(`Unexpected todo: ${JSON.stringify(todo)}`);
+}
+if (seen.join() !== "GET https://api.test/todos/1?expand=owner") {
+	throw new Error(`Unexpected request: ${seen.join()}`);
+}
+
+const rejected = (api: Fetch.Client) => {
+	// @ts-expect-error the :id path param is required
+	api.get("/todos/:id");
+	// @ts-expect-error get takes no body
+	api.get("/todos", { body: {} });
+};
+void rejected;
 
 console.log("smoke: ok");
 TS

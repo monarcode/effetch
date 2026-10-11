@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { isAbsoluteUrl, joinUrl } from "../src/internal/url.js";
+import {
+	errorUrl,
+	hasQueryOrFragment,
+	isAbsoluteUrl,
+	joinUrl,
+} from "../src/internal/url.js";
 
 describe("isAbsoluteUrl", () => {
 	it("is true for http and https URLs", () => {
@@ -72,5 +77,31 @@ describe("joinUrl", () => {
 		expect(joinUrl("http://localhost:3000", "/x")).toBe(
 			"http://localhost:3000/x",
 		);
+	});
+});
+
+describe("errorUrl", () => {
+	it("drops the query string and the fragment", () => {
+		expect(errorUrl("https://a.test/x?api_key=SECRET")).toBe(
+			"https://a.test/x",
+		);
+		expect(errorUrl("https://a.test/x#frag")).toBe("https://a.test/x");
+		expect(errorUrl("https://a.test/x?a=1#frag")).toBe("https://a.test/x");
+		expect(errorUrl("https://a.test/x#frag?a=1")).toBe("https://a.test/x");
+	});
+
+	it("leaves a URL without either alone", () => {
+		expect(errorUrl("https://a.test/x")).toBe("https://a.test/x");
+		expect(errorUrl("/relative/x")).toBe("/relative/x");
+		expect(errorUrl("")).toBe("");
+	});
+});
+
+describe("hasQueryOrFragment", () => {
+	it("detects a query string or a fragment", () => {
+		expect(hasQueryOrFragment("https://a.test/v1?key=K")).toBe(true);
+		expect(hasQueryOrFragment("https://a.test/v1#frag")).toBe(true);
+		expect(hasQueryOrFragment("https://a.test/v1")).toBe(false);
+		expect(hasQueryOrFragment("https://a.test:3000/v1/")).toBe(false);
 	});
 });

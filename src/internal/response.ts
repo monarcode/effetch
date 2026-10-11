@@ -4,16 +4,10 @@ import * as Schema from "effect/Schema";
 
 import { DecodeError, HttpError } from "../Errors.js";
 import type { AnySchema } from "../Options.js";
+import { errorUrl } from "./url.js";
 
 const messageOf = (error: unknown): string =>
 	error instanceof Error ? error.message : String(error);
-
-/**
- * The request URL without its query string or fragment, so secrets such as
- * `?api_key=…` never reach error messages or logs.
- */
-const errorUrl = (response: HttpClientResponse.HttpClientResponse): string =>
-	response.request.url.split(/[?#]/, 1)[0] ?? "";
 
 /**
  * `undefined` for an empty or whitespace-only body, else the parsed JSON.
@@ -97,7 +91,7 @@ export function checkStatus<EB extends AnySchema>(
 		return yield* Effect.fail(
 			new HttpError({
 				method: response.request.method,
-				url: errorUrl(response),
+				url: errorUrl(response.request.url),
 				status: response.status,
 				headers: response.headers,
 				text,
@@ -128,7 +122,7 @@ export const decodeOutput = <O extends AnySchema>(
 	const failure = (issue: unknown, message: string) =>
 		new DecodeError({
 			method: response.request.method,
-			url: errorUrl(response),
+			url: errorUrl(response.request.url),
 			status: response.status,
 			issue,
 			message,
