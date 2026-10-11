@@ -3,8 +3,10 @@
 
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schema from "effect/Schema";
 
 import { describe, expectTypeOf, it } from "vitest";
@@ -15,6 +17,39 @@ const ApiError = Schema.Struct({ code: Schema.String });
 const Todo = Schema.Struct({ id: Schema.Number });
 
 class Origin extends Context.Service<Origin, string>()("Origin") {}
+class Session extends Context.Service<Session, string>()("Session") {}
+class TokenError extends Data.TaggedError("TokenError")<{}> {}
+class Unavailable extends Data.TaggedError("Unavailable")<{}> {}
+
+declare const token: Effect.Effect<string, TokenError, Session>;
+
+const bearer = Fetch.plugin({
+	name: "bearer",
+	onRequest: (request) =>
+		Effect.map(token, (value) =>
+			HttpClientRequest.bearerToken(request, value),
+		),
+});
+
+const retry = Fetch.plugin({
+	name: "retry",
+	defaults: { times: 2 },
+	wrap: (client) => HttpClient.retry(client, { times: 2 }),
+});
+
+const unavailable = Fetch.plugin({
+	name: "unavailable",
+	wrap: (client) =>
+		HttpClient.transformResponse(client, (response) =>
+			Effect.gen(function* () {
+				const received = yield* response;
+				if (received.status === 503) {
+					return yield* new Unavailable();
+				}
+				return received;
+			}),
+		),
+});
 
 describe("make", () => {
 	it("needs an HttpClient and makes a Client with an unknown error body", () => {
@@ -61,7 +96,7 @@ describe("make", () => {
 			headers: { accept: "application/json" },
 		};
 		expectTypeOf(config).toEqualTypeOf<
-			Fetch.ClientConfig<Schema.Unknown, never, never>
+			Fetch.ClientConfig<[], Schema.Unknown, never, never>
 		>();
 		expectTypeOf(Fetch.make(config)).toEqualTypeOf<
 			Effect.Effect<
@@ -77,6 +112,67 @@ describe("make", () => {
 		Fetch.make({ baseURL: "https://api.test" });
 		// @ts-expect-error baseUrl is a string or an Effect of one
 		Fetch.make({ baseUrl: 42 });
+	});
+});
+
+describe("make with plugins", () => {
+	it("requires the plugins' services from make", () => {
+		expectTypeOf(Fetch.make({ plugins: [bearer, retry] })).toEqualTypeOf<
+			Effect.Effect<
+				Fetch.Client<
+					readonly [typeof bearer, typeof retry],
+					Schema.Unknown
+				>,
+				never,
+				HttpClient.HttpClient | Session
+			>
+		>();
+	});
+
+	it("rejects things that aren't plugins", () => {
+		// @ts-expect-error a plugin needs a name
+		Fetch.make({ plugins: [{ onRequest: Effect.succeed }] });
+		// @ts-expect-error plugins is a list
+		Fetch.make({ plugins: bearer });
+	});
+});
+
+declare const plugged: Fetch.Client<
+	readonly [typeof bearer, typeof retry, typeof unavailable]
+>;
+
+describe("Client with plugins", () => {
+	it("adds the plugins' errors to calls, which need no services", () => {
+		const call = plugged.get("/todos", { output: Todo });
+		expectTypeOf<Effect.Error<typeof call>>().toEqualTypeOf<
+			| Fetch.NetworkError
+			| Fetch.HttpError.With<unknown>
+			| Fetch.DecodeError
+			| TokenError
+			| Unavailable
+		>();
+		expectTypeOf<Effect.Services<typeof call>>().toBeNever();
+	});
+
+	it("adds the plugins' errors to httpClient", () => {
+		expectTypeOf(plugged.httpClient).toEqualTypeOf<
+			HttpClient.HttpClient.With<
+				Fetch.NetworkError | TokenError | Unavailable
+			>
+		>();
+	});
+
+	it("types per-call overrides from the plugins", () => {
+		plugged.get("/todos", {
+			plugins: { bearer: false, retry: { times: 0 }, unavailable: false },
+		});
+		plugged.post("/todos", { body: {}, plugins: { retry: {} } });
+		// @ts-expect-error no plugin is called "retyr"
+		plugged.get("/todos", { plugins: { retyr: false } });
+		// @ts-expect-error times is a number
+		plugged.get("/todos", { plugins: { retry: { times: "0" } } });
+		// @ts-expect-error bearer has no options to override
+		plugged.get("/todos", { plugins: { bearer: { scheme: "Token" } } });
 	});
 });
 

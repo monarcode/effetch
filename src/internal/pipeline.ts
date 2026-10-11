@@ -35,16 +35,18 @@ export const mapClientErrors = (
 
 const bodyHeaders = ["content-type", "content-length"];
 
-export const withDefaults = <E>(
-	client: HttpClient.HttpClient.With<E>,
+export type ApplyDefaults = (
+	request: HttpClientRequest.HttpClientRequest,
+) => HttpClientRequest.HttpClientRequest;
+
+export const makeApplyDefaults = (
 	baseUrl: string | undefined,
 	headers: Headers.Headers,
-): HttpClient.HttpClient.With<E> => {
+): ApplyDefaults => {
 	const defaults = Headers.removeMany(headers, bodyHeaders);
-	return HttpClient.mapRequestInput(client, (request) =>
+	return (request) =>
 		HttpClientRequest.setHeaders(
 			HttpClientRequest.setUrl(request, joinUrl(baseUrl, request.url)),
 			Headers.merge(defaults, request.headers),
-		),
-	);
+		);
 };

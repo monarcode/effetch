@@ -37,7 +37,7 @@ const setup = <
 	R = never,
 >(
 	script: Script,
-	config: Fetch.ClientConfig<EB, E, R> = {},
+	config: Fetch.ClientConfig<[], EB, E, R> = {},
 ) =>
 	Effect.gen(function* () {
 		const mock = makeMockClient(script);
@@ -308,6 +308,22 @@ describe("headers", () => {
 			);
 			expect(wire(mock, 1).headers["traceparent"]).toBeUndefined();
 			expect(wire(mock, 1).headers["b3"]).toBeUndefined();
+		}),
+	);
+
+	it.effect("leave tracing off for every call when make had it off", () =>
+		Effect.gen(function* () {
+			const { mock, api } = yield* setup([reply.json({})]).pipe(
+				Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+			);
+			yield* api.get("/todos");
+			yield* api
+				.get("/todos")
+				.pipe(
+					Effect.provideService(HttpClient.TracerPropagationEnabled, true),
+				);
+			expect(wire(mock, 0).headers["traceparent"]).toBeUndefined();
+			expect(wire(mock, 1).headers["traceparent"]).toBeDefined();
 		}),
 	);
 });

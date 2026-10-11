@@ -26,10 +26,14 @@ declare const UpstreamServicesTypeId: unique symbol;
 /**
  * What a plugin hook receives besides the request or response.
  *
- * - `request`: the request being sent (for `onResponse`, the request that
- *   produced the response).
+ * - `request`: in `onRequest`, the request it receives. In `onResponse`,
+ *   the request this plugin passed on (plugins after it may have changed it
+ *   further; `response.request` is the one that was sent). In `onError`,
+ *   the request as the call built it, before any plugin ran.
  * - `options`: the plugin's `defaults` merged with this call's override,
- *   `{ ...defaults, ...override }`.
+ *   `{ ...defaults, ...override }`, where `undefined` values in the
+ *   override keep the default. `undefined` for a plugin without
+ *   `defaults`.
  *
  * @example
  * ```ts
@@ -57,7 +61,8 @@ export interface PluginContext<Opts> {
 /**
  * A plugin hooks into every call a client makes.
  *
- * - `onRequest` can change the request. Plugins run it in array order.
+ * - `onRequest` can change the request, or fail. Plugins run it in array
+ *   order. It sees the full URL and the client's default headers.
  * - `onResponse` can change the response, or fail. It runs in reverse order
  *   and sees every response, non-2xx included: the library checks the status
  *   and decodes `output` only after the whole plugin chain.
@@ -67,7 +72,12 @@ export interface PluginContext<Opts> {
  *   It can add errors (`E`) but can't remove the ones from further in.
  *
  * `plugins[0]` is the outermost layer. A plugin's `wrap` encloses its own
- * hooks.
+ * `onRequest` and `onResponse` and every plugin after it, so a retrying
+ * `wrap` runs them again on each attempt. Transport failures reach plugins
+ * as `NetworkError`s, never as Effect's `HttpClientError`.
+ *
+ * The services a plugin needs (`R`) are required by `make`, once; calls on
+ * the client don't need them.
  *
  * `Opts` is the type of the options calls can override, and `defaults`
  * holds their values. Calls override them with
@@ -170,7 +180,13 @@ export declare namespace Plugin {
 
 	/**
 	 * The `onError` hook. `error` is a `FetchError`, another plugin's error,
-	 * or a defect's cause. It can't fail or change the call's outcome.
+	 * or a defect's cause. It can't fail or change the call's outcome: if it
+	 * dies, the defect is logged at Debug level and ignored.
+	 *
+	 * Hooks run in array order, after the status check and decoding. They
+	 * don't run when the call succeeds or is interrupted, when it dies
+	 * before its request is built (a missing path param, a body that can't
+	 * be encoded), or for a plugin the call skips.
 	 *
 	 * @example
 	 * ```ts

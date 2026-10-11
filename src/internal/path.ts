@@ -1,7 +1,5 @@
 import type { PathParamValue } from "../Path.js";
-
-const hasOwn = (object: object, key: string): boolean =>
-	Object.prototype.hasOwnProperty.call(object, key);
+import { hasOwn } from "./object.js";
 
 /**
  * Replaces each `:name` segment of `path` with the URI-encoded value of

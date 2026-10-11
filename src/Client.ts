@@ -5,7 +5,8 @@ import type * as HttpMethod from "effect/http/HttpMethod";
 import type * as Schema from "effect/Schema";
 
 import type { NetworkError } from "./Errors.js";
-import { mapClientErrors, withDefaults } from "./internal/pipeline.js";
+import { makeApplyDefaults, mapClientErrors } from "./internal/pipeline.js";
+import { applyPlugins, provideOverrides } from "./internal/plugins.js";
 import { makeCall, type RuntimeOptions } from "./internal/request.js";
 import { hasQueryOrFragment } from "./internal/url.js";
 import type {
@@ -31,25 +32,39 @@ import type { Plugin } from "./Plugin.js";
  *   header is set here or on the call.
  * - `error`: the default schema for non-2xx response bodies. A call's own
  *   `error` option replaces it.
+ * - `plugins`: hooks into every call (see {@link Plugin}). `plugins[0]` is
+ *   the outermost layer: its `onRequest` runs first and its `onResponse`
+ *   last. Names must be unique. Pass the list inline: annotating it as
+ *   `Plugin.Any[]` erases the plugins' types.
  *
  * @example
  * ```ts
  * import * as Config from "effect/Config";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpClientRequest from "effect/http/HttpClientRequest";
  * import * as Schema from "effect/Schema";
  * import * as Fetch from "@monarcode/effetch";
  *
  * const ApiError = Schema.Struct({ code: Schema.String });
  *
+ * const apiKey = Fetch.plugin({
+ *   name: "apiKey",
+ *   onRequest: (request) =>
+ *     Effect.succeed(HttpClientRequest.setHeader(request, "x-api-key", "key")),
+ * });
+ *
  * const make = Fetch.make({
  *   baseUrl: Config.String("API_URL"),
  *   headers: { accept: "application/json" },
  *   error: ApiError,
+ *   plugins: [apiKey],
  * });
  * ```
  *
  * @since 0.1.0
  */
 export interface ClientConfig<
+	Ps extends ReadonlyArray<Plugin.Any> = [],
 	EB extends AnySchema = Schema.Unknown,
 	BaseE = never,
 	BaseR = never,
@@ -60,11 +75,14 @@ export interface ClientConfig<
 	readonly headers?: Headers.Input | undefined;
 	/** Default schema for non-2xx response bodies. */
 	readonly error?: EB | undefined;
+	/** Plugins, outermost first. Names must be unique. */
+	readonly plugins?: Ps | undefined;
 }
 
 /**
  * A client made by {@link make}. Every call returns an Effect that needs
- * no services, apart from those the call's own schemas require.
+ * no services, apart from those the call's own schemas require, and that
+ * can fail with the plugins' errors on top of effetch's own.
  *
  * - `Ps`: the plugins the client was made with.
  * - `EB`: the client's default `error` schema.
@@ -93,11 +111,13 @@ export interface Client<
 > {
 	/**
 	 * The configured `HttpClient` underneath. It adds the base URL and the
-	 * default headers to the requests you give it, but does no status check
-	 * and no decoding.
+	 * default headers to the requests you give it and runs every plugin
+	 * with its defaults, but does no status check, no decoding and no
+	 * `onError` hooks.
 	 *
-	 * Transport failures are `NetworkError`s. Use it for anything the
-	 * methods don't cover, such as streaming a response.
+	 * Transport failures are `NetworkError`s, next to the plugins' own
+	 * errors. Use it for anything the methods don't cover, such as
+	 * streaming a response.
 	 *
 	 * @example
 	 * ```ts
@@ -283,18 +303,25 @@ export interface Client<
  * Makes a {@link Client}.
  *
  * `make` is an Effect: it needs an `HttpClient` (for example
- * `FetchHttpClient.layer`, or a mock in tests) plus whatever the `baseUrl`
- * Effect needs. The client it returns holds on to that `HttpClient`, so
- * its calls need nothing from the environment.
+ * `FetchHttpClient.layer`, or a mock in tests), whatever the `baseUrl`
+ * Effect needs, and the services the plugins need. The client holds on to
+ * all of them, so its calls need nothing from the environment apart from
+ * the services of their own schemas.
+ *
+ * Calls run with the services and references `make` had, plus those of
+ * the calling fiber, which win: a reference provided around one call (such
+ * as `FetchHttpClient.RequestInit`) overrides the one `make` saw.
  *
  * Calls fail with `NetworkError` when no response arrives, `HttpError` for
- * a non-2xx status, and `DecodeError` when `output` doesn't match.
+ * a non-2xx status, `DecodeError` when `output` doesn't match, and with
+ * the plugins' own errors.
  *
  * Invalid input is a defect, not a typed error, because it's a mistake in
- * the calling code: a missing path param, a body that can't be encoded, a
- * body on a `GET` or `HEAD` request, a `baseUrl` with a query string or a
- * fragment, and, outside browsers, a relative URL without a `baseUrl`
- * (browsers resolve it against the page's origin).
+ * the calling code: two plugins with the same name, a missing path param,
+ * a body that can't be encoded, a body on a `GET` or `HEAD` request, a
+ * `baseUrl` with a query string or a fragment, and, outside browsers, a
+ * relative URL without a `baseUrl` (browsers resolve it against the page's
+ * origin).
  *
  * An `HttpClient` that fails on non-2xx statuses (`filterStatusOk`) works
  * too: effetch takes the response back and reports the usual `HttpError`.
@@ -302,7 +329,8 @@ export interface Client<
  * **Browsers and tracing headers.** Effect's `HttpClient` adds `traceparent`
  * and `b3` headers to every request. In a browser, those make cross-origin
  * calls to APIs that don't allow them fail the CORS preflight. Turn that
- * off where you run the program:
+ * off where you run the program, or only around `make`, which then applies
+ * it to all of the client's calls:
  *
  * ```ts
  * import * as Effect from "effect/Effect";
@@ -340,14 +368,30 @@ export interface Client<
  * @since 0.1.0
  */
 export const make = <
+	const Ps extends ReadonlyArray<Plugin.Any> = [],
 	EB extends AnySchema = Schema.Unknown,
 	BaseE = never,
 	BaseR = never,
 >(
-	config: ClientConfig<EB, BaseE, BaseR> = {},
-): Effect.Effect<Client<[], EB>, BaseE, HttpClient.HttpClient | BaseR> =>
+	config: ClientConfig<Ps, EB, BaseE, BaseR> = {},
+): Effect.Effect<
+	Client<Ps, EB>,
+	BaseE,
+	HttpClient.HttpClient | BaseR | Plugin.Services<Ps>
+> =>
 	Effect.gen(function* () {
 		const provided = yield* HttpClient.HttpClient;
+		const context = yield* Effect.context<never>();
+		const plugins: ReadonlyArray<Plugin.Any> = config.plugins ?? [];
+		const duplicate = plugins.find(
+			(plugin, index) =>
+				plugins.findIndex((other) => other.name === plugin.name) !== index,
+		);
+		if (duplicate !== undefined) {
+			return yield* Effect.die(
+				new Error(`Two plugins are named "${duplicate.name}"`),
+			);
+		}
 		const baseUrl =
 			config.baseUrl === undefined || typeof config.baseUrl === "string"
 				? config.baseUrl
@@ -359,16 +403,21 @@ export const make = <
 				),
 			);
 		}
-		const defaultHeaders = Headers.fromInput(config.headers);
-		const httpClient = withDefaults(
-			mapClientErrors(provided),
+		const applyDefaults = makeApplyDefaults(
 			baseUrl,
-			defaultHeaders,
+			Headers.fromInput(config.headers),
+		);
+		const chain = applyPlugins(mapClientErrors(provided), plugins, context);
+		const httpClient = HttpClient.mapRequestInput(
+			HttpClient.transformResponse(chain, provideOverrides(undefined)),
+			applyDefaults,
 		);
 		const call = makeCall({
-			hasDefaultAccept: Headers.has(defaultHeaders, "accept"),
 			errorSchema: config.error,
-			httpClient,
+			applyDefaults,
+			chain,
+			plugins,
+			context,
 		});
 		const client = {
 			httpClient,
@@ -385,5 +434,5 @@ export const make = <
 			patch: call("PATCH"),
 			del: call("DELETE"),
 		};
-		return client as unknown as Client<[], EB>;
+		return client as unknown as Client<Ps, EB>;
 	});

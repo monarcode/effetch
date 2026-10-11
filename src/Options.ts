@@ -136,7 +136,11 @@ export interface BaseOptions<
 	readonly output?: O;
 	/** Decodes non-2xx bodies into `HttpError.body`. Overrides the client's. */
 	readonly error?: EB | undefined;
-	/** Per-request plugin overrides: `false` skips a plugin. */
+	/**
+	 * Per-request plugin overrides, by plugin name: `false` skips the
+	 * plugin's hooks and `wrap` for this call, and a partial of its options
+	 * is merged over its `defaults`.
+	 */
 	readonly plugins?: Plugin.Overrides<Ps> | undefined;
 }
 

@@ -57,6 +57,7 @@ cat >consumer.ts <<'TS'
 import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Schema from "effect/Schema";
 import * as Fetch from "@monarcode/effetch";
@@ -98,9 +99,18 @@ if (typeof Plugins !== "object") {
 
 const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
 
+const requestId = Fetch.plugin({
+	name: "requestId",
+	defaults: { id: "default" },
+	onRequest: (request, ctx) =>
+		Effect.succeed(
+			HttpClientRequest.setHeader(request, "x-request-id", ctx.options.id),
+		),
+});
+
 const seen: Array<string> = [];
 const mock = HttpClient.make((request, url) => {
-	seen.push(`${request.method} ${url.href}`);
+	seen.push(`${request.method} ${url.href} ${request.headers["x-request-id"]}`);
 	return Effect.succeed(
 		HttpClientResponse.fromWeb(
 			request,
@@ -113,11 +123,15 @@ const mock = HttpClient.make((request, url) => {
 });
 
 const program = Effect.gen(function* () {
-	const api = yield* Fetch.make({ baseUrl: "https://api.test" });
+	const api = yield* Fetch.make({
+		baseUrl: "https://api.test",
+		plugins: [requestId],
+	});
 	return yield* api.get("/todos/:id", {
 		params: { id: 1 },
 		query: { expand: "owner" },
 		output: Todo,
+		plugins: { requestId: { id: "smoke" } },
 	});
 }).pipe(Effect.provideService(HttpClient.HttpClient, mock));
 
@@ -126,15 +140,17 @@ const typed: { readonly id: number; readonly title: string } = todo;
 if (typed.id !== 1 || typed.title !== "Write docs") {
 	throw new Error(`Unexpected todo: ${JSON.stringify(todo)}`);
 }
-if (seen.join() !== "GET https://api.test/todos/1?expand=owner") {
+if (seen.join() !== "GET https://api.test/todos/1?expand=owner smoke") {
 	throw new Error(`Unexpected request: ${seen.join()}`);
 }
 
-const rejected = (api: Fetch.Client) => {
+const rejected = (api: Fetch.Client<readonly [typeof requestId]>) => {
 	// @ts-expect-error the :id path param is required
 	api.get("/todos/:id");
 	// @ts-expect-error get takes no body
 	api.get("/todos", { body: {} });
+	// @ts-expect-error no plugin is called "requestID"
+	api.get("/todos", { plugins: { requestID: false } });
 };
 void rejected;
 
