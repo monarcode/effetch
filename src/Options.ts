@@ -137,8 +137,12 @@ export interface BaseOptions<
  *
  * With an `input` schema, `body` is typed as the schema's type and encoded
  * with it before being sent as JSON. Without one (`I` is `Schema.Unknown`),
- * `body` is sent according to its runtime type: `HttpBody`, `FormData`,
- * `URLSearchParams`, `Uint8Array` and strings as-is, anything else as JSON.
+ * `body` is sent according to its runtime type: `HttpBody`, strings,
+ * `ArrayBuffer` and typed arrays, `Blob`/`File`, `FormData` and
+ * `URLSearchParams` as-is, anything else as JSON.
+ *
+ * A body that doesn't match `input`, or can't be serialised as JSON, is a
+ * defect (the call dies), not a typed failure.
  *
  * @example
  * ```ts
