@@ -62,10 +62,6 @@ jobs:
          - name: Install dependencies
            run: pnpm install --frozen-lockfile
 
-         # Keep effect at the lower bound of peerDependencies.effect in
-         # package.json. @effect/vitest moves in lockstep with effect and
-         # each release requires effect >= its own version, so pin the
-         # matching release rather than testing an unsupported pair.
          - name: Install oldest supported effect
            run: pnpm add --save-dev --save-exact effect@4.0.0 @effect/vitest@4.0.0
 

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Packs the package the way npm would publish it, installs the tarball into a
-# throwaway consumer project, then typechecks (NodeNext + Bundler) and runs it.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,7 +13,6 @@ echo "› Building"
 pnpm run build >/dev/null
 
 echo "› Packing"
-# Ignore scripts so prepublishOnly and other hooks never recurse into check.
 pnpm --config.ignore-scripts=true pack --pack-destination "$smoke" >/dev/null
 tarballs=("$smoke"/monarcode-effetch-*.tgz)
 if [ "${#tarballs[@]}" -ne 1 ] || [ ! -f "${tarballs[0]}" ]; then
@@ -57,18 +54,39 @@ npm install --silent --no-audit --no-fund --no-package-lock \
 	"$tarball" "effect@$effect_version" "typescript@$typescript_version"
 
 cat >consumer.ts <<'TS'
+import * as Headers from "effect/http/Headers";
 import * as Fetch from "@monarcode/effetch";
 import * as Plugins from "@monarcode/effetch/plugins";
 
-const placeholder: true = Fetch.VERSION_PLACEHOLDER;
+const orgId: string = "acme";
+type OrgUser = `/orgs/${typeof orgId}/users/:id`;
 
-// The published types must still reject bad usage.
-// @ts-expect-error VERSION_PLACEHOLDER is the literal `true`
-const wrong: false = Fetch.VERSION_PLACEHOLDER;
-void wrong;
+const params: Fetch.PathParams<OrgUser> = { id: 1 };
 
-if (placeholder !== true) {
-	throw new Error("Unexpected VERSION_PLACEHOLDER value");
+const overrides: Fetch.Plugin.Overrides<
+	[Fetch.Plugin<"retry", never, never, { times: number }>]
+> = { retry: { times: 0 } };
+
+// @ts-expect-error missing the id path param
+const missing: Fetch.PathParams<OrgUser> = {};
+// @ts-expect-error no plugin called "retyr"
+const typo: Fetch.Plugin.Overrides<[Fetch.Plugin<"retry">]> = { retyr: false };
+void [missing, typo];
+
+if (params.id !== 1 || overrides.retry === false) {
+	throw new Error("Unexpected values");
+}
+
+const error = new Fetch.HttpError({
+	method: "GET",
+	url: "/me",
+	status: 401,
+	headers: Headers.fromInput({ authorization: "Bearer secret" }),
+	text: "",
+	body: undefined,
+});
+if (!Fetch.isFetchError(error) || JSON.stringify(error).includes("secret")) {
+	throw new Error("HttpError is not a redacted FetchError");
 }
 if (typeof Plugins !== "object") {
 	throw new Error("@monarcode/effetch/plugins did not load");
