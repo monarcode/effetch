@@ -1,0 +1,41 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"semi": true,
+	"trailingComma": "all",
+	"singleQuote": false,
+	"jsxSingleQuote": false,
+	"printWidth": 80,
+	"tabWidth": 3,
+	"useTabs": true,
+	"arrowParens": "always",
+	"endOfLine": "lf",
+	"bracketSpacing": true,
+	"insertFinalNewline": true,
+	"overrides": [
+		{
+			"files": ["*.md"],
+			"options": { "useTabs": false, "tabWidth": 2 }
+		}
+	],
+	"ignorePatterns": ["node_modules", "dist", "coverage", ".smoke"],
+	"sortImports": {
+		"customGroups": [
+			{
+				"groupName": "effect",
+				"selector": "external",
+				"elementNamePattern": ["effect", "effect/**", "@effect/**"]
+			}
+		],
+		"groups": [
+			"builtin",
+			"effect",
+			"external",
+			["internal", "subpath"],
+			["parent", "sibling", "index"],
+			"style",
+			"unknown"
+		],
+		"internalPattern": ["@/"],
+		"newlinesBetween": true
+	}
+}

@@ -1,0 +1,70 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"plugins": ["import", "promise", "typescript", "unicorn"],
+	"env": {
+		"browser": true,
+		"es2025": true
+	},
+	"ignorePatterns": [
+		"**/node_modules/**",
+		"**/dist/**",
+		"**/coverage/**",
+		"**/.smoke/**"
+	],
+	"rules": {
+		"no-unused-vars": "off",
+		"typescript/no-unused-vars": [
+			"warn",
+			{
+				"fix": {
+					"imports": "safe-fix"
+				}
+			}
+		],
+		"import/no-cycle": "error",
+		"no-restricted-imports": [
+			"error",
+			{
+				"paths": [
+					{
+						"name": "effect",
+						"message": "Import a subpath, e.g. effect/Effect"
+					},
+					{
+						"name": "effect/http",
+						"message": "Import a subpath, e.g. effect/http/HttpClient"
+					}
+				],
+				"patterns": [
+					{
+						"group": ["node:*"],
+						"message": "No Node built-ins in library code"
+					}
+				]
+			}
+		]
+	},
+	"overrides": [
+		{
+			"files": ["scripts/**", "test/**", "examples/**", "*.config.ts"],
+			"env": { "node": true },
+			"rules": {
+				"no-restricted-imports": [
+					"error",
+					{
+						"paths": [
+							{
+								"name": "effect",
+								"message": "Import a subpath, e.g. effect/Effect"
+							},
+							{
+								"name": "effect/http",
+								"message": "Import a subpath, e.g. effect/http/HttpClient"
+							}
+						]
+					}
+				]
+			}
+		}
+	]
+}

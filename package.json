@@ -1,0 +1,89 @@
+{
+	"name": "@monarcode/effetch",
+	"version": "0.0.0",
+	"description": "Typed, schema-driven HTTP calls on Effect v4's HttpClient: path params, object queries, decoded responses and plugins",
+	"keywords": [
+		"effect",
+		"effect-ts",
+		"fetch",
+		"http",
+		"http-client",
+		"react-native",
+		"schema"
+	],
+	"homepage": "https://github.com/monarcode/effetch#readme",
+	"bugs": {
+		"url": "https://github.com/monarcode/effetch/issues"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/monarcode/effetch.git"
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE",
+		"CHANGELOG.md"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./plugins": {
+			"types": "./dist/plugins/index.d.ts",
+			"default": "./dist/plugins/index.js"
+		},
+		"./package.json": "./package.json"
+	},
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org/"
+	},
+	"scripts": {
+		"prepare": "husky",
+		"lint": "oxlint .",
+		"lint:fix": "oxlint --fix .",
+		"format": "oxfmt --write .",
+		"format:check": "oxfmt --check .",
+		"build": "tsdown",
+		"dev": "tsdown --watch",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"check:package": "publint --strict && attw --pack . --profile esm-only",
+		"smoke": "bash scripts/smoke.sh",
+		"check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm test && pnpm run build && pnpm run check:package && pnpm run smoke",
+		"prepublishOnly": "pnpm run check"
+	},
+	"devDependencies": {
+		"@arethetypeswrong/cli": "0.18.5",
+		"@effect/language-service": "0.87.4",
+		"@effect/vitest": "4.0.2",
+		"@types/node": "26.6.5",
+		"effect": "4.0.2",
+		"husky": "9.1.7",
+		"oxfmt": "0.72.0",
+		"oxlint": "1.87.0",
+		"publint": "0.3.25",
+		"tsdown": "0.23.1",
+		"typescript": "6.0.3",
+		"vitest": "5.0.3"
+	},
+	"peerDependencies": {
+		"effect": "^4.0.0"
+	},
+	"devEngines": {
+		"runtime": {
+			"name": "node",
+			"version": ">=24",
+			"onFail": "error"
+		}
+	},
+	"packageManager": "pnpm@10.12.1"
+}
