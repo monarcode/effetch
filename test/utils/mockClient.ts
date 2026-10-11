@@ -1,7 +1,9 @@
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientError from "effect/http/HttpClientError";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 
 import { type Reply, respond } from "./reply.js";
@@ -24,8 +26,14 @@ export interface Hang {
 	readonly _tag: "Hang";
 }
 
+export interface Delayed {
+	readonly _tag: "Delayed";
+	readonly duration: Duration.Input;
+	readonly step: Reply | TransportFailure;
+}
+
 /** What the mock client does with one request. */
-export type Step = Reply | TransportFailure | Hang;
+export type Step = Reply | TransportFailure | Hang | Delayed;
 
 /** The request never gets a response, like a network failure. */
 export const failure = (
@@ -34,6 +42,12 @@ export const failure = (
 
 /** The request never finishes, until it is interrupted. */
 export const hang: Hang = { _tag: "Hang" };
+
+/** `step` happens after `duration` (use `TestClock` to get there). */
+export const delayed = (
+	duration: Duration.Input,
+	step: Reply | TransportFailure,
+): Delayed => ({ _tag: "Delayed", duration, step });
 
 /**
  * The steps to take, in order, with the last one repeating, or a function
@@ -64,6 +78,33 @@ const bodyText = (request: HttpClientRequest.HttpClientRequest) => {
 	}
 };
 
+const run = (
+	step: Step,
+	request: HttpClientRequest.HttpClientRequest,
+): Effect.Effect<
+	HttpClientResponse.HttpClientResponse,
+	HttpClientError.HttpClientError
+> => {
+	if (!("_tag" in step)) {
+		return Effect.succeed(respond(step, request));
+	}
+	switch (step._tag) {
+		case "Hang":
+			return Effect.never;
+		case "Delayed":
+			return Effect.delay(run(step.step, request), step.duration);
+		case "TransportFailure":
+			return Effect.fail(
+				new HttpClientError.HttpClientError({
+					reason: new HttpClientError.TransportError({
+						request,
+						cause: step.cause,
+					}),
+				}),
+			);
+	}
+};
+
 /** An `HttpClient` that records its requests and answers from a script. */
 export const makeMockClient = (script: Script): MockClient => {
 	const requests: Array<RecordedRequest> = [];
@@ -84,19 +125,7 @@ export const makeMockClient = (script: Script): MockClient => {
 		if (step === undefined) {
 			return Effect.die(new Error("The mock client has an empty script"));
 		}
-		if ("_tag" in step) {
-			return step._tag === "Hang"
-				? Effect.never
-				: Effect.fail(
-						new HttpClientError.HttpClientError({
-							reason: new HttpClientError.TransportError({
-								request,
-								cause: step.cause,
-							}),
-						}),
-					);
-		}
-		return Effect.succeed(respond(step, request));
+		return run(step, request);
 	});
 	return { layer: Layer.succeed(HttpClient.HttpClient, client), requests };
 };

@@ -15,45 +15,19 @@ import * as Schema from "effect/Schema";
 import { describe, expect } from "vitest";
 
 import * as Fetch from "../src/index.js";
+import { base, setup, wire } from "./utils/client.js";
 import {
 	failure,
 	hang,
-	type MockClient,
 	makeMockClient,
 	type RecordedRequest,
 	type Script,
 } from "./utils/mockClient.js";
 import { reply } from "./utils/reply.js";
 
-const base = "https://api.test";
-
 const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
 const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
 const ApiError = Schema.Struct({ code: Schema.String });
-
-const setup = <
-	EB extends Fetch.AnySchema = Schema.Unknown,
-	E = never,
-	R = never,
->(
-	script: Script,
-	config: Fetch.ClientConfig<[], EB, E, R> = {},
-) =>
-	Effect.gen(function* () {
-		const mock = makeMockClient(script);
-		const api = yield* Fetch.make({ baseUrl: base, ...config }).pipe(
-			Effect.provide(mock.layer),
-		);
-		return { mock, api };
-	});
-
-const wire = (mock: MockClient, index = 0) => {
-	const recorded = mock.requests[index];
-	if (recorded === undefined) {
-		throw new Error(`No request recorded at ${index}`);
-	}
-	return recorded;
-};
 
 const defectOf = <A, E>(self: Effect.Effect<A, E>) =>
 	Effect.map(Effect.exit(self), (exit) => {

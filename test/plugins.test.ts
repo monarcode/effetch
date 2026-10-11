@@ -13,17 +13,10 @@ import { describe, expect } from "vitest";
 
 import * as Fetch from "../src/index.js";
 import { CurrentOverrides } from "../src/internal/plugins.js";
+import { base, setup, wire } from "./utils/client.js";
 import { captureLogs } from "./utils/logs.js";
-import {
-	failure,
-	hang,
-	type MockClient,
-	makeMockClient,
-	type Script,
-} from "./utils/mockClient.js";
+import { failure, hang, type Script } from "./utils/mockClient.js";
 import { reply, respond } from "./utils/reply.js";
-
-const base = "https://api.test";
 
 const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
 
@@ -34,26 +27,6 @@ class Unavailable extends Data.TaggedError("Unavailable")<{
 class Session extends Context.Service<Session, { readonly token: string }>()(
 	"Session",
 ) {}
-
-const setup = <const Ps extends ReadonlyArray<Fetch.Plugin.Any> = []>(
-	script: Script,
-	config: Fetch.ClientConfig<Ps> = {},
-) =>
-	Effect.gen(function* () {
-		const mock = makeMockClient(script);
-		const api = yield* Fetch.make({ baseUrl: base, ...config }).pipe(
-			Effect.provide(mock.layer),
-		);
-		return { mock, api };
-	});
-
-const wire = (mock: MockClient, index = 0) => {
-	const recorded = mock.requests[index];
-	if (recorded === undefined) {
-		throw new Error(`No request recorded at ${index}`);
-	}
-	return recorded;
-};
 
 const trail = (request: HttpClientRequest.HttpClientRequest, name: string) =>
 	HttpClientRequest.setHeader(

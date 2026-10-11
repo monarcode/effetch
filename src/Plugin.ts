@@ -5,6 +5,13 @@ import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 type AnyToUnknown<T> = 0 extends 1 & T ? unknown : T;
 
+/**
+ * `T` itself, once known. As a return type it stops TypeScript inferring
+ * `T` from where the result goes: inside a `plugins` list, that would be
+ * `Plugin.Any`, and the plugin's errors and services would become `any`.
+ */
+type Settled<T> = [T] extends [infer U] ? U : never;
+
 type Parts<P> =
 	P extends Plugin<string, infer E, infer R, infer Opts>
 		? {
@@ -532,9 +539,11 @@ export function plugin<
 	>,
 ): Plugin<
 	Name,
-	ERequest | EResponse | Exclude<EWrap, Plugin.UpstreamError>,
-	RRequest | RResponse | RError | Exclude<RWrap, Plugin.UpstreamServices>,
-	Opts
+	Settled<ERequest | EResponse | Exclude<EWrap, Plugin.UpstreamError>>,
+	Settled<
+		RRequest | RResponse | RError | Exclude<RWrap, Plugin.UpstreamServices>
+	>,
+	Settled<Opts>
 >;
 export function plugin(definition: Plugin.Any): Plugin.Any {
 	return definition;

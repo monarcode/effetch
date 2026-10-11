@@ -61,7 +61,14 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Schema from "effect/Schema";
 import * as Fetch from "@monarcode/effetch";
-import * as Plugins from "@monarcode/effetch/plugins";
+import {
+	bearer,
+	type BearerPlugin,
+	logger,
+	retry,
+	TimeoutError,
+	timeout,
+} from "@monarcode/effetch/plugins";
 
 const orgId: string = "acme";
 type OrgUser = `/orgs/${typeof orgId}/users/:id`;
@@ -93,8 +100,9 @@ const error = new Fetch.HttpError({
 if (!Fetch.isFetchError(error) || JSON.stringify(error).includes("secret")) {
 	throw new Error("HttpError is not a redacted FetchError");
 }
-if (typeof Plugins !== "object") {
-	throw new Error("@monarcode/effetch/plugins did not load");
+const timedOut = new TimeoutError({ method: "GET", url: "/x", duration: "1s" });
+if (timedOut._tag !== "TimeoutError" || Fetch.isFetchError(timedOut)) {
+	throw new Error("TimeoutError from @monarcode/effetch/plugins is wrong");
 }
 
 const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
@@ -110,7 +118,9 @@ const requestId = Fetch.plugin({
 
 const seen: Array<string> = [];
 const mock = HttpClient.make((request, url) => {
-	seen.push(`${request.method} ${url.href} ${request.headers["x-request-id"]}`);
+	seen.push(
+		`${request.method} ${url.href} ${request.headers["x-request-id"]} ${request.headers["authorization"]}`,
+	);
 	return Effect.succeed(
 		HttpClientResponse.fromWeb(
 			request,
@@ -125,7 +135,13 @@ const mock = HttpClient.make((request, url) => {
 const program = Effect.gen(function* () {
 	const api = yield* Fetch.make({
 		baseUrl: "https://api.test",
-		plugins: [requestId],
+		plugins: [
+			logger(),
+			retry(),
+			timeout({ duration: "5 seconds" }),
+			requestId,
+			bearer({ token: () => "smoke-token" }),
+		],
 	});
 	return yield* api.get("/todos/:id", {
 		params: { id: 1 },
@@ -140,17 +156,24 @@ const typed: { readonly id: number; readonly title: string } = todo;
 if (typed.id !== 1 || typed.title !== "Write docs") {
 	throw new Error(`Unexpected todo: ${JSON.stringify(todo)}`);
 }
-if (seen.join() !== "GET https://api.test/todos/1?expand=owner smoke") {
+if (
+	seen.join() !==
+	"GET https://api.test/todos/1?expand=owner smoke Bearer smoke-token"
+) {
 	throw new Error(`Unexpected request: ${seen.join()}`);
 }
 
-const rejected = (api: Fetch.Client<readonly [typeof requestId]>) => {
+const rejected = (
+	api: Fetch.Client<readonly [typeof requestId, BearerPlugin]>,
+) => {
 	// @ts-expect-error the :id path param is required
 	api.get("/todos/:id");
 	// @ts-expect-error get takes no body
 	api.get("/todos", { body: {} });
 	// @ts-expect-error no plugin is called "requestID"
 	api.get("/todos", { plugins: { requestID: false } });
+	// @ts-expect-error bearer can only be skipped
+	api.get("/todos", { plugins: { bearer: { scheme: "Token" } } });
 };
 void rejected;
 

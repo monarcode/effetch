@@ -9,6 +9,7 @@ export interface LogEntry {
 	readonly level: LogLevel.LogLevel;
 	readonly message: ReadonlyArray<unknown>;
 	readonly cause: Cause.Cause<unknown>;
+	readonly annotations: Readonly<Record<string, unknown>>;
 }
 
 export interface CapturedLogs {
@@ -28,6 +29,7 @@ export const captureLogs = (): CapturedLogs => {
 				? options.message
 				: [options.message],
 			cause: options.cause,
+			annotations: options.fiber.getRef(References.CurrentLogAnnotations),
 		});
 	});
 	return {

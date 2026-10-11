@@ -137,6 +137,47 @@ describe("make with plugins", () => {
 	});
 });
 
+const inline = Fetch.make({
+	plugins: [
+		Fetch.plugin({
+			name: "plain",
+			onRequest: (request) => Effect.succeed(request),
+		}),
+		Fetch.plugin({
+			name: "withOptions",
+			defaults: { version: "1" },
+			onRequest: (request, ctx) =>
+				Effect.succeed(
+					HttpClientRequest.setHeader(
+						request,
+						"x-version",
+						ctx.options.version,
+					),
+				),
+		}),
+	],
+});
+declare const inlineApi: Effect.Success<typeof inline>;
+
+describe("make with plugins written inline", () => {
+	it("infers their errors, services and options, not any", () => {
+		expectTypeOf<
+			Effect.Services<typeof inline>
+		>().toEqualTypeOf<HttpClient.HttpClient>();
+		const call = inlineApi.get("/todos");
+		expectTypeOf<Effect.Error<typeof call>>().toEqualTypeOf<
+			Fetch.NetworkError | Fetch.HttpError.With<unknown>
+		>();
+		inlineApi.get("/todos", {
+			plugins: { plain: false, withOptions: { version: "2" } },
+		});
+		// @ts-expect-error plain has no options
+		inlineApi.get("/todos", { plugins: { plain: { version: "2" } } });
+		// @ts-expect-error version is a string
+		inlineApi.get("/todos", { plugins: { withOptions: { version: 2 } } });
+	});
+});
+
 declare const plugged: Fetch.Client<
 	readonly [typeof bearer, typeof retry, typeof unavailable]
 >;
