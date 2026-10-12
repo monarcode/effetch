@@ -321,7 +321,7 @@ export interface Client<
  * a body that can't be encoded, a body on a `GET` or `HEAD` request, a
  * `baseUrl` with a query string or a fragment, and, outside browsers, a
  * relative URL without a `baseUrl` (browsers resolve it against the page's
- * origin).
+ * URL).
  *
  * An `HttpClient` that fails on non-2xx statuses (`filterStatusOk`) works
  * too: effetch takes the response back and reports the usual `HttpError`.

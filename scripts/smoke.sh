@@ -25,6 +25,9 @@ echo "› Checking tarball contents"
 contents="$(tar -tzf "$tarball")"
 for required in \
 	package/package.json \
+	package/README.md \
+	package/CHANGELOG.md \
+	package/LICENSE \
 	package/dist/index.js \
 	package/dist/index.d.ts \
 	package/dist/plugins/index.js \
