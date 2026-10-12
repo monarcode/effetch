@@ -36,8 +36,11 @@
 ## Before declaring any work done
 
 Run `pnpm run check` and make sure it passes. It runs lint, format check,
-typecheck, tests (including type tests), build, publint, attw and the tarball
-smoke test.
+typecheck, the docs check (every public export has a description, `@example`
+and `@since`, and every `ts` example in the JSDoc and the README compiles),
+tests (including type tests), build, publint, attw and the tarball smoke test
+(which also checks go-to-definition, hovers and completions in the installed
+package).
 
 Source imports use explicit `.js` extensions. Because
 `exactOptionalPropertyTypes` is on, write optional props as

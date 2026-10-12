@@ -3,6 +3,10 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 
+/**
+ * `unknown` if `T` is `any`, else `T`, so erased plugin types don't spread
+ * `any`.
+ */
 type AnyToUnknown<T> = 0 extends 1 & T ? unknown : T;
 
 /**
@@ -12,6 +16,7 @@ type AnyToUnknown<T> = 0 extends 1 & T ? unknown : T;
  */
 type Settled<T> = [T] extends [infer U] ? U : never;
 
+/** The error (`E`), services (`R`) and options (`Opts`) types of plugin `P`. */
 type Parts<P> =
 	P extends Plugin<string, infer E, infer R, infer Opts>
 		? {
@@ -21,13 +26,19 @@ type Parts<P> =
 			}
 		: never;
 
+/**
+ * An optional override per plugin name in `Ps`, leaving out non-literal
+ * names.
+ */
 type OverrideMap<Ps extends ReadonlyArray<Plugin.Any>> = {
 	readonly [P in Ps[number] as string extends P["name"] ? never : P["name"]]?:
 		| Plugin.Override<P>
 		| undefined;
 };
 
+/** The brand that makes {@link Plugin.UpstreamError} opaque. */
 declare const UpstreamErrorTypeId: unique symbol;
+/** The brand that makes {@link Plugin.UpstreamServices} opaque. */
 declare const UpstreamServicesTypeId: unique symbol;
 
 /**
@@ -61,7 +72,9 @@ declare const UpstreamServicesTypeId: unique symbol;
  * @since 0.1.0
  */
 export interface PluginContext<Opts> {
+	/** The request this hook is about (see above for which one). */
 	readonly request: HttpClientRequest.HttpClientRequest;
+	/** The plugin's `defaults` merged with this call's override. */
 	readonly options: Opts;
 }
 
@@ -103,7 +116,9 @@ export interface PluginContext<Opts> {
  * const apiKey: Fetch.Plugin<"apiKey"> = Fetch.plugin({
  *   name: "apiKey",
  *   onRequest: (request) =>
- *     Effect.succeed(HttpClientRequest.setHeader(request, "x-api-key", "secret")),
+ *     Effect.succeed(
+ *       HttpClientRequest.setHeader(request, "x-api-key", "secret"),
+ *     ),
  * });
  * ```
  *
@@ -261,11 +276,17 @@ export declare namespace Plugin {
 	 * @since 0.1.0
 	 */
 	export interface Any {
+		/** The plugin's name. */
 		readonly name: string;
+		/** The plugin's default options, if any. */
 		readonly defaults?: any;
+		/** The plugin's `onRequest` hook, if any. */
 		readonly onRequest?: OnRequest<any, any, any> | undefined;
+		/** The plugin's `onResponse` hook, if any. */
 		readonly onResponse?: OnResponse<any, any, any> | undefined;
+		/** The plugin's `onError` hook, if any. */
 		readonly onError?: OnError<any, any> | undefined;
+		/** The plugin's `wrap` hook, if any. */
 		readonly wrap?:
 			| ((
 					client: Upstream,
@@ -293,6 +314,7 @@ export declare namespace Plugin {
 	 * @since 0.1.0
 	 */
 	export interface UpstreamError {
+		/** Makes the type opaque: no real error has this property. */
 		readonly [UpstreamErrorTypeId]: typeof UpstreamErrorTypeId;
 	}
 
@@ -310,6 +332,7 @@ export declare namespace Plugin {
 	 * @since 0.1.0
 	 */
 	export interface UpstreamServices {
+		/** Makes the type opaque: no real service has this property. */
 		readonly [UpstreamServicesTypeId]: typeof UpstreamServicesTypeId;
 	}
 

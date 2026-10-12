@@ -104,8 +104,13 @@ const send = (
 		);
 	}).pipe(provideOverrides(options.plugins));
 
+export type Call = (
+	path: string,
+	options?: RuntimeOptions,
+) => Effect.Effect<unknown, unknown, unknown>;
+
 export const makeCall =
 	(state: RequesterState) =>
-	(method: HttpMethod.HttpMethod) =>
-	(path: string, options: RuntimeOptions = {}) =>
+	(method: HttpMethod.HttpMethod): Call =>
+	(path, options = {}) =>
 		send(state, method, path, options);

@@ -217,4 +217,8 @@ echo "› Typechecking consumer (Bundler)"
 echo "› Running consumer"
 node consumer.ts
 
+echo "› Checking the editor experience (definitions, hovers, completions)"
+cp "$root/scripts/editor-check.mjs" .
+node editor-check.mjs
+
 echo "✓ Smoke test passed"

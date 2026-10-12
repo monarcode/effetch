@@ -1,3 +1,7 @@
+/**
+ * The parameter name in one path segment `S` (`":id"` gives `"id"`), or
+ * `never`.
+ */
 type SegmentParam<S extends string> = S extends `:${infer N}`
 	? N extends ""
 		? never
