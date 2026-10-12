@@ -49,6 +49,34 @@ export type QueryInput = {
 };
 
 /**
+ * The constraint on a `query` of type `Q`: each of `Q`'s own properties must
+ * be a {@link QueryValue} or an array of them.
+ *
+ * Unlike {@link QueryInput}, this has no index signature, so it also accepts
+ * values typed with an `interface` (TypeScript never gives interfaces an
+ * implicit index signature).
+ *
+ * @example
+ * ```ts
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * interface ListTodosParams {
+ *   readonly limit: number;
+ *   readonly tags?: ReadonlyArray<string> | undefined;
+ * }
+ *
+ * declare const params: ListTodosParams;
+ *
+ * const query: Fetch.QueryOf<ListTodosParams> = params;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type QueryOf<Q> = {
+	readonly [K in keyof Q]: QueryValue | ReadonlyArray<QueryValue>;
+};
+
+/**
  * Any Effect schema accepted by the `output`, `error` and `input` options.
  *
  * @example
@@ -96,6 +124,8 @@ export type ParamsOption<P extends string> = string extends P
  * - `O`: the `output` schema, or `undefined` for the raw response.
  * - `EB`: the `error` schema for non-2xx bodies.
  * - `Ps`: the client's plugins, for the `plugins` override map.
+ * - `Q`: the type of `query`, checked with {@link QueryOf}. Defaults to
+ *   {@link QueryInput}.
  *
  * @example
  * ```ts
@@ -117,9 +147,10 @@ export interface BaseOptions<
 	O extends AnySchema | undefined,
 	EB extends AnySchema,
 	Ps extends ReadonlyArray<Plugin.Any>,
+	Q extends QueryOf<Q> = QueryInput,
 > {
 	/** Query parameters. Arrays repeat the key; `null`/`undefined` are dropped. */
-	readonly query?: QueryInput | undefined;
+	readonly query?: Q | undefined;
 	/** Headers for this call, merged over the client's headers. */
 	readonly headers?: Headers.Input | undefined;
 	/**
@@ -198,8 +229,9 @@ export type NoBodyRequestOptions<
 	O extends AnySchema | undefined,
 	EB extends AnySchema,
 	Ps extends ReadonlyArray<Plugin.Any>,
+	Q extends QueryOf<Q> = QueryInput,
 > = ParamsOption<P> &
-	BaseOptions<O, EB, Ps> & {
+	BaseOptions<O, EB, Ps, Q> & {
 		readonly body?: undefined;
 		readonly input?: undefined;
 	};
@@ -226,7 +258,8 @@ export type RequestOptions<
 	EB extends AnySchema,
 	I extends AnySchema,
 	Ps extends ReadonlyArray<Plugin.Any>,
-> = ParamsOption<P> & BaseOptions<O, EB, Ps> & BodyOptions<I>;
+	Q extends QueryOf<Q> = QueryInput,
+> = ParamsOption<P> & BaseOptions<O, EB, Ps, Q> & BodyOptions<I>;
 
 /**
  * The rest arguments after the path: the options object `T` is required
@@ -384,9 +417,10 @@ export interface NoBodyMethod<
 		P extends string,
 		O extends AnySchema | undefined = undefined,
 		EB extends AnySchema = DefaultEB,
+		Q extends QueryOf<Q> = QueryInput,
 	>(
 		path: P,
-		...args: Args<P, NoBodyRequestOptions<P, O, EB, Ps>>
+		...args: Args<P, NoBodyRequestOptions<P, O, EB, Ps, Q>>
 	): CallEffect<O, EB, Schema.Unknown, Ps>;
 }
 
@@ -423,9 +457,10 @@ export interface BodyMethod<
 		O extends AnySchema | undefined = undefined,
 		EB extends AnySchema = DefaultEB,
 		I extends AnySchema = Schema.Unknown,
+		Q extends QueryOf<Q> = QueryInput,
 	>(
 		path: P,
-		...args: Args<P, RequestOptions<P, O, EB, I, Ps>>
+		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q>>
 	): CallEffect<O, EB, I, Ps>;
 }
 
@@ -462,9 +497,10 @@ export interface RequestMethod<
 		O extends AnySchema | undefined = undefined,
 		EB extends AnySchema = DefaultEB,
 		I extends AnySchema = Schema.Unknown,
+		Q extends QueryOf<Q> = QueryInput,
 	>(
 		method: HttpMethod.HttpMethod,
 		path: P,
-		...args: Args<P, RequestOptions<P, O, EB, I, Ps>>
+		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q>>
 	): CallEffect<O, EB, I, Ps>;
 }

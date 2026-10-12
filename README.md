@@ -571,10 +571,10 @@ page's URL.
   [writing plugins](#writing-a-plugin).
 - Option and result types, for wrapping the client in your own functions:
   `RequestOptions`, `NoBodyRequestOptions`, `BaseOptions`, `BodyOptions`,
-  `ParamsOption`, `QueryInput`, `QueryValue`, `AnySchema`, `Args`,
-  `Success`, `CallError`, `CallServices`, `CallEffect`, `NoBodyMethod`,
-  `BodyMethod`, `RequestMethod`, `PathParamNames`, `PathParams`,
-  `PathParamValue`.
+  `ParamsOption`, `QueryInput`, `QueryOf`, `QueryValue`, `AnySchema`,
+  `Args`, `Success`, `CallError`, `CallServices`, `CallEffect`,
+  `NoBodyMethod`, `BodyMethod`, `RequestMethod`, `PathParamNames`,
+  `PathParams`, `PathParamValue`.
 
 `@monarcode/effetch/plugins`:
 

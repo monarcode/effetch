@@ -11,7 +11,13 @@ import * as SchemaGetter from "effect/SchemaGetter";
 import { describe, expectTypeOf, it } from "vitest";
 
 import type { DecodeError, HttpError, NetworkError } from "../../src/Errors.js";
-import type { BodyMethod, NoBodyMethod } from "../../src/Options.js";
+import type {
+	BaseOptions,
+	BodyMethod,
+	NoBodyMethod,
+	QueryInput,
+	RequestMethod,
+} from "../../src/Options.js";
 import type { Plugin } from "../../src/Plugin.js";
 
 class TimeoutError extends Data.TaggedError("TimeoutError")<{}> {}
@@ -24,6 +30,7 @@ type Ps = [
 
 declare const get: NoBodyMethod<Ps, Schema.Unknown>;
 declare const post: BodyMethod<Ps, Schema.Unknown>;
+declare const request: RequestMethod<Ps, Schema.Unknown>;
 
 const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
 const ApiError = Schema.Struct({ code: Schema.String });
@@ -92,6 +99,99 @@ describe("query and headers", () => {
 		});
 		// @ts-expect-error nested objects aren't query values
 		get("/todos", { query: { filter: { done: true } } });
+	});
+});
+
+interface ListTodosParams {
+	readonly limit: number;
+	readonly page?: number;
+	readonly after?: string | undefined;
+	readonly tags?: ReadonlyArray<string> | undefined;
+	readonly q: string | null;
+}
+type ListTodosAlias = {
+	readonly limit: number;
+	readonly page?: number;
+};
+interface WithDate extends ListTodosParams {
+	readonly when: Date;
+}
+interface WithFunction {
+	readonly limit: number;
+	readonly next: () => number;
+}
+
+declare const params: ListTodosParams;
+declare const alias: ListTodosAlias;
+declare const withDate: WithDate;
+declare const withFunction: WithFunction;
+declare const maybe: ListTodosParams | undefined;
+declare const input: QueryInput;
+
+describe("query", () => {
+	it("accepts values typed with an interface", () => {
+		get("/todos", { query: params });
+		get("/todos/:id", { params: { id: 1 }, query: params });
+		post("/todos", { query: params, body: {} });
+		request("GET", "/todos", { query: params });
+	});
+
+	it("accepts type aliases, object literals and QueryInput", () => {
+		get("/todos", { query: alias });
+		get("/todos", { query: { limit: 5, page: 2 } });
+		get("/todos", { query: input });
+	});
+
+	it("accepts optional properties, nullish values and readonly arrays", () => {
+		get("/todos", { query: { limit: 5 } satisfies ListTodosAlias });
+		get("/todos", {
+			query: {
+				limit: 5,
+				after: undefined,
+				q: null,
+				tags: ["a", "b"] as ReadonlyArray<string>,
+			} satisfies ListTodosParams,
+		});
+		get("/todos", { query: maybe });
+	});
+
+	it("can be omitted", () => {
+		get("/todos");
+		get("/todos", {});
+		get("/todos", { query: undefined });
+	});
+
+	it("rejects values that aren't query values", () => {
+		// @ts-expect-error a Date isn't a query value
+		get("/todos", { query: { when: new Date() } });
+		// @ts-expect-error a function isn't a query value
+		get("/todos", { query: { next: () => 1 } });
+		// @ts-expect-error arrays of objects aren't query values
+		get("/todos", { query: { ids: [{ id: 1 }] } });
+	});
+
+	it("rejects interfaces with a property of the wrong type", () => {
+		// @ts-expect-error when is a Date
+		get("/todos", { query: withDate });
+		// @ts-expect-error next is a function
+		post("/todos", { query: withFunction });
+		// @ts-expect-error when is a Date
+		request("GET", "/todos", { query: withDate });
+	});
+
+	it("falls back to QueryInput with explicit type arguments", () => {
+		get<"/todos", typeof Todo>("/todos", { query: { limit: 5 } });
+		// @ts-expect-error still rejects non-query values
+		get<"/todos", typeof Todo>("/todos", { query: { when: new Date() } });
+	});
+
+	it("is QueryInput in the option types by default", () => {
+		expectTypeOf<
+			BaseOptions<undefined, Schema.Unknown, Ps>["query"]
+		>().toEqualTypeOf<QueryInput | undefined>();
+		expectTypeOf<
+			BaseOptions<undefined, Schema.Unknown, Ps, ListTodosParams>["query"]
+		>().toEqualTypeOf<ListTodosParams | undefined>();
 	});
 });
 

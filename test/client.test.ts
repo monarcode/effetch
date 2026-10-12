@@ -155,6 +155,19 @@ describe("path params and query", () => {
 		}),
 	);
 
+	it.effect("accept a query typed with an interface", () =>
+		Effect.gen(function* () {
+			interface ListTodosParams {
+				readonly limit: number;
+				readonly page?: number | undefined;
+			}
+			const params: ListTodosParams = { limit: 5, page: undefined };
+			const { mock, api } = yield* setup([reply.json({})]);
+			yield* api.get("/todos", { query: params });
+			expect(wire(mock).url).toBe("https://api.test/todos?limit=5");
+		}),
+	);
+
 	it.effect("make the call defect when a param is missing at runtime", () =>
 		Effect.gen(function* () {
 			const { mock, api } = yield* setup([reply.json({})]);

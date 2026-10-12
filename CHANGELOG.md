@@ -2,6 +2,16 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## 0.1.0-alpha.2
+
+### Fixed
+
+- `query` now accepts values typed with an `interface`. Each property is
+  still checked, so a `Date`, a nested object or a function is rejected. The
+  new `QueryOf<Q>` type is the constraint; `QueryInput` is unchanged, and the
+  option types (`BaseOptions`, `NoBodyRequestOptions`, `RequestOptions`) take
+  an optional trailing `Q` parameter that defaults to it.
+
 ## 0.1.0-alpha.1
 
 First release published from CI with npm provenance. No changes to the
