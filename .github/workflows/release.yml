@@ -1,4 +1,4 @@
-name: Release alpha
+name: Release
 
 env:
    HUSKY: 0
@@ -7,7 +7,7 @@ on:
    workflow_dispatch:
       inputs:
          version:
-            description: Alpha version already committed in package.json (without v)
+            description: Version already committed in package.json, without v (0.1.0, 0.1.0-rc.0, 0.1.0-alpha.3)
             required: true
             type: string
 
@@ -84,19 +84,26 @@ jobs:
          - name: Check npm supports trusted publishing
            run: |
               node --input-type=module -e 'import { execFileSync } from "node:child_process"; const [major, minor, patch] = execFileSync("npm", ["--version"], { encoding: "utf8" }).trim().split(".").map(Number); if (!(major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1))))) throw new Error("npm >=11.5.1 is required");'
-         - name: Publish alpha to npm
+         - name: Publish to npm
            env:
               RELEASE_VERSION: ${{ inputs.version }}
-           run: npm publish "$RUNNER_TEMP/release/monarcode-effetch-$RELEASE_VERSION.tgz" --tag latest --access public --ignore-scripts
-         - name: Create GitHub prerelease and tag
+           run: |
+              DIST_TAG=$(jq -er .distTag "$RUNNER_TEMP/release/release.json")
+              npm publish "$RUNNER_TEMP/release/monarcode-effetch-$RELEASE_VERSION.tgz" --tag "$DIST_TAG" --access public --ignore-scripts
+         - name: Create GitHub release and tag
            env:
               GH_TOKEN: ${{ github.token }}
               GH_REPO: ${{ github.repository }}
               RELEASE_VERSION: ${{ inputs.version }}
               RELEASE_COMMIT: ${{ github.sha }}
            run: |
+              if jq -e .prerelease "$RUNNER_TEMP/release/release.json" > /dev/null; then
+                KIND=(--prerelease --latest=false)
+              else
+                KIND=(--latest)
+              fi
               gh release create "v$RELEASE_VERSION" \
                 --target "$RELEASE_COMMIT" \
                 --title "v$RELEASE_VERSION" \
-                --prerelease --latest=false \
+                "${KIND[@]}" \
                 --notes-file "$RUNNER_TEMP/release/release-notes.md"

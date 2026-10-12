@@ -2,18 +2,20 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+const number = "(?:0|[1-9][0-9]*)";
+const release = new RegExp(
+	`^${number}\\.${number}\\.${number}(?:-(?:alpha|beta|rc)\\.${number})?$`,
+);
+const stable = new RegExp(`^${number}\\.${number}\\.${number}$`);
+
 export function prepareRelease(manifest, changelog, version) {
-	const number = "(?:0|[1-9][0-9]*)";
-	const alpha = new RegExp(
-		`^${number}\\.${number}\\.${number}-alpha\\.${number}$`,
-	);
 	if (
 		typeof version !== "string" ||
 		version.trim() !== version ||
-		!alpha.test(version)
+		!release.test(version)
 	) {
 		throw new Error(
-			"Use an alpha version such as 0.1.0-alpha.1, without a v prefix.",
+			"Use a version such as 0.1.0, 0.1.0-rc.0 or 0.1.0-alpha.3, without a v prefix.",
 		);
 	}
 	if (manifest.version !== version)
@@ -41,16 +43,34 @@ export function prepareRelease(manifest, changelog, version) {
 		.slice(section.index + section[0].length, next?.index)
 		.trim();
 	if (!notes) throw new Error("Release notes must not be empty.");
-	return { version, tag: `v${version}`, notes };
+	return {
+		version,
+		tag: `v${version}`,
+		prerelease: !stable.test(version),
+		notes,
+	};
+}
+
+export function chooseDistTag(version, published) {
+	if (stable.test(version)) return "latest";
+	return published.some((existing) => stable.test(existing))
+		? "next"
+		: "latest";
 }
 
 export async function checkRegistry(version, request = fetch) {
 	const response = await request(
-		`https://registry.npmjs.org/@monarcode%2Feffetch/${version}`,
+		"https://registry.npmjs.org/@monarcode%2Feffetch",
 	);
-	if (response.status === 404) return;
-	if (response.ok) throw new Error(`Version ${version} is already published.`);
-	throw new Error(`npm registry check failed with HTTP ${response.status}.`);
+	if (response.status === 404) return { distTag: chooseDistTag(version, []) };
+	if (!response.ok)
+		throw new Error(
+			`npm registry check failed with HTTP ${response.status}.`,
+		);
+	const published = Object.keys((await response.json()).versions ?? {});
+	if (published.includes(version))
+		throw new Error(`Version ${version} is already published.`);
+	return { distTag: chooseDistTag(version, published) };
 }
 
 if (
@@ -65,15 +85,15 @@ if (
 	}
 	const manifest = JSON.parse(await readFile("package.json", "utf8"));
 	const changelog = await readFile("CHANGELOG.md", "utf8");
-	const release = prepareRelease(manifest, changelog, version);
-	if (registryFlag) await checkRegistry(release.version);
+	const prepared = prepareRelease(manifest, changelog, version);
+	const registry = registryFlag ? await checkRegistry(prepared.version) : {};
 	await mkdir(directory, { recursive: true });
 	await writeFile(
 		resolve(directory, "release-notes.md"),
-		`${release.notes}\n`,
+		`${prepared.notes}\n`,
 	);
 	await writeFile(
 		resolve(directory, "release.json"),
-		`${JSON.stringify(release, null, 2)}\n`,
+		`${JSON.stringify({ ...prepared, ...registry }, null, 2)}\n`,
 	);
 }
