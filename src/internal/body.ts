@@ -118,7 +118,7 @@ export const encodeBody = <I extends AnySchema = Schema.Unknown>(
 	I["EncodingServices"]
 > => {
 	if (body === undefined) {
-		return Effect.succeed(undefined);
+		return Effect.undefined;
 	}
 	if (input !== undefined) {
 		return orDieInvalid(HttpBody.jsonSchema(input)(body));
