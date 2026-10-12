@@ -2,6 +2,11 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## 0.1.0-alpha.1
+
+First release published from CI with npm provenance. No changes to the
+package since 0.1.0-alpha.0.
+
 ## 0.1.0-alpha.0
 
 First preview of effetch: typed, schema-driven HTTP calls on Effect v4's
