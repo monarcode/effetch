@@ -15,6 +15,14 @@ export const make = Fetch./*make*/make({
 declare const api: Fetch.Client;
 
 export const call = api./*get*/get("/users/:id", { params: { /*params*/ } });
+
+interface ListUsersParams {
+	readonly limit: number;
+	readonly page?: number | undefined;
+}
+declare const listUsersParams: ListUsersParams;
+
+export const list = api./*query*/get("/users", { query: listUsersParams });
 `;
 
 const config = ts.getParsedCommandLineOfConfigFile(
@@ -100,6 +108,31 @@ const names = (completions?.entries ?? []).map((entry) => entry.name);
 expect(
 	names.includes("id"),
 	`params on "/users/:id" doesn't complete id: ${names.slice(0, 10).join(", ")}`,
+);
+
+const queryStart = source.lastIndexOf("\n", at("query")) + 1;
+const queryEnd = source.indexOf("\n", at("query"));
+const queryErrors = service
+	.getSemanticDiagnostics(probe)
+	.filter(
+		(diagnostic) =>
+			diagnostic.start !== undefined &&
+			diagnostic.start >= queryStart &&
+			diagnostic.start < queryEnd,
+	)
+	.map((diagnostic) =>
+		ts.flattenDiagnosticMessageText(diagnostic.messageText, " "),
+	);
+expect(
+	queryErrors.length === 0,
+	`An interface-typed query doesn't compile: ${queryErrors.join("; ")}`,
+);
+const queryHover = ts.displayPartsToString(
+	service.getQuickInfoAtPosition(probe, at("query"))?.displayParts,
+);
+expect(
+	queryHover.includes(", ListUsersParams>") && !queryHover.includes("QueryOf"),
+	`Hover on get with a query doesn't name the query's type: ${queryHover}`,
 );
 
 if (failures.length > 0) {

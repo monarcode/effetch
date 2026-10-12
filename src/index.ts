@@ -20,6 +20,7 @@ export type {
 	NoBodyRequestOptions,
 	ParamsOption,
 	QueryInput,
+	QueryOf,
 	QueryValue,
 	RequestMethod,
 	RequestOptions,

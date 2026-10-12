@@ -51,7 +51,8 @@ export class NetworkError extends Schema.TaggedError<NetworkError>()(
  *   sensitive ones (`set-cookie`, `authorization`, …) print as
  *   `<redacted>` when the error is logged or serialised.
  * - `text` is always the raw response body (`""` if it couldn't be read).
- * - `body` is the body decoded with the call's (or client's) `error` schema,
+ * - `body` is the body decoded with the call's `error` schema (or the client's
+ *   `defaultError`),
  *   or `undefined` if it didn't match. Without an `error` schema, `body` is
  *   the parsed JSON when `text` is valid JSON, else `undefined`. An empty
  *   body is always `undefined`. Reading `body` never fails the call.
@@ -83,7 +84,7 @@ export class NetworkError extends Schema.TaggedError<NetworkError>()(
 export class HttpError extends Schema.TaggedError<HttpError>()("HttpError", {
 	method: Schema.String,
 	url: Schema.String,
-	status: Schema.Number,
+	status: Schema.Finite,
 	headers: Schema.declare(Headers.isHeaders),
 	text: Schema.String,
 	body: Schema.Unknown,
@@ -161,7 +162,7 @@ export class DecodeError extends Schema.TaggedError<DecodeError>()(
 	{
 		method: Schema.String,
 		url: Schema.String,
-		status: Schema.Number,
+		status: Schema.Finite,
 		issue: Schema.Unknown,
 		message: Schema.String,
 	},

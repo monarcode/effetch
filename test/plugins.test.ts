@@ -18,7 +18,7 @@ import { captureLogs } from "./utils/logs.js";
 import { failure, hang, type Script } from "./utils/mockClient.js";
 import { reply, respond } from "./utils/reply.js";
 
-const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
 class SessionExpired extends Data.TaggedError("SessionExpired")<{}> {}
 class Unavailable extends Data.TaggedError("Unavailable")<{

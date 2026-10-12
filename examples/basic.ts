@@ -7,7 +7,7 @@ import * as Schema from "effect/Schema";
 import * as Fetch from "@monarcode/effetch";
 
 const Todo = Schema.Struct({
-	id: Schema.Number,
+	id: Schema.Finite,
 	title: Schema.String,
 	done: Schema.Boolean,
 });
@@ -19,7 +19,7 @@ const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
 const make = Fetch.make({
 	baseUrl: "https://api.example.com",
 	headers: { accept: "application/json" },
-	error: ApiError,
+	defaultError: ApiError,
 });
 
 class Api extends Context.Service<Api, Effect.Success<typeof make>>()("Api") {}

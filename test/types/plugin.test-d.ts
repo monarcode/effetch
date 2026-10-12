@@ -39,7 +39,7 @@ const timeout = plugin({
 			Effect.gen(function* () {
 				const { duration } = yield* options;
 				if (duration === "0 seconds") {
-					return yield* Effect.fail(new TimeoutError());
+					return yield* new TimeoutError();
 				}
 				return yield* response;
 			}),

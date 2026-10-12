@@ -14,7 +14,7 @@ import { describe, expectTypeOf, it } from "vitest";
 import * as Fetch from "../../src/index.js";
 
 const ApiError = Schema.Struct({ code: Schema.String });
-const Todo = Schema.Struct({ id: Schema.Number });
+const Todo = Schema.Struct({ id: Schema.Finite });
 
 class Origin extends Context.Service<Origin, string>()("Origin") {}
 class Session extends Context.Service<Session, string>()("Session") {}
@@ -70,13 +70,15 @@ describe("make", () => {
 	});
 
 	it("types the client's error schema", () => {
-		expectTypeOf(Fetch.make({ error: ApiError })).toEqualTypeOf<
+		expectTypeOf(Fetch.make({ defaultError: ApiError })).toEqualTypeOf<
 			Effect.Effect<
 				Fetch.Client<[], typeof ApiError>,
 				never,
 				HttpClient.HttpClient
 			>
 		>();
+		// @ts-expect-error the client's option is defaultError
+		Fetch.make({ error: ApiError });
 	});
 
 	it("carries the baseUrl Effect's error and services", () => {

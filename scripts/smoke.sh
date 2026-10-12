@@ -108,7 +108,7 @@ if (timedOut._tag !== "TimeoutError" || Fetch.isFetchError(timedOut)) {
 	throw new Error("TimeoutError from @monarcode/effetch/plugins is wrong");
 }
 
-const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
 const requestId = Fetch.plugin({
 	name: "requestId",

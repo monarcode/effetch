@@ -22,7 +22,7 @@ import { captureLogs } from "../utils/logs.js";
 import { delayed, failure, hang } from "../utils/mockClient.js";
 import { reply } from "../utils/reply.js";
 
-const Todo = Schema.Struct({ id: Schema.Number });
+const Todo = Schema.Struct({ id: Schema.Finite });
 
 const everySecond = Schedule.spaced("1 second");
 

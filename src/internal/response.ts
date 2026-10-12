@@ -28,7 +28,7 @@ const readErrorBody = <EB extends AnySchema>(
 	try {
 		json = parseBody(text);
 	} catch {
-		return Effect.succeed(undefined);
+		return Effect.undefined;
 	}
 	if (json === undefined || schema === undefined) {
 		return Effect.succeed(json);
@@ -88,16 +88,14 @@ export function checkStatus<EB extends AnySchema>(
 	return Effect.gen(function* () {
 		const text = yield* Effect.orElseSucceed(response.text, () => "");
 		const body = yield* readErrorBody(text, errorSchema);
-		return yield* Effect.fail(
-			new HttpError({
-				method: response.request.method,
-				url: errorUrl(response.request.url),
-				status: response.status,
-				headers: response.headers,
-				text,
-				body,
-			}),
-		);
+		return yield* new HttpError({
+			method: response.request.method,
+			url: errorUrl(response.request.url),
+			status: response.status,
+			headers: response.headers,
+			text,
+			body,
+		});
 	});
 }
 

@@ -12,7 +12,7 @@ import * as Schema from "effect/Schema";
 import * as Fetch from "@monarcode/effetch";
 
 const Todo = Schema.Struct({
-	id: Schema.Number,
+	id: Schema.Finite,
 	title: Schema.String,
 	done: Schema.Boolean,
 });
@@ -129,7 +129,7 @@ const reportErrors = Fetch.plugin({
 
 export const make = Fetch.make({
 	baseUrl: "https://api.example.com",
-	error: ApiError,
+	defaultError: ApiError,
 	plugins: [reportErrors, deadline, apiVersion, auth],
 });
 

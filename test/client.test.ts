@@ -25,7 +25,7 @@ import {
 } from "./utils/mockClient.js";
 import { reply } from "./utils/reply.js";
 
-const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
 const ApiError = Schema.Struct({ code: Schema.String });
 
@@ -152,6 +152,19 @@ describe("path params and query", () => {
 			expect(wire(mock).url).toBe(
 				"https://api.test/users/42/files/a%20b%2Fc?page=1&tags=a&tags=b",
 			);
+		}),
+	);
+
+	it.effect("accept a query typed with an interface", () =>
+		Effect.gen(function* () {
+			interface ListTodosParams {
+				readonly limit: number;
+				readonly page?: number | undefined;
+			}
+			const params: ListTodosParams = { limit: 5, page: undefined };
+			const { mock, api } = yield* setup([reply.json({})]);
+			yield* api.get("/todos", { query: params });
+			expect(wire(mock).url).toBe("https://api.test/todos?limit=5");
 		}),
 	);
 
@@ -469,7 +482,7 @@ describe("results", () => {
 					reply.json({ code: "gone" }, { status: 410 }),
 					reply.json({ message: "other" }, { status: 400 }),
 				],
-				{ error: ApiError },
+				{ defaultError: ApiError },
 			);
 			const first = yield* Effect.flip(api.get("/todos/1"));
 			const second = yield* Effect.flip(api.get("/todos/1"));
@@ -484,7 +497,7 @@ describe("results", () => {
 			Effect.gen(function* () {
 				const { api } = yield* setup(
 					[reply.json({ reason: "full" }, { status: 409 })],
-					{ error: ApiError },
+					{ defaultError: ApiError },
 				);
 				const Conflict = Schema.Struct({ reason: Schema.String });
 				const error = yield* Effect.flip(
@@ -524,9 +537,10 @@ describe("an HttpClient that fails on non-2xx statuses", () => {
 			const failing = Layer.effect(HttpClient.HttpClient)(
 				Effect.map(HttpClient.HttpClient, HttpClient.filterStatusOk),
 			).pipe(Layer.provide(mock.layer));
-			return yield* Fetch.make({ baseUrl: base, error: ApiError }).pipe(
-				Effect.provide(failing),
-			);
+			return yield* Fetch.make({
+				baseUrl: base,
+				defaultError: ApiError,
+			}).pipe(Effect.provide(failing));
 		});
 
 	it.effect("still gives an HttpError with the response body", () =>

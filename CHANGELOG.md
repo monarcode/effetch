@@ -2,6 +2,29 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## 0.1.0-alpha.2
+
+### Changed
+
+- `make`'s `error` option is now `defaultError`, so it reads differently from
+  a call's `error`, which replaces it.
+
+### Fixed
+
+- `query` now accepts values typed with an `interface`. Each property is
+  still checked, so a `Date`, a nested object or a function is rejected. The
+  new `QueryOf<Q>` type is the constraint; `QueryInput` is unchanged, and the
+  option types (`BaseOptions`, `NoBodyRequestOptions`, `RequestOptions`) take
+  an optional trailing `Q` parameter that defaults to it.
+- `HttpError.status` and `DecodeError.status` use `Schema.Finite` instead of
+  `Schema.Number`. The value is still a `number`, as before.
+
+### Documentation
+
+- Examples use `Schema.Finite` instead of `Schema.Number`. Through the JSON
+  codec, `Schema.Number` decodes `"NaN"`, `"Infinity"` and `"-Infinity"`
+  strings into numbers and encodes them back as strings.
+
 ## 0.1.0-alpha.1
 
 First release published from CI with npm provenance. No changes to the

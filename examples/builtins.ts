@@ -8,7 +8,7 @@ import * as Fetch from "@monarcode/effetch";
 import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
 
 const Todo = Schema.Struct({
-	id: Schema.Number,
+	id: Schema.Finite,
 	title: Schema.String,
 	done: Schema.Boolean,
 });
@@ -23,7 +23,7 @@ const session: { accessToken: string | undefined } = {
 
 export const make = Fetch.make({
 	baseUrl: "https://api.example.com",
-	error: ApiError,
+	defaultError: ApiError,
 	plugins: [
 		logger({ level: "Info" }),
 		retry(),

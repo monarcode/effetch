@@ -9,7 +9,7 @@ import { checkStatus, decodeOutput } from "../../src/internal/response.js";
 
 declare const response: HttpClientResponse.HttpClientResponse;
 
-const Todo = Schema.Struct({ id: Schema.Number });
+const Todo = Schema.Struct({ id: Schema.Finite });
 const ApiError = Schema.Struct({ code: Schema.String });
 
 interface Locale {
