@@ -30,8 +30,8 @@ import type { Plugin } from "./Plugin.js";
  *   `content-type` on a call to override it). When a call has an `output`
  *   schema, effetch sends `Accept: application/json` unless an `accept`
  *   header is set here or on the call.
- * - `error`: the default schema for non-2xx response bodies. A call's own
- *   `error` option replaces it.
+ * - `defaultError`: the schema for non-2xx response bodies of calls that
+ *   don't pass their own `error` option. A call's `error` replaces it.
  * - `plugins`: hooks into every call (see {@link Plugin}). `plugins[0]` is
  *   the outermost layer: its `onRequest` runs first and its `onResponse`
  *   last. Names must be unique. Pass the list inline: annotating it as
@@ -56,7 +56,7 @@ import type { Plugin } from "./Plugin.js";
  * const make = Fetch.make({
  *   baseUrl: Config.String("API_URL"),
  *   headers: { accept: "application/json" },
- *   error: ApiError,
+ *   defaultError: ApiError,
  *   plugins: [apiKey],
  * });
  * ```
@@ -73,8 +73,8 @@ export interface ClientConfig<
 	readonly baseUrl?: string | Effect.Effect<string, BaseE, BaseR> | undefined;
 	/** Headers sent with every request. */
 	readonly headers?: Headers.Input | undefined;
-	/** Default schema for non-2xx response bodies. */
-	readonly error?: EB | undefined;
+	/** Schema for non-2xx response bodies, unless a call passes its own `error`. */
+	readonly defaultError?: EB | undefined;
 	/** Plugins, outermost first. Names must be unique. */
 	readonly plugins?: Ps | undefined;
 }
@@ -85,7 +85,7 @@ export interface ClientConfig<
  * can fail with the plugins' errors on top of effetch's own.
  *
  * - `Ps`: the plugins the client was made with.
- * - `EB`: the client's default `error` schema.
+ * - `EB`: the client's `defaultError` schema.
  *
  * @example
  * ```ts
@@ -413,7 +413,7 @@ export const make = <
 			applyDefaults,
 		);
 		const call = makeCall({
-			errorSchema: config.error,
+			errorSchema: config.defaultError,
 			applyDefaults,
 			chain,
 			plugins,

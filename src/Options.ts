@@ -394,7 +394,8 @@ export type CallEffect<
  * The signature of `get`, `head` and `options`: no `body` or `input`.
  *
  * - `Ps`: the client's plugins.
- * - `DefaultEB`: the client's `error` schema, used when a call has none.
+ * - `DefaultEB`: the client's `defaultError` schema, used when a call has
+ *   no `error`.
  *
  * @example
  * ```ts
@@ -429,7 +430,8 @@ export interface NoBodyMethod<
  * typed by `input` when given.
  *
  * - `Ps`: the client's plugins.
- * - `DefaultEB`: the client's `error` schema, used when a call has none.
+ * - `DefaultEB`: the client's `defaultError` schema, used when a call has
+ *   no `error`.
  *
  * @example
  * ```ts
@@ -469,7 +471,8 @@ export interface BodyMethod<
  * `input` when given.
  *
  * - `Ps`: the client's plugins.
- * - `DefaultEB`: the client's `error` schema, used when a call has none.
+ * - `DefaultEB`: the client's `defaultError` schema, used when a call has
+ *   no `error`.
  *
  * @example
  * ```ts

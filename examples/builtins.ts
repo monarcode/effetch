@@ -23,7 +23,7 @@ const session: { accessToken: string | undefined } = {
 
 export const make = Fetch.make({
 	baseUrl: "https://api.example.com",
-	error: ApiError,
+	defaultError: ApiError,
 	plugins: [
 		logger({ level: "Info" }),
 		retry(),

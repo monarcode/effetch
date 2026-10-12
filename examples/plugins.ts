@@ -129,7 +129,7 @@ const reportErrors = Fetch.plugin({
 
 export const make = Fetch.make({
 	baseUrl: "https://api.example.com",
-	error: ApiError,
+	defaultError: ApiError,
 	plugins: [reportErrors, deadline, apiVersion, auth],
 });
 

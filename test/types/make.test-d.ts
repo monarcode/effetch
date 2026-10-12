@@ -70,13 +70,15 @@ describe("make", () => {
 	});
 
 	it("types the client's error schema", () => {
-		expectTypeOf(Fetch.make({ error: ApiError })).toEqualTypeOf<
+		expectTypeOf(Fetch.make({ defaultError: ApiError })).toEqualTypeOf<
 			Effect.Effect<
 				Fetch.Client<[], typeof ApiError>,
 				never,
 				HttpClient.HttpClient
 			>
 		>();
+		// @ts-expect-error the client's option is defaultError
+		Fetch.make({ error: ApiError });
 	});
 
 	it("carries the baseUrl Effect's error and services", () => {

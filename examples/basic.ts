@@ -19,7 +19,7 @@ const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
 const make = Fetch.make({
 	baseUrl: "https://api.example.com",
 	headers: { accept: "application/json" },
-	error: ApiError,
+	defaultError: ApiError,
 });
 
 class Api extends Context.Service<Api, Effect.Success<typeof make>>()("Api") {}

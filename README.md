@@ -141,7 +141,7 @@ const session: { accessToken?: string } = {};
 const make = Fetch.make({
   baseUrl: Config.String("API_URL"),
   headers: { "x-client": "web" },
-  error: ApiError,
+  defaultError: ApiError,
   plugins: [
     logger(),
     retry(),
@@ -159,12 +159,12 @@ export const ApiLive = Layer.effect(Api)(make).pipe(
 );
 ```
 
-| Option    | Description                                                                                                                                                                                 |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `baseUrl` | Prepended to every path that isn't an absolute `http(s)://` URL. A string, or an Effect run once when the client is made (a `Config` works). It can't contain a query string or a fragment. |
-| `headers` | Sent with every request. A call's header of the same name wins. `content-type` and `content-length` are ignored here: they come from each body.                                             |
-| `error`   | The default schema for non-2xx response bodies (see [Errors](#errors)).                                                                                                                     |
-| `plugins` | See [Plugins](#plugins). The first one is the outermost.                                                                                                                                    |
+| Option         | Description                                                                                                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`      | Prepended to every path that isn't an absolute `http(s)://` URL. A string, or an Effect run once when the client is made (a `Config` works). It can't contain a query string or a fragment. |
+| `headers`      | Sent with every request. A call's header of the same name wins. `content-type` and `content-length` are ignored here: they come from each body.                                             |
+| `defaultError` | The schema for non-2xx response bodies of calls without their own `error` (see [Errors](#errors)).                                                                                          |
+| `plugins`      | See [Plugins](#plugins). The first one is the outermost.                                                                                                                                    |
 
 The client holds on to the `HttpClient`, the `baseUrl` and the services its
 plugins need. Its calls need nothing from the environment, apart from the
@@ -260,7 +260,7 @@ anything the methods don't cover, such as streaming a response.
 - `HttpError.headers` are Effect `Headers`: `authorization`, `set-cookie` and
   other sensitive headers print as `<redacted>`.
 - `HttpError.text` is the raw body. `body` is the body decoded with the
-  `error` schema, `undefined` if it didn't match, or the parsed JSON when
+  call's `error` schema (or the client's `defaultError`), `undefined` if it didn't match, or the parsed JSON when
   there's no schema. Reading it never fails the call.
 
 ```ts

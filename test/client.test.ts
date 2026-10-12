@@ -482,7 +482,7 @@ describe("results", () => {
 					reply.json({ code: "gone" }, { status: 410 }),
 					reply.json({ message: "other" }, { status: 400 }),
 				],
-				{ error: ApiError },
+				{ defaultError: ApiError },
 			);
 			const first = yield* Effect.flip(api.get("/todos/1"));
 			const second = yield* Effect.flip(api.get("/todos/1"));
@@ -497,7 +497,7 @@ describe("results", () => {
 			Effect.gen(function* () {
 				const { api } = yield* setup(
 					[reply.json({ reason: "full" }, { status: 409 })],
-					{ error: ApiError },
+					{ defaultError: ApiError },
 				);
 				const Conflict = Schema.Struct({ reason: Schema.String });
 				const error = yield* Effect.flip(
@@ -537,9 +537,10 @@ describe("an HttpClient that fails on non-2xx statuses", () => {
 			const failing = Layer.effect(HttpClient.HttpClient)(
 				Effect.map(HttpClient.HttpClient, HttpClient.filterStatusOk),
 			).pipe(Layer.provide(mock.layer));
-			return yield* Fetch.make({ baseUrl: base, error: ApiError }).pipe(
-				Effect.provide(failing),
-			);
+			return yield* Fetch.make({
+				baseUrl: base,
+				defaultError: ApiError,
+			}).pipe(Effect.provide(failing));
 		});
 
 	it.effect("still gives an HttpError with the response body", () =>

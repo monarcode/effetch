@@ -4,6 +4,11 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ## 0.1.0-alpha.2
 
+### Changed
+
+- `make`'s `error` option is now `defaultError`, so it reads differently from
+  a call's `error`, which replaces it.
+
 ### Fixed
 
 - `query` now accepts values typed with an `interface`. Each property is
