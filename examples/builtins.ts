@@ -8,7 +8,7 @@ import * as Fetch from "@monarcode/effetch";
 import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
 
 const Todo = Schema.Struct({
-	id: Schema.Number,
+	id: Schema.Finite,
 	title: Schema.String,
 	done: Schema.Boolean,
 });

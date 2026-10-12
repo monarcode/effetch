@@ -84,7 +84,7 @@ export type QueryOf<Q> = {
  * import * as Schema from "effect/Schema";
  * import type * as Fetch from "@monarcode/effetch";
  *
- * const Todo: Fetch.AnySchema = Schema.Struct({ id: Schema.Number });
+ * const Todo: Fetch.AnySchema = Schema.Struct({ id: Schema.Finite });
  * ```
  *
  * @since 0.1.0
@@ -132,7 +132,7 @@ export type ParamsOption<P extends string> = string extends P
  * import * as Schema from "effect/Schema";
  * import type * as Fetch from "@monarcode/effetch";
  *
- * const Todo = Schema.Struct({ id: Schema.Number });
+ * const Todo = Schema.Struct({ id: Schema.Finite });
  *
  * const options: Fetch.BaseOptions<typeof Todo, Schema.Unknown, []> = {
  *   query: { expand: "owner" },
@@ -290,7 +290,7 @@ export type Args<P extends string, T> = [PathParamNames<P>] extends [never]
  * import * as Schema from "effect/Schema";
  * import type * as Fetch from "@monarcode/effetch";
  *
- * type Todo = Fetch.Success<Schema.Struct<{ id: Schema.Number }>>;
+ * type Todo = Fetch.Success<Schema.Struct<{ id: Schema.Finite }>>;
  * //   ^? { readonly id: number }
  * ```
  *
@@ -311,7 +311,7 @@ export type Success<O extends AnySchema | undefined> = O extends AnySchema
  * import type * as Fetch from "@monarcode/effetch";
  *
  * type E = Fetch.CallError<
- *   Schema.Struct<{ id: Schema.Number }>,
+ *   Schema.Struct<{ id: Schema.Finite }>,
  *   Schema.Struct<{ code: Schema.String }>,
  *   []
  * >;
@@ -340,7 +340,7 @@ export type CallError<
  * import type * as Fetch from "@monarcode/effetch";
  *
  * type R = Fetch.CallServices<
- *   Schema.Struct<{ id: Schema.Number }>,
+ *   Schema.Struct<{ id: Schema.Finite }>,
  *   Schema.Unknown,
  *   Schema.Unknown
  * >;
@@ -373,7 +373,7 @@ export type CallServices<
  * import type * as Fetch from "@monarcode/effetch";
  *
  * type Call = Fetch.CallEffect<
- *   Schema.Struct<{ id: Schema.Number }>,
+ *   Schema.Struct<{ id: Schema.Finite }>,
  *   Schema.Unknown,
  *   Schema.Unknown,
  *   []
@@ -403,7 +403,7 @@ export type CallEffect<
  *
  * declare const get: Fetch.NoBodyMethod<[], Schema.Unknown>;
  *
- * const Todo = Schema.Struct({ id: Schema.Number });
+ * const Todo = Schema.Struct({ id: Schema.Finite });
  * const todo = get("/todos/:id", { params: { id: 1 }, output: Todo });
  * ```
  *
@@ -438,7 +438,7 @@ export interface NoBodyMethod<
  *
  * declare const patch: Fetch.BodyMethod<[], Schema.Unknown>;
  *
- * const Todo = Schema.Struct({ id: Schema.Number, done: Schema.Boolean });
+ * const Todo = Schema.Struct({ id: Schema.Finite, done: Schema.Boolean });
  * const updated = patch("/todos/:id", {
  *   params: { id: 1 },
  *   body: { done: true },
@@ -478,7 +478,7 @@ export interface BodyMethod<
  *
  * declare const request: Fetch.RequestMethod<[], Schema.Unknown>;
  *
- * const Todo = Schema.Struct({ id: Schema.Number, done: Schema.Boolean });
+ * const Todo = Schema.Struct({ id: Schema.Finite, done: Schema.Boolean });
  * const updated = request("PATCH", "/todos/:id", {
  *   params: { id: 1 },
  *   body: { done: true },

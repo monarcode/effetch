@@ -7,7 +7,7 @@ import * as Schema from "effect/Schema";
 import * as Fetch from "@monarcode/effetch";
 
 const Todo = Schema.Struct({
-	id: Schema.Number,
+	id: Schema.Finite,
 	title: Schema.String,
 	done: Schema.Boolean,
 });

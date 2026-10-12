@@ -93,7 +93,7 @@ export interface ClientConfig<
  * import * as Schema from "effect/Schema";
  * import * as Fetch from "@monarcode/effetch";
  *
- * const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
+ * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
  *
  * const program = (api: Fetch.Client) =>
  *   api.get("/todos/:id", { params: { id: 1 }, output: Todo }).pipe(
@@ -147,7 +147,7 @@ export interface Client<
 	 * import * as Schema from "effect/Schema";
 	 * import * as Fetch from "@monarcode/effetch";
 	 *
-	 * const Todo = Schema.Struct({ id: Schema.Number, done: Schema.Boolean });
+	 * const Todo = Schema.Struct({ id: Schema.Finite, done: Schema.Boolean });
 	 *
 	 * const complete = (api: Fetch.Client, id: number) =>
 	 *   api.request("PATCH", "/todos/:id", {
@@ -167,7 +167,7 @@ export interface Client<
 	 * import * as Schema from "effect/Schema";
 	 * import * as Fetch from "@monarcode/effetch";
 	 *
-	 * const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
+	 * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 	 *
 	 * const list = (api: Fetch.Client) =>
 	 *   api.get("/todos", {
@@ -223,7 +223,7 @@ export interface Client<
 	 * import * as Fetch from "@monarcode/effetch";
 	 *
 	 * const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
-	 * const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
+	 * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 	 *
 	 * const create = (api: Fetch.Client) =>
 	 *   api.post("/todos", {
@@ -250,7 +250,7 @@ export interface Client<
 	 * import * as Schema from "effect/Schema";
 	 * import * as Fetch from "@monarcode/effetch";
 	 *
-	 * const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
+	 * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 	 *
 	 * const replace = (api: Fetch.Client, todo: typeof Todo.Type) =>
 	 *   api.put("/todos/:id", {
@@ -272,7 +272,7 @@ export interface Client<
 	 * import * as Schema from "effect/Schema";
 	 * import * as Fetch from "@monarcode/effetch";
 	 *
-	 * const Todo = Schema.Struct({ id: Schema.Number, done: Schema.Boolean });
+	 * const Todo = Schema.Struct({ id: Schema.Finite, done: Schema.Boolean });
 	 *
 	 * const complete = (api: Fetch.Client, id: number) =>
 	 *   api.patch("/todos/:id", {

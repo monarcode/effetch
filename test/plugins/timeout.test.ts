@@ -40,7 +40,7 @@ describe("timeout", () => {
 				plugins: [timeout({ duration: "5 seconds" })],
 			});
 			const value = yield* after(
-				api.get("/slow", { output: Schema.Number }),
+				api.get("/slow", { output: Schema.Finite }),
 				"4 seconds",
 			);
 			expect(value).toBe(1);
@@ -54,7 +54,7 @@ describe("timeout", () => {
 			});
 			const value = yield* after(
 				api.get("/export", {
-					output: Schema.Number,
+					output: Schema.Finite,
 					plugins: { timeout: { duration: "10 seconds" } },
 				}),
 				"8 seconds",
@@ -77,7 +77,7 @@ describe("timeout", () => {
 			});
 			const value = yield* after(
 				api.get("/slow", {
-					output: Schema.Number,
+					output: Schema.Finite,
 					plugins: { timeout: false },
 				}),
 				"1 minute",

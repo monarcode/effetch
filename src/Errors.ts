@@ -83,7 +83,7 @@ export class NetworkError extends Schema.TaggedError<NetworkError>()(
 export class HttpError extends Schema.TaggedError<HttpError>()("HttpError", {
 	method: Schema.String,
 	url: Schema.String,
-	status: Schema.Number,
+	status: Schema.Finite,
 	headers: Schema.declare(Headers.isHeaders),
 	text: Schema.String,
 	body: Schema.Unknown,
@@ -161,7 +161,7 @@ export class DecodeError extends Schema.TaggedError<DecodeError>()(
 	{
 		method: Schema.String,
 		url: Schema.String,
-		status: Schema.Number,
+		status: Schema.Finite,
 		issue: Schema.Unknown,
 		message: Schema.String,
 	},

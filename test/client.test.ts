@@ -25,7 +25,7 @@ import {
 } from "./utils/mockClient.js";
 import { reply } from "./utils/reply.js";
 
-const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
 const ApiError = Schema.Struct({ code: Schema.String });
 

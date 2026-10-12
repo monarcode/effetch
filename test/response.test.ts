@@ -35,7 +35,7 @@ const withSecretQuery = [
 	),
 ];
 
-const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 const ApiError = Schema.Struct({ code: Schema.String });
 
 class Locale extends Context.Service<Locale, { readonly tag: string }>()(

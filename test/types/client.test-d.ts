@@ -32,7 +32,7 @@ declare const get: NoBodyMethod<Ps, Schema.Unknown>;
 declare const post: BodyMethod<Ps, Schema.Unknown>;
 declare const request: RequestMethod<Ps, Schema.Unknown>;
 
-const Todo = Schema.Struct({ id: Schema.Number, title: Schema.String });
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 const ApiError = Schema.Struct({ code: Schema.String });
 const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
 
