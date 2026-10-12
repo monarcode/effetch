@@ -607,8 +607,7 @@ pnpm run check
 | `pnpm run smoke`      | Packs the package, installs it in a fresh project, typechecks and runs a consumer, and checks go-to-definition, hovers and completions. |
 | `pnpm run check`      | All of the above, plus publint and attw. CI runs it on every push to `main` and every pull request.                                     |
 
-The pre-commit hook runs `lint` and `format:check`. Releases are described in
-[RELEASING.md](RELEASING.md).
+The pre-commit hook runs `lint` and `format:check`.
 
 ## License
 
