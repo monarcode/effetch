@@ -5,7 +5,11 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { checkRegistry, prepareRelease } from "../scripts/prepare-release.mjs";
+import {
+	checkRegistry,
+	chooseDistTag,
+	prepareRelease,
+} from "../scripts/prepare-release.mjs";
 
 const manifest = {
 	name: "@monarcode/effetch",
@@ -25,6 +29,7 @@ describe("prepareRelease", () => {
 		expect(prepareRelease(manifest, changelog, manifest.version)).toEqual({
 			version: "0.1.0-alpha.1",
 			tag: "v0.1.0-alpha.1",
+			prerelease: true,
 			notes: "### Added\n\n- New things.\n\n### Fixed\n\n- A bug.",
 		});
 		expect(
@@ -37,18 +42,44 @@ describe("prepareRelease", () => {
 	});
 
 	it.each([
+		["0.1.0", false],
+		["1.0.0", false],
+		["0.1.0-alpha.3", true],
+		["0.1.0-beta.0", true],
+		["0.1.0-rc.0", true],
+		["0.1.0-rc.12", true],
+	])("accepts %s (prerelease: %s)", (version, prerelease) => {
+		const release = prepareRelease(
+			{ ...manifest, version },
+			`# Changelog\n\n## ${version}\n\nNotes.\n`,
+			version,
+		);
+		expect(release).toEqual({
+			version,
+			tag: `v${version}`,
+			prerelease,
+			notes: "Notes.",
+		});
+	});
+
+	it.each([
 		"v0.1.0-alpha.1",
-		"0.1.0",
-		"0.1.0-beta.1",
+		"v0.1.0",
+		"0.1",
+		"0.1.0-rc",
+		"0.1.0-rc.0.1",
+		"0.1.0-pre.1",
+		"0.1.0-RC.1",
 		"0.1.0-alpha.01",
 		"01.1.0-alpha.1",
+		"0.1.0+build.1",
 		" 0.1.0-alpha.1",
 		"0.1.0-alpha.1\n",
 		"$(echo bad)",
 		undefined,
-	])("rejects %j, which isn't an alpha version", (version) => {
+	])("rejects %j, which isn't a release version", (version) => {
 		expect(() => prepareRelease(manifest, changelog, version)).toThrow(
-			/alpha version/,
+			/Use a version such as/,
 		);
 	});
 
@@ -102,27 +133,58 @@ describe("prepareRelease", () => {
 	});
 });
 
+describe("chooseDistTag", () => {
+	it.each([
+		["0.1.0", [], "latest"],
+		["0.1.0", ["0.1.0-rc.0"], "latest"],
+		["0.2.0", ["0.1.0"], "latest"],
+		["0.1.0-rc.0", [], "latest"],
+		["0.1.0-rc.0", ["0.0.0-stage", "0.1.0-alpha.2"], "latest"],
+		["0.2.0-rc.0", ["0.1.0-rc.0", "0.1.0"], "next"],
+	] as const)("tags %s with %j published as %s", (version, published, tag) => {
+		expect(chooseDistTag(version, published)).toBe(tag);
+	});
+});
+
 describe("checkRegistry", () => {
-	const answering = (status: number) => {
+	const answering = (status: number, versions: Array<string> = []) => {
 		const urls: Array<string> = [];
 		const request = async (url: string) => {
 			urls.push(url);
-			return { status, ok: status >= 200 && status < 300 };
+			return {
+				status,
+				ok: status >= 200 && status < 300,
+				json: async () => ({
+					versions: Object.fromEntries(versions.map((v) => [v, {}])),
+				}),
+			};
 		};
 		return { urls, request };
 	};
 
-	it("passes when the version isn't on npm (404)", async () => {
+	it("passes when the package isn't on npm (404)", async () => {
 		const { urls, request } = answering(404);
-		await checkRegistry("0.1.0-alpha.1", request);
-		expect(urls).toEqual([
-			"https://registry.npmjs.org/@monarcode%2Feffetch/0.1.0-alpha.1",
-		]);
+		await expect(checkRegistry("0.1.0-alpha.1", request)).resolves.toEqual({
+			distTag: "latest",
+		});
+		expect(urls).toEqual(["https://registry.npmjs.org/@monarcode%2Feffetch"]);
 	});
 
-	it("fails when the version is already published (200)", async () => {
+	it("passes with the dist-tag when the version is new", async () => {
 		await expect(
-			checkRegistry("0.1.0-alpha.1", answering(200).request),
+			checkRegistry("0.1.0-rc.0", answering(200, ["0.1.0-alpha.2"]).request),
+		).resolves.toEqual({ distTag: "latest" });
+		await expect(
+			checkRegistry("0.2.0-rc.0", answering(200, ["0.1.0"]).request),
+		).resolves.toEqual({ distTag: "next" });
+	});
+
+	it("fails when the version is already published", async () => {
+		await expect(
+			checkRegistry(
+				"0.1.0-alpha.1",
+				answering(200, ["0.1.0-alpha.0", "0.1.0-alpha.1"]).request,
+			),
 		).rejects.toThrow(/already published/);
 	});
 
@@ -153,7 +215,12 @@ describe("the command", () => {
 			JSON.parse(
 				readFileSync(path.join(dir, "out", "release.json"), "utf8"),
 			),
-		).toMatchObject({ version: "0.1.0-alpha.1", tag: "v0.1.0-alpha.1" });
+		).toEqual({
+			version: "0.1.0-alpha.1",
+			tag: "v0.1.0-alpha.1",
+			prerelease: true,
+			notes: "### Added\n\n- New things.\n\n### Fixed\n\n- A bug.",
+		});
 	});
 
 	it("fails without an output directory or with an unknown flag", () => {
