@@ -1,4 +1,10 @@
-# effetch
+<h1>
+  <img
+    src="https://github.com/monarcode/effetch/raw/main/banner.png"
+    alt="effetch: schema-driven HTTP calls on Effect v4's HttpClient, typed end to end"
+    width="100%"
+  />
+</h1>
 
 [![npm](https://img.shields.io/npm/v/@monarcode/effetch)](https://www.npmjs.com/package/@monarcode/effetch)
 [![CI](https://github.com/monarcode/effetch/actions/workflows/ci.yml/badge.svg)](https://github.com/monarcode/effetch/actions/workflows/ci.yml)
