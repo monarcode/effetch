@@ -1,5 +1,17 @@
 export { make } from "./Client.js";
 export type { Client, ClientConfig } from "./Client.js";
+export type {
+	Endpoint,
+	EndpointArgs,
+	EndpointBody,
+	EndpointDefinition,
+	EndpointMethod,
+	EndpointOptions,
+	EndpointRoute,
+	RouteMethod,
+	RoutePath,
+	ValidRoute,
+} from "./Endpoint.js";
 export {
 	DecodeError,
 	HttpError,

@@ -99,7 +99,7 @@ class RetryableStatus extends Data.TaggedError("RetryableStatus")<{
  * import * as Fetch from "@monarcode/effetch";
  * import { retry } from "@monarcode/effetch/plugins";
  *
- * const make = Fetch.make({
+ * const makeApi = Fetch.make({
  *   baseUrl: "https://api.example.com",
  *   plugins: [retry({ times: 3 })],
  * });

@@ -142,7 +142,7 @@ export type BearerPlugin<E = never, R = never> = Plugin<
  *   }),
  * });
  *
- * const make = Fetch.make({
+ * const makeApi = Fetch.make({
  *   baseUrl: "https://api.example.com",
  *   plugins: [fromSession],
  * });

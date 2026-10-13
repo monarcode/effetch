@@ -34,6 +34,23 @@ export const provideOverrides = (
 ): (<A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>) =>
 	Effect.provideService(CurrentOverrides, overrides ?? noOverrides);
 
+/**
+ * The route of the call being run, such as `"GET /users/:id"`. Provided
+ * around each call; anything else (such as `client.httpClient`) sees
+ * `undefined`.
+ */
+export const CurrentRoute: Context.Reference<string | undefined> =
+	Context.Reference<string | undefined>("@monarcode/effetch/CurrentRoute", {
+		defaultValue: () => undefined,
+	});
+
+export const provideRoute = (
+	route: string | undefined,
+): (<A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>) =>
+	Effect.provideService(CurrentRoute, route);
+
+const currentRoute = Effect.service(CurrentRoute);
+
 const overrideOf = (overrides: OverrideMap, name: string): unknown =>
 	hasOwn(overrides, name) ? overrides[name] : undefined;
 
@@ -56,6 +73,37 @@ export const mergeOptions = (defaults: unknown, override: unknown): unknown =>
 				),
 			}
 		: defaults;
+
+/**
+ * An endpoint's `plugins` option with a call's on top, per plugin name. The
+ * call's override wins, except that when both are options objects they're
+ * merged with {@link mergeOptions}. `Object.fromEntries` defines own
+ * properties, so even a plugin named `__proto__` stays a plain key.
+ */
+export const mergeOverrides = (
+	endpoint: OverrideMap | undefined,
+	call: OverrideMap | undefined,
+): OverrideMap | undefined => {
+	if (endpoint === undefined || call === undefined) {
+		return call ?? endpoint;
+	}
+	const names = new Set([...Object.keys(endpoint), ...Object.keys(call)]);
+	return Object.fromEntries(
+		Array.from(names, (name) => {
+			const base = overrideOf(endpoint, name);
+			const override = overrideOf(call, name);
+			if (override === undefined) {
+				return [name, base];
+			}
+			return [
+				name,
+				isRecord(base) && isRecord(override)
+					? mergeOptions(base, override)
+					: override,
+			];
+		}),
+	);
+};
 
 const fromExecute = <E, R>(
 	execute: (
@@ -99,12 +147,14 @@ const layer = (plugin: Plugin.Any, inner: Execute): Execute => {
 			: (request) =>
 					Effect.gen(function* () {
 						const current = yield* options;
+						const route = yield* currentRoute;
 						const sent =
 							onRequest === undefined
 								? request
 								: yield* onRequest(request, {
 										request,
 										options: current,
+										route,
 									});
 						const response = yield* inner(sent);
 						return onResponse === undefined
@@ -112,12 +162,19 @@ const layer = (plugin: Plugin.Any, inner: Execute): Execute => {
 							: yield* onResponse(response, {
 									request: sent,
 									options: current,
+									route,
 								});
 					});
 	const wrapped: Execute =
 		wrap === undefined
 			? hooked
-			: executeOf(wrap(fromExecute(hooked) as Plugin.Upstream, options));
+			: executeOf(
+					wrap(
+						fromExecute(hooked) as Plugin.Upstream,
+						options,
+						currentRoute,
+					),
+				);
 	return (request) =>
 		Effect.flatMap(Effect.service(CurrentOverrides), (overrides) =>
 			overrideOf(overrides, plugin.name) === false
@@ -172,8 +229,10 @@ export const runErrorHooks = (
 		return Effect.void;
 	}
 	const error = Cause.squash(cause);
-	const hooks = Effect.flatMap(Effect.service(CurrentOverrides), (overrides) =>
-		Effect.forEach(
+	const hooks = Effect.gen(function* () {
+		const overrides = yield* Effect.service(CurrentOverrides);
+		const route = yield* currentRoute;
+		yield* Effect.forEach(
 			plugins,
 			(plugin) => {
 				const override = overrideOf(overrides, plugin.name);
@@ -182,7 +241,7 @@ export const runErrorHooks = (
 				}
 				const options = mergeOptions(plugin.defaults, override);
 				return Effect.catchCause(
-					plugin.onError(error, { request, options }),
+					plugin.onError(error, { request, options, route }),
 					(failure) =>
 						Effect.logDebug(
 							`effetch: the onError hook of plugin "${plugin.name}" failed`,
@@ -191,7 +250,7 @@ export const runErrorHooks = (
 				);
 			},
 			{ discard: true },
-		),
-	);
+		);
+	});
 	return withContext(context)(hooks);
 };

@@ -14,6 +14,7 @@ import type { ApplyDefaults } from "./pipeline.js";
 import {
 	type OverrideMap,
 	provideOverrides,
+	provideRoute,
 	runErrorHooks,
 } from "./plugins.js";
 import { toUrlParams } from "./query.js";
@@ -102,7 +103,10 @@ const send = (
 		return yield* Effect.tapCause(execute(state, request, options), (cause) =>
 			runErrorHooks(state.plugins, state.context, request, cause),
 		);
-	}).pipe(provideOverrides(options.plugins));
+	}).pipe(
+		provideOverrides(options.plugins),
+		provideRoute(`${method} ${path}`),
+	);
 
 export type Call = (
 	path: string,

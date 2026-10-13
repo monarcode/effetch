@@ -12,7 +12,7 @@ import * as Schema from "effect/Schema";
 import { describe, expect } from "vitest";
 
 import * as Fetch from "../src/index.js";
-import { CurrentOverrides } from "../src/internal/plugins.js";
+import { CurrentOverrides, CurrentRoute } from "../src/internal/plugins.js";
 import { base, setup, wire } from "./utils/client.js";
 import { captureLogs } from "./utils/logs.js";
 import { failure, hang, type Script } from "./utils/mockClient.js";
@@ -564,6 +564,128 @@ describe("make", () => {
 	);
 });
 
+/** Records the route each hook sees, as `"<hook> <route>"`. */
+const routeRecorder = (seen: Array<string>) =>
+	Fetch.plugin({
+		name: "routes",
+		onRequest: (request, ctx) =>
+			Effect.sync(() => {
+				seen.push(`onRequest ${ctx.route}`);
+				return request;
+			}),
+		onResponse: (response, ctx) =>
+			Effect.sync(() => {
+				seen.push(`onResponse ${ctx.route}`);
+				return response;
+			}),
+		onError: (_error, ctx) =>
+			Effect.sync(() => {
+				seen.push(`onError ${ctx.route}`);
+			}),
+		wrap: (client, _options, route) =>
+			HttpClient.transform(client, (response) =>
+				Effect.gen(function* () {
+					seen.push(`wrap ${yield* route}`);
+					return yield* response;
+				}),
+			),
+	});
+
+describe("route", () => {
+	it.effect("is the call's method and unfilled path, in every hook", () =>
+		Effect.gen(function* () {
+			const seen: Array<string> = [];
+			const { api } = yield* setup([reply.empty(500)], {
+				plugins: [routeRecorder(seen)],
+			});
+			yield* Effect.flip(api.get("/todos/:id", { params: { id: 1 } }));
+			expect(seen).toEqual([
+				"wrap GET /todos/:id",
+				"onRequest GET /todos/:id",
+				"onResponse GET /todos/:id",
+				"onError GET /todos/:id",
+			]);
+		}),
+	);
+
+	it.effect("is the same for every method and for endpoints", () =>
+		Effect.gen(function* () {
+			const seen: Array<string> = [];
+			const { api } = yield* setup([reply.json({})], {
+				plugins: [routeRecorder(seen)],
+			});
+			yield* api.request("PATCH", "/todos/:id", { params: { id: 1 } });
+			yield* api.endpoint("PATCH /todos/:id")({ params: { id: 2 } });
+			yield* api.post("https://other.test/upload");
+			const onRequest = seen.filter((entry) =>
+				entry.startsWith("onRequest"),
+			);
+			expect(onRequest).toEqual([
+				"onRequest PATCH /todos/:id",
+				"onRequest PATCH /todos/:id",
+				"onRequest POST https://other.test/upload",
+			]);
+		}),
+	);
+
+	it.effect("belongs to its own call, even concurrently", () =>
+		Effect.gen(function* () {
+			const seen: Array<string> = [];
+			const { api } = yield* setup([reply.json({})], {
+				plugins: [routeRecorder(seen)],
+			});
+			yield* Effect.all(
+				[api.get("/a"), api.del("/b/:id", { params: { id: 1 } })],
+				{
+					concurrency: "unbounded",
+				},
+			);
+			expect(
+				seen.filter((entry) => entry.startsWith("onRequest")).sort(),
+			).toEqual(["onRequest DELETE /b/:id", "onRequest GET /a"]);
+		}),
+	);
+
+	it.effect("is undefined for httpClient, even inside a call", () =>
+		Effect.gen(function* () {
+			const seen: Array<string> = [];
+			const inner: {
+				send?:
+					| ((
+							request: HttpClientRequest.HttpClientRequest,
+					  ) => Effect.Effect<unknown, unknown>)
+					| undefined;
+			} = {};
+			const nested = Fetch.plugin({
+				name: "nested",
+				onRequest: (request, ctx) =>
+					Effect.gen(function* () {
+						// Only once, so a leaked route fails the test instead of looping.
+						const send = inner.send;
+						if (ctx.route === "GET /outer" && send !== undefined) {
+							inner.send = undefined;
+							yield* Effect.orDie(send(HttpClientRequest.get("/inner")));
+						}
+						return request;
+					}),
+			});
+			const { mock, api } = yield* setup([reply.json({})], {
+				plugins: [routeRecorder(seen), nested],
+			});
+			inner.send = (request) => api.httpClient.execute(request);
+			yield* api.get("/outer");
+			expect(mock.requests.map((request) => request.url)).toEqual([
+				`${base}/inner`,
+				`${base}/outer`,
+			]);
+			expect(seen.filter((entry) => entry.startsWith("onRequest"))).toEqual([
+				"onRequest GET /outer",
+				"onRequest undefined",
+			]);
+		}),
+	);
+});
+
 describe("httpClient", () => {
 	it.effect("runs every plugin with its defaults, outside any call", () =>
 		Effect.gen(function* () {
@@ -575,6 +697,23 @@ describe("httpClient", () => {
 				.pipe(Effect.provideService(CurrentOverrides, { tag: false }));
 			expect(wire(mock).url).toBe(`${base}/todos`);
 			expect(wire(mock).headers["x-trail"]).toBe("tag");
+		}),
+	);
+
+	it.effect("gives plugins no route, outside any call", () =>
+		Effect.gen(function* () {
+			const seen: Array<string> = [];
+			const { api } = yield* setup([reply.json({})], {
+				plugins: [routeRecorder(seen)],
+			});
+			yield* api.httpClient
+				.execute(HttpClientRequest.get("/todos"))
+				.pipe(Effect.provideService(CurrentRoute, "GET /elsewhere"));
+			expect(seen).toEqual([
+				"wrap undefined",
+				"onRequest undefined",
+				"onResponse undefined",
+			]);
 		}),
 	);
 

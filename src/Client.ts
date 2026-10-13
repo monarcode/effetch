@@ -4,9 +4,15 @@ import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpMethod from "effect/http/HttpMethod";
 import type * as Schema from "effect/Schema";
 
+import type { EndpointMethod } from "./Endpoint.js";
 import type { NetworkError } from "./Errors.js";
+import { makeEndpoint, type RuntimeDefinition } from "./internal/endpoint.js";
 import { makeApplyDefaults, mapClientErrors } from "./internal/pipeline.js";
-import { applyPlugins, provideOverrides } from "./internal/plugins.js";
+import {
+	applyPlugins,
+	provideOverrides,
+	provideRoute,
+} from "./internal/plugins.js";
 import { makeCall, type RuntimeOptions } from "./internal/request.js";
 import { hasQueryOrFragment } from "./internal/url.js";
 import type {
@@ -53,7 +59,7 @@ import type { Plugin } from "./Plugin.js";
  *     Effect.succeed(HttpClientRequest.setHeader(request, "x-api-key", "key")),
  * });
  *
- * const make = Fetch.make({
+ * const makeApi = Fetch.make({
  *   baseUrl: Config.String("API_URL"),
  *   headers: { accept: "application/json" },
  *   defaultError: ApiError,
@@ -297,6 +303,66 @@ export interface Client<
 	 * ```
 	 */
 	readonly del: BodyMethod<Ps, EB>;
+
+	/**
+	 * Defines an endpoint: a route like `"GET /users/:id"` and the schemas,
+	 * headers and plugin overrides to call it with. You get back a function
+	 * that takes one call's `params`, `query`, `body`, `headers` and
+	 * `plugins`, and returns the same Effect as the equivalent method:
+	 * `getUser({ params: { id } })` sends what
+	 * `api.get("/users/:id", { output: User, params: { id } })` does.
+	 *
+	 * - The route is checked as you type: an uppercase method, one space,
+	 *   then a path starting with `/` or an absolute `http(s)://` URL.
+	 * - `params` are required, with exactly the path's names, when the path
+	 *   has any.
+	 * - With an `input` schema, `body` is required and typed by it. `GET`,
+	 *   `HEAD`, `OPTIONS` and `TRACE` endpoints take no body.
+	 * - A call's `headers` and `plugins` are merged over the endpoint's, and
+	 *   win. The schemas can't be changed per call.
+	 *
+	 * Defining an endpoint does nothing on its own: each call sends a
+	 * request. A route that isn't valid (which the types prevent) throws.
+	 *
+	 * @example
+	 * ```ts
+	 * import * as Context from "effect/Context";
+	 * import * as Effect from "effect/Effect";
+	 * import * as Schema from "effect/Schema";
+	 * import * as Fetch from "@monarcode/effetch";
+	 * import { bearer } from "@monarcode/effetch/plugins";
+	 *
+	 * const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+	 * const NewUser = Schema.Struct({ name: Schema.String });
+	 * const Credentials = Schema.Struct({ user: Schema.String, password: Schema.String });
+	 * const Session = Schema.Struct({ token: Schema.String });
+	 *
+	 * const makeApi = Effect.gen(function* () {
+	 *   const api = yield* Fetch.make({
+	 *     baseUrl: "https://api.example.com",
+	 *     plugins: [bearer({ token: "token" })],
+	 *   });
+	 *   return {
+	 *     getUser: api.endpoint("GET /users/:id", { output: User }),
+	 *     createUser: api.endpoint("POST /users", { input: NewUser, output: User }),
+	 *     login: api.endpoint("POST /auth/login", {
+	 *       input: Credentials,
+	 *       output: Session,
+	 *       plugins: { bearer: false },
+	 *     }),
+	 *   };
+	 * });
+	 *
+	 * class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()("Api") {}
+	 *
+	 * const program = Effect.gen(function* () {
+	 *   const { getUser, createUser } = yield* Api;
+	 *   const ada = yield* createUser({ body: { name: "Ada" } });
+	 *   return yield* getUser({ params: { id: ada.id } });
+	 * });
+	 * ```
+	 */
+	readonly endpoint: EndpointMethod<Ps, EB>;
 }
 
 /**
@@ -353,14 +419,14 @@ export interface Client<
  * import * as FetchHttpClient from "effect/http/FetchHttpClient";
  * import * as Fetch from "@monarcode/effetch";
  *
- * const make = Fetch.make({
+ * const makeApi = Fetch.make({
  *   baseUrl: "https://api.example.com",
  *   headers: { accept: "application/json" },
  * });
  *
- * class Api extends Context.Service<Api, Effect.Success<typeof make>>()("Api") {}
+ * class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()("Api") {}
  *
- * const ApiLive = Layer.effect(Api)(make).pipe(
+ * const ApiLive = Layer.effect(Api)(makeApi).pipe(
  *   Layer.provide(FetchHttpClient.layer),
  * );
  * ```
@@ -409,7 +475,9 @@ export const make = <
 		);
 		const chain = applyPlugins(mapClientErrors(provided), plugins, context);
 		const httpClient = HttpClient.mapRequestInput(
-			HttpClient.transformResponse(chain, provideOverrides(undefined)),
+			HttpClient.transformResponse(chain, (response) =>
+				response.pipe(provideOverrides(undefined), provideRoute(undefined)),
+			),
 			applyDefaults,
 		);
 		const call = makeCall({
@@ -433,6 +501,8 @@ export const make = <
 			put: call("PUT"),
 			patch: call("PATCH"),
 			del: call("DELETE"),
+			endpoint: (route: string, definition?: RuntimeDefinition) =>
+				makeEndpoint(call, route, definition),
 		};
 		return client as unknown as Client<Ps, EB>;
 	});

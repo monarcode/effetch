@@ -177,8 +177,56 @@ const rejected = (
 	api.get("/todos", { plugins: { requestID: false } });
 	// @ts-expect-error bearer can only be skipped
 	api.get("/todos", { plugins: { bearer: { scheme: "Token" } } });
+	// @ts-expect-error the method is misspelled
+	api.endpoint("GTE /todos");
+	// @ts-expect-error the :id path param is required
+	api.endpoint("GET /todos/:id")({});
+	// @ts-expect-error GET endpoints take no input
+	api.endpoint("GET /todos", { input: Todo });
+	// @ts-expect-error the body is required with an input
+	api.endpoint("POST /todos", { input: Todo })();
 };
 void rejected;
+
+const routes: Array<string | undefined> = [];
+const routeSeen = Fetch.plugin({
+	name: "routeSeen",
+	onRequest: (request, ctx) =>
+		Effect.sync(() => {
+			routes.push(ctx.route);
+			return request;
+		}),
+});
+
+const endpointProgram = Effect.gen(function* () {
+	const api = yield* Fetch.make({
+		baseUrl: "https://api.test",
+		plugins: [requestId, routeSeen],
+	});
+	const getTodo = api.endpoint("GET /todos/:id", {
+		output: Todo,
+		plugins: { requestId: { id: "endpoint" } },
+	});
+	if (
+		getTodo.route !== "GET /todos/:id" ||
+		getTodo.method !== "GET" ||
+		getTodo.path !== "/todos/:id"
+	) {
+		throw new Error("Unexpected endpoint route, method or path");
+	}
+	return yield* getTodo({ params: { id: 2 } });
+}).pipe(Effect.provideService(HttpClient.HttpClient, mock));
+
+const viaEndpoint: { readonly id: number } = await Effect.runPromise(
+	endpointProgram,
+);
+if (
+	viaEndpoint.id !== 1 ||
+	seen.at(-1) !== "GET https://api.test/todos/2 endpoint undefined" ||
+	routes.join() !== "GET /todos/:id"
+) {
+	throw new Error(`Unexpected endpoint request: ${seen.at(-1)}`);
+}
 
 console.log("smoke: ok");
 TS

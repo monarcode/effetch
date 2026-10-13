@@ -124,6 +124,28 @@ describe("plugin()", () => {
 		expectTypeOf<Plugin.Errors<[typeof retry]>>().toBeNever();
 	});
 
+	it("gives hooks and wrap the call's route", () => {
+		const p = plugin({
+			name: "routes",
+			onRequest: (request, ctx) => {
+				expectTypeOf(ctx.route).toEqualTypeOf<string | undefined>();
+				return Effect.succeed(request);
+			},
+			onError: (_error, ctx) => {
+				expectTypeOf(ctx.route).toEqualTypeOf<string | undefined>();
+				return Effect.void;
+			},
+			wrap: (client, _options, route) => {
+				expectTypeOf(route).toEqualTypeOf<
+					Effect.Effect<string | undefined>
+				>();
+				return client;
+			},
+		});
+		expectTypeOf<Plugin.Errors<[typeof p]>>().toBeNever();
+		expectTypeOf<Plugin.Services<[typeof p]>>().toBeNever();
+	});
+
 	it("rejects hooks returning the wrong type", () => {
 		plugin({
 			name: "bad",

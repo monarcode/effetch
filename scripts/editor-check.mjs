@@ -23,6 +23,10 @@ interface ListUsersParams {
 declare const listUsersParams: ListUsersParams;
 
 export const list = api./*query*/get("/users", { query: listUsersParams });
+
+export const route = api.endpoint("");
+export const /*getUser*/getUser = api./*endpoint*/endpoint("GET /users/:id");
+export const user = getUser({ params: { /*endpointParams*/ } });
 `;
 
 const config = ts.getParsedCommandLineOfConfigFile(
@@ -77,6 +81,7 @@ for (const [marker, file, docs] of [
 	["make", "Client.d.ts", "Makes a"],
 	["get", "Client.d.ts", "Sends a `GET` request"],
 	["bearer", path.join("plugins", "bearer.d.ts"), "Sends `Authorization"],
+	["endpoint", "Client.d.ts", "Defines an endpoint"],
 ]) {
 	const definitions = service.getDefinitionAtPosition(probe, at(marker)) ?? [];
 	const targets = definitions.map((definition) =>
@@ -94,7 +99,9 @@ for (const [marker, file, docs] of [
 		`Hover on ${marker} doesn't show its docs: ${JSON.stringify(documentation.slice(0, 80))}`,
 	);
 	expect(
-		marker === "get" || (tags.includes("example") && tags.includes("since")),
+		marker === "get" ||
+			marker === "endpoint" ||
+			(tags.includes("example") && tags.includes("since")),
 		`Hover on ${marker} lacks @example or @since: ${tags.join(", ")}`,
 	);
 }
@@ -108,6 +115,34 @@ const names = (completions?.entries ?? []).map((entry) => entry.name);
 expect(
 	names.includes("id"),
 	`params on "/users/:id" doesn't complete id: ${names.slice(0, 10).join(", ")}`,
+);
+
+const routeCompletions = service.getCompletionsAtPosition(
+	probe,
+	source.indexOf('endpoint("")') + 'endpoint("'.length,
+	undefined,
+);
+const routes = (routeCompletions?.entries ?? []).map((entry) => entry.name);
+expect(
+	routes.includes("GET /") && routes.includes("POST /"),
+	`endpoint("") doesn't suggest the methods: ${routes.slice(0, 10).join(", ")}`,
+);
+
+const endpointParams = (
+	service.getCompletionsAtPosition(probe, at("endpointParams"), undefined)
+		?.entries ?? []
+).map((entry) => entry.name);
+expect(
+	endpointParams.includes("id"),
+	`params of a "GET /users/:id" endpoint don't complete id: ${endpointParams.slice(0, 10).join(", ")}`,
+);
+
+const endpointHover = ts.displayPartsToString(
+	service.getQuickInfoAtPosition(probe, at("getUser"))?.displayParts,
+);
+expect(
+	endpointHover.includes('Endpoint<"GET /users/:id"'),
+	`Hover on an endpoint doesn't name its type and route: ${endpointHover}`,
 );
 
 const queryStart = source.lastIndexOf("\n", at("query")) + 1;

@@ -52,6 +52,11 @@ declare const UpstreamServicesTypeId: unique symbol;
  *   `{ ...defaults, ...override }`, where `undefined` values in the
  *   override keep the default. `undefined` for a plugin without
  *   `defaults`.
+ * - `route`: the call's method and path as written, before its params are
+ *   filled in, such as `"GET /users/:id"`. It's the same for every call to
+ *   that path, whether made with a method like `get` or an endpoint, so
+ *   logs and metrics can be grouped by it. `undefined` for requests sent
+ *   through `client.httpClient`.
  *
  * @example
  * ```ts
@@ -63,7 +68,10 @@ declare const UpstreamServicesTypeId: unique symbol;
  *   defaults: { header: "x-request-id" },
  *   onResponse: (response, ctx: Fetch.PluginContext<{ header: string }>) =>
  *     Effect.as(
- *       Effect.logDebug(ctx.request.url, response.headers[ctx.options.header]),
+ *       Effect.logDebug(
+ *         ctx.route ?? ctx.request.url,
+ *         response.headers[ctx.options.header],
+ *       ),
  *       response,
  *     ),
  * });
@@ -76,6 +84,11 @@ export interface PluginContext<Opts> {
 	readonly request: HttpClientRequest.HttpClientRequest;
 	/** The plugin's `defaults` merged with this call's override. */
 	readonly options: Opts;
+	/**
+	 * The call's method and unfilled path, such as `"GET /users/:id"`.
+	 * `undefined` for requests sent through `client.httpClient`.
+	 */
+	readonly route: string | undefined;
 }
 
 /**
@@ -230,18 +243,32 @@ export declare namespace Plugin {
 	 * The `wrap` hook: wraps the rest of the chain (`client`). Its error and
 	 * service types are opaque placeholders, so a `wrap` can add errors and
 	 * services but can't drop the ones from further in. `options` reads
-	 * this call's merged options.
+	 * this call's merged options, and `route` this call's route (see
+	 * {@link PluginContext}).
 	 *
 	 * Write the body with `Effect.gen` rather than a ternary that returns
 	 * two different Effects: TypeScript can't union their error types.
 	 *
 	 * @example
 	 * ```ts
+	 * import * as Effect from "effect/Effect";
 	 * import * as HttpClient from "effect/http/HttpClient";
 	 * import type * as Fetch from "@monarcode/effetch";
 	 *
 	 * const retryTwice: Fetch.Plugin.Wrap<undefined, never, never> = (client) =>
 	 *   HttpClient.retry(client, { times: 2 });
+	 *
+	 * const timed: Fetch.Plugin.Wrap<undefined, never, never> = (
+	 *   client,
+	 *   _options,
+	 *   route,
+	 * ) =>
+	 *   HttpClient.transform(client, (response, request) =>
+	 *     Effect.gen(function* () {
+	 *       const label = (yield* route) ?? request.url;
+	 *       return yield* Effect.withLogSpan(response, label);
+	 *     }),
+	 *   );
 	 * ```
 	 *
 	 * @since 0.1.0
@@ -249,6 +276,7 @@ export declare namespace Plugin {
 	export type Wrap<Opts, E, R> = (
 		client: Upstream,
 		options: Effect.Effect<Opts>,
+		route: Effect.Effect<string | undefined>,
 	) => HttpClient.HttpClient.With<UpstreamError | E, UpstreamServices | R>;
 
 	/**
@@ -291,6 +319,7 @@ export declare namespace Plugin {
 			| ((
 					client: Upstream,
 					options: Effect.Effect<any>,
+					route: Effect.Effect<string | undefined>,
 			  ) => HttpClient.HttpClient.With<any, any>)
 			| undefined;
 	}
