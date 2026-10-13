@@ -31,7 +31,7 @@ const session: { accessToken: string | undefined } = {
 
 // The endpoints are defined once, with the client, and the service exposes
 // them as its methods.
-const make = Effect.gen(function* () {
+const makeApi = Effect.gen(function* () {
 	const api = yield* Fetch.make({
 		baseUrl: "https://api.example.com",
 		defaultError: ApiError,
@@ -63,11 +63,11 @@ const make = Effect.gen(function* () {
 	};
 });
 
-export class Api extends Context.Service<Api, Effect.Success<typeof make>>()(
+export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
 	"Api",
 ) {}
 
-export const ApiLive = Layer.effect(Api)(make).pipe(
+export const ApiLive = Layer.effect(Api)(makeApi).pipe(
 	Layer.provide(FetchHttpClient.layer),
 );
 
@@ -100,18 +100,15 @@ export const program = (email: string, password: string) =>
 		yield* api.deleteTodo({ params: { id: created.id } });
 		return { open: open.length, all: all.length };
 	}).pipe(
-		Effect.catchTag("TimeoutError", (error) =>
-			Effect.fail(`${error.url} didn't answer within ${error.duration}`),
-		),
-		Effect.catchTag("HttpError", (error) =>
-			Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
-		),
-		Effect.catchTag("NetworkError", () =>
-			Effect.fail("You appear to be offline"),
-		),
-		Effect.catchTag("DecodeError", (error) =>
-			Effect.fail(`Unexpected response: ${error.message}`),
-		),
+		Effect.catchTags({
+			TimeoutError: (error) =>
+				Effect.fail(`${error.url} didn't answer within ${error.duration}`),
+			HttpError: (error) =>
+				Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
+			NetworkError: () => Effect.fail("You appear to be offline"),
+			DecodeError: (error) =>
+				Effect.fail(`Unexpected response: ${error.message}`),
+		}),
 	);
 
 export const main = (email: string, password: string) =>

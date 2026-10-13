@@ -127,17 +127,17 @@ const reportErrors = Fetch.plugin({
 		),
 });
 
-export const make = Fetch.make({
+export const makeApi = Fetch.make({
 	baseUrl: "https://api.example.com",
 	defaultError: ApiError,
 	plugins: [reportErrors, deadline, apiVersion, auth],
 });
 
-export class Api extends Context.Service<Api, Effect.Success<typeof make>>()(
+export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
 	"Api",
 ) {}
 
-export const ApiLive = Layer.effect(Api)(make).pipe(
+export const ApiLive = Layer.effect(Api)(makeApi).pipe(
 	Layer.provide(FetchHttpClient.layer),
 	Layer.provideMerge(SessionLive),
 );
@@ -176,21 +176,16 @@ export const program = (email: string, password: string) =>
 		const todos = yield* listTodos;
 		return todos.length;
 	}).pipe(
-		Effect.catchTag("SessionExpired", () =>
-			Effect.fail("Please sign in again"),
-		),
-		Effect.catchTag("DeadlineExceeded", (error) =>
-			Effect.fail(`${error.method} ${error.url} took too long`),
-		),
-		Effect.catchTag("HttpError", (error) =>
-			Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
-		),
-		Effect.catchTag("NetworkError", () =>
-			Effect.fail("You appear to be offline"),
-		),
-		Effect.catchTag("DecodeError", (error) =>
-			Effect.fail(`Unexpected response: ${error.message}`),
-		),
+		Effect.catchTags({
+			SessionExpired: () => Effect.fail("Please sign in again"),
+			DeadlineExceeded: (error) =>
+				Effect.fail(`${error.method} ${error.url} took too long`),
+			HttpError: (error) =>
+				Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
+			NetworkError: () => Effect.fail("You appear to be offline"),
+			DecodeError: (error) =>
+				Effect.fail(`Unexpected response: ${error.message}`),
+		}),
 	);
 
 export const main = (email: string, password: string) =>

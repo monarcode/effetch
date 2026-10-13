@@ -34,6 +34,16 @@ All notable changes to `@monarcode/effetch`, newest first.
 - `CallServices` and `CallEffect` accept `undefined` for the `input` schema
   `I`, as they already did for `O`.
 
+### Documentation
+
+- The README's Endpoints section explains why endpoints exist, when to use
+  one rather than a method, and how to organize them: in one service for a
+  small app, in each module for a feature-sliced app, and with several
+  backends.
+- New examples: `endpoints.ts`, `backends.ts`, and `app/`, a feature-sliced
+  app with shared clients and module-owned endpoints. `examples/README.md`
+  says what each example shows.
+
 ## 0.1.0-alpha.2
 
 ### Changed

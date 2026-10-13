@@ -46,7 +46,7 @@ const reportErrors = (backend: string) =>
 			Effect.logWarning(`${backend} ${ctx.route} failed`, error),
 	});
 
-const makeUsers = Effect.gen(function* () {
+const makeUsersApi = Effect.gen(function* () {
 	const client = yield* Fetch.make({
 		baseUrl: Config.String("USERS_API_URL"),
 		defaultError: UsersError,
@@ -62,10 +62,10 @@ const makeUsers = Effect.gen(function* () {
 
 export class UsersApi extends Context.Service<
 	UsersApi,
-	Effect.Success<typeof makeUsers>
+	Effect.Success<typeof makeUsersApi>
 >()("UsersApi") {}
 
-const makeWallet = Effect.gen(function* () {
+const makeWalletApi = Effect.gen(function* () {
 	const client = yield* Fetch.make({
 		baseUrl: Config.String("WALLET_API_URL"),
 		defaultError: WalletError,
@@ -91,13 +91,13 @@ const makeWallet = Effect.gen(function* () {
 
 export class WalletApi extends Context.Service<
 	WalletApi,
-	Effect.Success<typeof makeWallet>
+	Effect.Success<typeof makeWalletApi>
 >()("WalletApi") {}
 
 // One HttpClient for both.
 export const ApisLive = Layer.mergeAll(
-	Layer.effect(UsersApi)(makeUsers),
-	Layer.effect(WalletApi)(makeWallet),
+	Layer.effect(UsersApi)(makeUsersApi),
+	Layer.effect(WalletApi)(makeWalletApi),
 ).pipe(Layer.provide(FetchHttpClient.layer));
 
 // Each backend's errors are caught next to its calls, where `HttpError.body`
@@ -144,12 +144,11 @@ export const program = (to: string) =>
 		yield* recordActivity(user.id, receipt.id);
 		return receipt;
 	}).pipe(
-		Effect.catchTag("NetworkError", () =>
-			Effect.fail("You appear to be offline"),
-		),
-		Effect.catchTag("DecodeError", (error) =>
-			Effect.fail(`Unexpected response: ${error.message}`),
-		),
+		Effect.catchTags({
+			NetworkError: () => Effect.fail("You appear to be offline"),
+			DecodeError: (error) =>
+				Effect.fail(`Unexpected response: ${error.message}`),
+		}),
 	);
 
 export const main = (to: string) => program(to).pipe(Effect.provide(ApisLive));

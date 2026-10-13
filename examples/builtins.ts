@@ -21,7 +21,7 @@ const session: { accessToken: string | undefined } = {
 	accessToken: undefined,
 };
 
-export const make = Fetch.make({
+export const makeApi = Fetch.make({
 	baseUrl: "https://api.example.com",
 	defaultError: ApiError,
 	plugins: [
@@ -32,11 +32,11 @@ export const make = Fetch.make({
 	],
 });
 
-export class Api extends Context.Service<Api, Effect.Success<typeof make>>()(
+export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
 	"Api",
 ) {}
 
-export const ApiLive = Layer.effect(Api)(make).pipe(
+export const ApiLive = Layer.effect(Api)(makeApi).pipe(
 	Layer.provide(FetchHttpClient.layer),
 );
 
@@ -83,18 +83,15 @@ export const program = (email: string, password: string) =>
 		const todos = yield* listTodos;
 		return todos.filter((todo) => !todo.done).length;
 	}).pipe(
-		Effect.catchTag("TimeoutError", (error) =>
-			Effect.fail(`${error.url} didn't answer within ${error.duration}`),
-		),
-		Effect.catchTag("HttpError", (error) =>
-			Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
-		),
-		Effect.catchTag("NetworkError", () =>
-			Effect.fail("You appear to be offline"),
-		),
-		Effect.catchTag("DecodeError", (error) =>
-			Effect.fail(`Unexpected response: ${error.message}`),
-		),
+		Effect.catchTags({
+			TimeoutError: (error) =>
+				Effect.fail(`${error.url} didn't answer within ${error.duration}`),
+			HttpError: (error) =>
+				Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
+			NetworkError: () => Effect.fail("You appear to be offline"),
+			DecodeError: (error) =>
+				Effect.fail(`Unexpected response: ${error.message}`),
+		}),
 	);
 
 export const main = (email: string, password: string) =>

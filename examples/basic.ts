@@ -16,15 +16,17 @@ const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
 
 const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
 
-const make = Fetch.make({
+const makeApi = Fetch.make({
 	baseUrl: "https://api.example.com",
 	headers: { accept: "application/json" },
 	defaultError: ApiError,
 });
 
-class Api extends Context.Service<Api, Effect.Success<typeof make>>()("Api") {}
+class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
+	"Api",
+) {}
 
-export const ApiLive = Layer.effect(Api)(make).pipe(
+export const ApiLive = Layer.effect(Api)(makeApi).pipe(
 	Layer.provide(FetchHttpClient.layer),
 );
 
@@ -52,17 +54,15 @@ export const program = Effect.gen(function* () {
 
 	return todos.length;
 }).pipe(
-	Effect.catchTag("HttpError", (error) =>
-		error.status === 404
-			? Effect.succeed(0)
-			: Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
-	),
-	Effect.catchTag("NetworkError", () =>
-		Effect.fail("You appear to be offline"),
-	),
-	Effect.catchTag("DecodeError", (error) =>
-		Effect.fail(`Unexpected response: ${error.message}`),
-	),
+	Effect.catchTags({
+		HttpError: (error) =>
+			error.status === 404
+				? Effect.succeed(0)
+				: Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
+		NetworkError: () => Effect.fail("You appear to be offline"),
+		DecodeError: (error) =>
+			Effect.fail(`Unexpected response: ${error.message}`),
+	}),
 );
 
 export const main = program.pipe(Effect.provide(ApiLive));

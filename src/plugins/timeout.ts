@@ -95,7 +95,7 @@ export type TimeoutPlugin = Plugin<
  * import * as Fetch from "@monarcode/effetch";
  * import { timeout } from "@monarcode/effetch/plugins";
  *
- * const make = Fetch.make({
+ * const makeApi = Fetch.make({
  *   baseUrl: "https://api.example.com",
  *   plugins: [timeout({ duration: "10 seconds" })],
  * });

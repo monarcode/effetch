@@ -66,7 +66,7 @@ export type LoggerPlugin = Plugin<"logger">;
  * import * as Fetch from "@monarcode/effetch";
  * import { logger } from "@monarcode/effetch/plugins";
  *
- * const make = Fetch.make({
+ * const makeApi = Fetch.make({
  *   baseUrl: "https://api.example.com",
  *   plugins: [logger({ level: "Info" })],
  * });

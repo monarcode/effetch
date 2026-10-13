@@ -141,7 +141,7 @@ const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
 
 const session: { accessToken?: string } = {};
 
-const make = Fetch.make({
+const makeApi = Fetch.make({
   baseUrl: Config.String("API_URL"),
   headers: { "x-client": "web" },
   defaultError: ApiError,
@@ -153,11 +153,11 @@ const make = Fetch.make({
   ],
 });
 
-export class Api extends Context.Service<Api, Effect.Success<typeof make>>()(
+export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
   "Api",
 ) {}
 
-export const ApiLive = Layer.effect(Api)(make).pipe(
+export const ApiLive = Layer.effect(Api)(makeApi).pipe(
   Layer.provide(FetchHttpClient.layer),
 );
 ```
@@ -273,7 +273,7 @@ const Credentials = Schema.Struct({
 });
 const Session = Schema.Struct({ token: Schema.String });
 
-const make = Effect.gen(function* () {
+const makeApi = Effect.gen(function* () {
   const api = yield* Fetch.make({
     baseUrl: "https://api.example.com",
     plugins: [bearer({ token: () => readToken() })],
@@ -290,7 +290,7 @@ const make = Effect.gen(function* () {
   };
 });
 
-export class Api extends Context.Service<Api, Effect.Success<typeof make>>()(
+export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
   "Api",
 ) {}
 
@@ -331,32 +331,249 @@ or an absolute `http(s)://` URL. It's checked as you type: `"GTE /users"` and
   cache keys. Plugins see the same route as
   [`ctx.route`](#writing-a-plugin).
 
-Endpoints are defined where there's a client, usually in the service that
-holds it, as above. To split them across files, write functions that take the
-client:
+### Why endpoints
+
+An HTTP call mixes two kinds of information:
+
+| Fixed by the API                                     | Different on every call             |
+| ---------------------------------------------------- | ----------------------------------- |
+| the route; the response, error and body schemas      | path params, query values, the body |
+| rules for that route, such as "login sends no token" | a one-off header or plugin override |
+
+With the methods, both are written at every call site. Three calls to
+`GET /users/:id` repeat the path and the `User` schema three times, and a
+mistake in one of them, such as the wrong schema or a forgotten
+`bearer: false`, still compiles. An endpoint takes the first column once,
+when it's defined, and only the second column when it's called.
+
+That gives you:
+
+- **One place per route.** A path or a schema changes in one line, and the
+  service that holds the endpoints lists the API you use.
+- **Stricter types than a method can have.** A method only learns its HTTP
+  method and its `input` at the call, so it has to accept both ways. An
+  endpoint knows them up front: `body` is required when there's an `input`
+  (it's optional with `api.post`), a `GET` endpoint rejects a `body` at
+  compile time (`api.request("GET", …)` only dies at runtime), and the route
+  is checked as you type.
+- **Defaults that can't be forgotten.** An endpoint's headers and plugin
+  overrides apply to every call.
+- **A name and a route.** Call sites read `users.get(…)` rather than a URL,
+  and `route`, `method` and `path` are there for query keys and log labels.
+
+Endpoints add no new behaviour: a call goes through the same pipeline as the
+method it stands for (plugins, retries, decoding, errors), so the rest of this
+README applies to both. A call needs nothing from the environment apart from
+its schemas' services, so its Effect runs anywhere: in a service, in a query
+function, or with `Effect.runPromise`.
+
+An endpoint is a saved call, not a contract shared with a server: for that,
+use Effect's `HttpApi`.
+
+### Endpoints or methods
+
+Use an endpoint when a call:
+
+- is made from more than one place;
+- has rules every call must follow, such as an auth exception or a content
+  type;
+- sends a body with an `input` schema;
+- belongs to a backend whose API you want listed in one place.
+
+Use a method for one-off calls, and for calls whose method or path is only
+known at runtime; use `client.httpClient` for streaming. Mixing them is
+normal: keep the client next to its endpoints, for the calls that aren't worth
+one.
+
+Avoid:
+
+- **`api.endpoint(…)(…)` at a call site.** It's a method call written twice:
+  use the method.
+- **Defining endpoints in code that runs on every request.** Define them once,
+  when the layer that holds them is built.
+- **Typing a client parameter as `Fetch.Client`.** That's a client without
+  plugins, and yours won't fit. Use `Effect.Success<typeof makeApi>`, where
+  `makeApi` is your `Fetch.make(…)`: the type of your own client.
+- **Spreading several groups of endpoints into one object.** When two use the
+  same name, the later one silently wins. Nest them: `{ users, todos }`.
+
+### Organizing endpoints
+
+Endpoints are made from a client, so they're defined where a client is
+available: in a layer that reads it, or in a function that takes it. Where
+that is depends on the size of the app.
+
+#### A small app: one service
+
+Keep the client in one file and each area's endpoints in another, as a
+function of the client. The service makes the client once and calls each
+function once:
 
 ```ts
-import type * as Effect from "effect/Effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import * as Fetch from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
 const NewUser = Schema.Struct({ name: Schema.String });
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
 // client.ts
-export const makeClient = Fetch.make({ baseUrl: "https://api.example.com" });
+export const makeClient = Fetch.make({
+  baseUrl: "https://api.example.com",
+  plugins: [bearer({ token: "token" })],
+});
 export type Client = Effect.Success<typeof makeClient>;
 
 // users.ts
 export const users = (api: Client) => ({
   get: api.endpoint("GET /users/:id", { output: User }),
   create: api.endpoint("POST /users", { input: NewUser, output: User }),
+  login: api.endpoint("POST /auth/login", {
+    output: User,
+    plugins: { bearer: false },
+  }),
+});
+
+// todos.ts
+export const todos = (api: Client) => ({
+  list: api.endpoint("GET /todos", { output: Schema.Array(Todo) }),
+});
+
+// api.ts
+const makeApi = Effect.map(makeClient, (client) => ({
+  client, // for one-off calls
+  users: users(client),
+  todos: todos(client),
+}));
+
+export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
+  "Api",
+) {}
+
+// anywhere
+export const program = Effect.gen(function* () {
+  const { users } = yield* Api;
+  return yield* users.get({ params: { id: 1 } });
 });
 ```
 
-An endpoint is a saved call, not a contract shared with a server: for that,
-use Effect's `HttpApi`.
+`Client` is the type of your client, plugins and `defaultError` included, so
+the plugin overrides in `users.ts` are checked against your plugins, and
+errors are typed with your `defaultError`.
+
+#### A feature-sliced app: endpoints in each module
+
+When the app is split into feature modules, each with its own schemas, turn
+it around: the client is shared infrastructure that knows nothing about the
+modules, and each module defines its endpoints from it, next to its schemas.
+
+```text
+src/
+├── infrastructure/http/
+│   └── app-api-client.ts  the client: base URL, error body, plugins
+├── modules/
+│   ├── todos/
+│   │   ├── contract/      schemas
+│   │   ├── data/          endpoints, made from AppApiClient
+│   │   ├── application/   workflows that take more than one call
+│   │   └── public.ts
+│   └── wallet/
+└── runtime.ts             modules, on top of clients, on top of HttpClient
+```
+
+This layout is a personal preference, the one effetch's author uses in their
+own apps, and effetch doesn't depend on it: rename, merge or split the folders
+to suit your project. What carries over is that modules import the client,
+never the other way around, and that endpoints are defined once, in a layer.
+
+```ts
+import * as Config from "effect/Config";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+// infrastructure/http/app-api-client.ts: how to reach the backend, nothing else
+const makeAppApiClient = Fetch.make({ baseUrl: Config.String("APP_API_URL") });
+
+export class AppApiClient extends Context.Service<
+  AppApiClient,
+  Effect.Success<typeof makeAppApiClient>
+>()("AppApiClient") {}
+
+export const AppApiClientLive = Layer.effect(AppApiClient)(makeAppApiClient);
+
+// modules/todos/contract/todos.ts
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+const NewTodo = Schema.Struct({ title: Schema.String });
+
+// modules/todos/data/todo.api.ts: the module's endpoints, as its service
+const makeTodoApi = AppApiClient.useSync((client) => ({
+  list: client.endpoint("GET /todos", { output: Schema.Array(Todo) }),
+  get: client.endpoint("GET /todos/:id", { output: Todo }),
+  create: client.endpoint("POST /todos", { input: NewTodo, output: Todo }),
+}));
+
+export class TodoApi extends Context.Service<
+  TodoApi,
+  Effect.Success<typeof makeTodoApi>
+>()("TodoApi") {}
+
+export const TodoApiLive = Layer.effect(TodoApi)(makeTodoApi);
+
+// runtime.ts
+export const AppLayer = TodoApiLive.pipe(
+  Layer.provideMerge(AppApiClientLive),
+  Layer.provide(FetchHttpClient.layer),
+);
+
+// anywhere
+export const program = Effect.gen(function* () {
+  const todos = yield* TodoApi;
+  const todo = yield* todos.create({ body: { title: "Write docs" } });
+  return yield* todos.get({ params: { id: todo.id } });
+});
+```
+
+The client file stays the same size however many endpoints the app has, and
+it never imports a module: dependencies point from the modules to the
+infrastructure. A module with 20 endpoints has 20 one-line definitions in its
+own `data/` folder, beside its own schemas. When they serve separate concerns,
+split them into several services, each in its own file.
+
+Every module's data service is its endpoints, as `TodoApi` is here: one line
+per operation, and every type inferred. An operation that isn't one HTTP call
+(it combines calls, reshapes a response or adds a domain error) is a workflow
+over those endpoints, in the module's `application/` folder, so every
+module's `data/` folder looks the same. Declare a service's interface by hand
+only when the module needs other implementations, such as an offline one or a
+fake for UI work, and implement it with the endpoints.
+
+[`examples/app`](examples/app) is a complete app in this layout, with two
+modules and two backends.
+
+#### Several backends
+
+Make one client per backend, each in its own service, with its own `baseUrl`,
+`defaultError` and plugins. Each module, or each area's function, uses the
+client of the backend it talks to, and one `HttpClient` layer serves them all.
+
+- Plugins are values: one `bearer` can serve several clients.
+- `ctx.route` has no host. A plugin that groups by route and is shared by
+  several clients should take the backend's name, so each client gets its own
+  instance.
+- Catch a backend's `HttpError` next to its calls, where `body` has that
+  backend's error shape.
+
+[`examples/backends.ts`](examples/backends.ts) does this in one file, and
+[`examples/app`](examples/app) across modules.
 
 ## Errors
 
@@ -388,13 +605,14 @@ const ApiError = Schema.Struct({ code: Schema.String });
 
 export const todo = (id: number) =>
   api.get("/todos/:id", { params: { id }, output: Todo, error: ApiError }).pipe(
-    Effect.catchTag("HttpError", (error) =>
-      error.status === 404
-        ? Effect.succeed(undefined)
-        : Effect.fail(error.body?.code ?? `HTTP ${error.status}`),
-    ),
-    Effect.catchTag("NetworkError", () => Effect.fail("You're offline")),
-    Effect.catchTag("DecodeError", (error) => Effect.fail(error.message)),
+    Effect.catchTags({
+      HttpError: (error) =>
+        error.status === 404
+          ? Effect.succeed(undefined)
+          : Effect.fail(error.body?.code ?? `HTTP ${error.status}`),
+      NetworkError: () => Effect.fail("You're offline"),
+      DecodeError: (error) => Effect.fail(error.message),
+    }),
   );
 ```
 
@@ -419,7 +637,7 @@ import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
 
 declare const readToken: () => Promise<string | null>;
 
-export const make = Fetch.make({
+export const makeApi = Fetch.make({
   baseUrl: "https://api.example.com",
   plugins: [
     logger({ level: "Info" }),
@@ -569,8 +787,8 @@ export const auth = Fetch.plugin({
     }),
 });
 
-// make now needs Session; calls fail with SessionExpired too.
-export const make = Fetch.make({
+// makeApi now needs Session; calls fail with SessionExpired too.
+export const makeApi = Fetch.make({
   baseUrl: "https://api.example.com",
   plugins: [auth],
 });
@@ -614,7 +832,8 @@ export const deadline = Fetch.plugin({
   `Fetch.Plugin.Any[]` erases the plugins' types.
 
 [`examples/`](examples) has complete programs with built-in and custom
-plugins, with endpoints, and with several backends, each with its own client.
+plugins, endpoints, several backends and a feature-sliced app: its
+[README](examples/README.md) says what each one shows.
 
 ## Testing
 
@@ -673,14 +892,16 @@ import * as Layer from "effect/Layer";
 
 import * as Fetch from "@monarcode/effetch";
 
-const make = Fetch.make({ baseUrl: "https://api.example.com" });
+const makeApi = Fetch.make({ baseUrl: "https://api.example.com" });
 
-export class Api extends Context.Service<Api, Effect.Success<typeof make>>()(
+export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
   "Api",
 ) {}
 
 export const ApiLive = Layer.effect(Api)(
-  make.pipe(Effect.provideService(HttpClient.TracerPropagationEnabled, false)),
+  makeApi.pipe(
+    Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+  ),
 ).pipe(Layer.provide(FetchHttpClient.layer));
 ```
 

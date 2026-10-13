@@ -59,7 +59,7 @@ import type { Plugin } from "./Plugin.js";
  *     Effect.succeed(HttpClientRequest.setHeader(request, "x-api-key", "key")),
  * });
  *
- * const make = Fetch.make({
+ * const makeApi = Fetch.make({
  *   baseUrl: Config.String("API_URL"),
  *   headers: { accept: "application/json" },
  *   defaultError: ApiError,
@@ -337,7 +337,7 @@ export interface Client<
 	 * const Credentials = Schema.Struct({ user: Schema.String, password: Schema.String });
 	 * const Session = Schema.Struct({ token: Schema.String });
 	 *
-	 * const make = Effect.gen(function* () {
+	 * const makeApi = Effect.gen(function* () {
 	 *   const api = yield* Fetch.make({
 	 *     baseUrl: "https://api.example.com",
 	 *     plugins: [bearer({ token: "token" })],
@@ -353,7 +353,7 @@ export interface Client<
 	 *   };
 	 * });
 	 *
-	 * class Api extends Context.Service<Api, Effect.Success<typeof make>>()("Api") {}
+	 * class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()("Api") {}
 	 *
 	 * const program = Effect.gen(function* () {
 	 *   const { getUser, createUser } = yield* Api;
@@ -419,14 +419,14 @@ export interface Client<
  * import * as FetchHttpClient from "effect/http/FetchHttpClient";
  * import * as Fetch from "@monarcode/effetch";
  *
- * const make = Fetch.make({
+ * const makeApi = Fetch.make({
  *   baseUrl: "https://api.example.com",
  *   headers: { accept: "application/json" },
  * });
  *
- * class Api extends Context.Service<Api, Effect.Success<typeof make>>()("Api") {}
+ * class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()("Api") {}
  *
- * const ApiLive = Layer.effect(Api)(make).pipe(
+ * const ApiLive = Layer.effect(Api)(makeApi).pipe(
  *   Layer.provide(FetchHttpClient.layer),
  * );
  * ```
