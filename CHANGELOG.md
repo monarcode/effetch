@@ -36,6 +36,10 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ### Documentation
 
+- The README is reorganized as a guide that reads top to bottom: why effetch
+  (with a side-by-side with `HttpClient`), getting started, then clients,
+  calls, errors, plugins and writing them, endpoints, structuring an app and
+  testing, with a two-level table of contents.
 - The README's Endpoints section explains why endpoints exist, when to use
   one rather than a method, and how to organize them: in one service for a
   small app, in each module for a feature-sliced app, and with several
