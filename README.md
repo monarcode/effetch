@@ -29,7 +29,8 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 ```
 
 > **Release candidate.** effetch is close to its first stable release
-> (`0.1.0-rc.N`). The API may still change before 0.1.0.
+> (`0.1.0-rc.N`). The API is frozen; only fixes and documentation changes
+> until 0.1.0.
 
 ## Contents
 
