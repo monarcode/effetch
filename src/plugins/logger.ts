@@ -50,8 +50,11 @@ export type LoggerPlugin = Plugin<"logger">;
  * with the failure's cause.
  *
  * The same values are log annotations (`method`, `url`, `status`,
- * `durationMs`). The URL has no query string, and no headers are logged,
- * so tokens and cookies stay out of logs. The duration is measured with
+ * `durationMs`), along with `route`: the call's method and unfilled path,
+ * such as `GET /users/:id`, the same for every call to that path, to group
+ * entries by (left out for requests sent through `client.httpClient`). The
+ * URL has no query string, and no headers are logged, so tokens and
+ * cookies stay out of logs. The duration is measured with
  * Effect's `Clock` until the response headers arrive, in whole
  * milliseconds.
  *
@@ -75,7 +78,7 @@ export const logger = (options: LoggerOptions = {}): LoggerPlugin => {
 	const log = options.level === "Info" ? Effect.logInfo : Effect.logDebug;
 	return plugin({
 		name: "logger",
-		wrap: (client) =>
+		wrap: (client, _options, currentRoute) =>
 			HttpClient.transform(client, (response, request) =>
 				Effect.gen(function* () {
 					const start = yield* Clock.currentTimeMillis;
@@ -85,11 +88,13 @@ export const logger = (options: LoggerOptions = {}): LoggerPlugin => {
 					);
 					const method = request.method;
 					const url = errorUrl(request.url);
+					const route = yield* currentRoute;
+					const call = route === undefined ? {} : { route };
 					if (Exit.isSuccess(exit)) {
 						const { status } = exit.value;
 						yield* Effect.annotateLogs(
 							log(`${method} ${url} ${status} (${durationMs}ms)`),
-							{ method, url, status, durationMs },
+							{ method, url, ...call, status, durationMs },
 						);
 					} else if (!Cause.hasInterruptsOnly(exit.cause)) {
 						yield* Effect.annotateLogs(
@@ -97,7 +102,7 @@ export const logger = (options: LoggerOptions = {}): LoggerPlugin => {
 								`${method} ${url} failed (${durationMs}ms)`,
 								exit.cause,
 							),
-							{ method, url, durationMs },
+							{ method, url, ...call, durationMs },
 						);
 					}
 					return yield* exit;

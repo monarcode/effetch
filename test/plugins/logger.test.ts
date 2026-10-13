@@ -4,6 +4,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 import { describe, expect } from "vitest";
 
@@ -17,7 +18,7 @@ import { reply } from "../utils/reply.js";
 
 describe("logger", () => {
 	it.effect(
-		"logs the method, URL, status and duration at Debug, as text and annotations",
+		"logs the method, URL, status and duration at Debug, as text and annotations, with the route",
 		() =>
 			Effect.gen(function* () {
 				const logs = captureLogs();
@@ -35,11 +36,45 @@ describe("logger", () => {
 					annotations: {
 						method: "GET",
 						url: `${base}/todos`,
+						route: "GET /todos",
 						status: 200,
 						durationMs: 120,
 					},
 				});
 			}),
+	);
+
+	it.effect("annotates the route with its params unfilled", () =>
+		Effect.gen(function* () {
+			const logs = captureLogs();
+			const { api } = yield* setup([reply.json({})], {
+				plugins: [logger()],
+			});
+			const getTodo = api.endpoint("GET /todos/:id");
+			yield* logs.capture(api.patch("/todos/:id", { params: { id: 1 } }));
+			yield* logs.capture(getTodo({ params: { id: 2 } }));
+			expect(logs.entries.map((entry) => entry.message)).toEqual([
+				[`PATCH ${base}/todos/1 200 (0ms)`],
+				[`GET ${base}/todos/2 200 (0ms)`],
+			]);
+			expect(
+				logs.entries.map((entry) => entry.annotations["route"]),
+			).toEqual(["PATCH /todos/:id", "GET /todos/:id"]);
+		}),
+	);
+
+	it.effect("leaves the route out for client.httpClient", () =>
+		Effect.gen(function* () {
+			const logs = captureLogs();
+			const { api } = yield* setup([reply.json({})], {
+				plugins: [logger()],
+			});
+			yield* logs.capture(
+				api.httpClient.execute(HttpClientRequest.get("/todos")),
+			);
+			expect(logs.entries).toHaveLength(1);
+			expect(logs.entries[0]?.annotations).not.toHaveProperty("route");
+		}),
 	);
 
 	it.effect("rounds the duration to whole milliseconds", () =>
@@ -83,6 +118,7 @@ describe("logger", () => {
 			expect(logs.entries[0]?.annotations).toMatchObject({
 				method: "GET",
 				url: `${base}/todos`,
+				route: "GET /todos",
 				durationMs: 0,
 			});
 			const cause = logs.entries[0]?.cause;

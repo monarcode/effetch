@@ -352,11 +352,11 @@ export type CallError<
 export type CallServices<
 	O extends AnySchema | undefined,
 	EB extends AnySchema,
-	I extends AnySchema,
+	I extends AnySchema | undefined,
 > =
 	| (O extends AnySchema ? O["DecodingServices"] : never)
 	| EB["DecodingServices"]
-	| I["EncodingServices"];
+	| (I extends AnySchema ? I["EncodingServices"] : never);
 
 /**
  * The Effect a call returns: it succeeds with {@link Success}, fails with
@@ -364,7 +364,8 @@ export type CallServices<
  *
  * - `O`: the `output` schema, or `undefined` for the raw response.
  * - `EB`: the `error` schema for non-2xx bodies.
- * - `I`: the `input` schema (`Schema.Unknown` when the call has none).
+ * - `I`: the `input` schema (`Schema.Unknown` or `undefined` when the call
+ *   has none).
  * - `Ps`: the client's plugins.
  *
  * @example
@@ -386,7 +387,7 @@ export type CallServices<
 export type CallEffect<
 	O extends AnySchema | undefined,
 	EB extends AnySchema,
-	I extends AnySchema,
+	I extends AnySchema | undefined,
 	Ps extends ReadonlyArray<Plugin.Any>,
 > = Effect.Effect<Success<O>, CallError<O, EB, Ps>, CallServices<O, EB, I>>;
 

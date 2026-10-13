@@ -2,6 +2,38 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## 0.1.0-rc.1
+
+### Added
+
+- `client.endpoint(route, definition)` saves a call: a route such as
+  `"GET /users/:id"` with its `output`, `error` and `input` schemas, `headers`
+  and plugin overrides. It returns a function that takes one call's `params`,
+  `query`, `body`, `headers` and `plugins`, and sends what the equivalent
+  method would.
+  - The route is type-checked (an uppercase method, one space, then a path
+    starting with `/` or an absolute `http(s)://` URL), and editors suggest
+    the methods.
+  - With an `input` schema, `body` is required. `GET`, `HEAD`, `OPTIONS` and
+    `TRACE` endpoints reject `body` and `input`.
+  - A call's `headers` and plugin overrides are merged over the endpoint's,
+    and win. Plugin options given by both are merged.
+  - Each endpoint has `route`, `method` and `path` properties.
+- The types `Endpoint`, `EndpointMethod`, `EndpointDefinition`,
+  `EndpointOptions`, `EndpointBody`, `EndpointArgs`, `EndpointRoute`,
+  `ValidRoute`, `RouteMethod` and `RoutePath`.
+- Plugins see each call's route: its method and path before the params are
+  filled in, such as `"GET /users/:id"`, the same for a method call and an
+  endpoint. Hooks get it as `ctx.route` (`PluginContext.route`), and `wrap`
+  as a third argument, an `Effect` like `options`. It's `undefined` for
+  requests sent through `client.httpClient`.
+- `logger` adds the route to its log annotations, as `route`.
+
+### Changed
+
+- `CallServices` and `CallEffect` accept `undefined` for the `input` schema
+  `I`, as they already did for `O`.
+
 ## 0.1.0-alpha.2
 
 ### Changed

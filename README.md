@@ -37,6 +37,7 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 - [Quick start](#quick-start)
 - [Making a client](#making-a-client)
 - [Calling](#calling)
+- [Endpoints](#endpoints)
 - [Errors](#errors)
 - [Plugins](#plugins)
 - [Testing](#testing)
@@ -65,7 +66,9 @@ time. You get:
 - responses decoded with a `Schema`, and error bodies decoded with another;
 - three tagged errors to `catchTag` on, plus your plugins' own;
 - Effect-native plugins for auth, retries, timeouts and logging, with typed
-  per-call overrides.
+  per-call overrides;
+- endpoints: a route like `"GET /users/:id"` saved with its schemas, headers
+  and plugin overrides, then called like a function.
 
 It has no platform-specific code, and targets browsers, React Native,
 Node 20+, Bun and Deno.
@@ -246,6 +249,115 @@ Effect's JSON codec, where `Schema.Number` also decodes the strings `"NaN"`,
 default headers and plugins, but no status check and no decoding. Use it for
 anything the methods don't cover, such as streaming a response.
 
+## Endpoints
+
+`api.endpoint` saves a call you make often: its route, its schemas, and the
+headers and plugin overrides every call needs. You get back a function that
+takes the rest:
+
+```ts
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+declare const readToken: () => Promise<string | null>;
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const NewUser = Schema.Struct({ name: Schema.String });
+const Credentials = Schema.Struct({
+  user: Schema.String,
+  password: Schema.String,
+});
+const Session = Schema.Struct({ token: Schema.String });
+
+const make = Effect.gen(function* () {
+  const api = yield* Fetch.make({
+    baseUrl: "https://api.example.com",
+    plugins: [bearer({ token: () => readToken() })],
+  });
+  return {
+    getUser: api.endpoint("GET /users/:id", { output: User }),
+    listUsers: api.endpoint("GET /users", { output: Schema.Array(User) }),
+    createUser: api.endpoint("POST /users", { input: NewUser, output: User }),
+    login: api.endpoint("POST /auth/login", {
+      input: Credentials,
+      output: Session,
+      plugins: { bearer: false },
+    }),
+  };
+});
+
+export class Api extends Context.Service<Api, Effect.Success<typeof make>>()(
+  "Api",
+) {}
+
+export const program = Effect.gen(function* () {
+  const { getUser, listUsers, createUser } = yield* Api;
+  const ada = yield* createUser({ body: { name: "Ada" } });
+  const users = yield* listUsers({ query: { page: 2 } });
+  const user = yield* getUser({ params: { id: ada.id } });
+  return { users, user };
+});
+```
+
+`getUser({ params: { id } })` sends exactly what
+`api.get("/users/:id", { output: User, params: { id } })` does, and returns
+the same Effect.
+
+The route is an uppercase method, one space, then a path that starts with `/`
+or an absolute `http(s)://` URL. It's checked as you type: `"GTE /users"` and
+`"get /users"` don't compile, and editors suggest the methods.
+
+| Defined once, on the endpoint | Passed with each call     |
+| ----------------------------- | ------------------------- |
+| `output`, `error`, `input`    | `params`, `query`, `body` |
+| `headers`, `plugins`          | `headers`, `plugins`      |
+
+- `params` are required when the route's path has any, as with the methods.
+  An endpoint that needs nothing more is called with no arguments:
+  `listUsers()`.
+- With an `input` schema, `body` is required and typed by it. `GET`, `HEAD`,
+  `OPTIONS` and `TRACE` endpoints take no `body` and no `input`.
+- A call's headers win over the endpoint's, which win over the client's.
+  Unlike the client's, an endpoint's headers can set `content-type`.
+- A call's plugin override wins over the endpoint's, and when both give
+  options they're merged. An endpoint defined with `retry: false` can still
+  be retried in one call with `plugins: { retry: { times: 2 } }`.
+- The schemas belong to the endpoint and can't be changed per call.
+- Each endpoint has `route`, `method` and `path` properties, for log labels or
+  cache keys. Plugins see the same route as
+  [`ctx.route`](#writing-a-plugin).
+
+Endpoints are defined where there's a client, usually in the service that
+holds it, as above. To split them across files, write functions that take the
+client:
+
+```ts
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const NewUser = Schema.Struct({ name: Schema.String });
+
+// client.ts
+export const makeClient = Fetch.make({ baseUrl: "https://api.example.com" });
+export type Client = Effect.Success<typeof makeClient>;
+
+// users.ts
+export const users = (api: Client) => ({
+  get: api.endpoint("GET /users/:id", { output: User }),
+  create: api.endpoint("POST /users", { input: NewUser, output: User }),
+});
+```
+
+An endpoint is a saved call, not a contract shared with a server: for that,
+use Effect's `HttpApi`.
+
 ## Errors
 
 | Error                   | When                                                                               | Fields                                               |
@@ -323,7 +435,7 @@ export const withEffectToken = bearer({ token: Effect.succeed("token") });
 | Plugin                                              | What it does                                                                                                                                                                                                                                                                                        | Per call                |
 | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
 | `bearer({ token, scheme? })`                        | Sends `Authorization: Bearer <token>`. The token is a string, a function of the request (sync or async), or an Effect, read for every request. `null`, `undefined` and `""` send no header, and an existing `Authorization` header is kept.                                                         | `false`                 |
-| `logger({ level? })`                                | Logs one entry per call at Debug (or Info): `GET <url> 200 (35ms)`, or `failed` with the cause. Never logs headers or query strings.                                                                                                                                                                | `false`                 |
+| `logger({ level? })`                                | Logs one entry per call at Debug (or Info): `GET <url> 200 (35ms)`, or `failed` with the cause, with the call's [route](#writing-a-plugin) as an annotation. Never logs headers or query strings.                                                                                                   | `false`                 |
 | `retry({ times?, schedule?, methods?, statuses? })` | Retries network errors and 408, 429, 500, 502, 503 and 504, 2 times by default, with jittered exponential backoff from 200ms. Only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) by default, so a `POST` is never sent twice. When retries run out, the last response is returned. | `false`, `{ times }`    |
 | `timeout({ duration })`                             | Fails with `TimeoutError` and aborts the request when the response headers don't arrive in time. Downloading the body isn't covered.                                                                                                                                                                | `false`, `{ duration }` |
 
@@ -371,17 +483,49 @@ export const program = Effect.gen(function* () {
 `Fetch.plugin` defines a plugin and infers its name, errors, services and
 options from the hooks:
 
-| Hook                        | Runs                                                                                                                                         |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `onRequest(request, ctx)`   | Before the request is sent, in array order. Returns the request to send, or fails. It sees the full URL and the client's headers.            |
-| `onResponse(response, ctx)` | On every response, non-2xx included, in reverse order. Returns the response, or fails. The status check and decoding come after all plugins. |
-| `onError(error, ctx)`       | After a call fails or dies, in array order. It can't change the outcome.                                                                     |
-| `wrap(client, options)`     | Wraps the plugins after it and the network, for retries, timeouts and the like. It can add errors but can't remove them.                     |
+| Hook                           | Runs                                                                                                                                         |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onRequest(request, ctx)`      | Before the request is sent, in array order. Returns the request to send, or fails. It sees the full URL and the client's headers.            |
+| `onResponse(response, ctx)`    | On every response, non-2xx included, in reverse order. Returns the response, or fails. The status check and decoding come after all plugins. |
+| `onError(error, ctx)`          | After a call fails or dies, in array order. It can't change the outcome.                                                                     |
+| `wrap(client, options, route)` | Wraps the plugins after it and the network, for retries, timeouts and the like. It can add errors but can't remove them.                     |
 
 `ctx.options` is the plugin's `defaults` merged with the call's override, so
 a plugin needs `defaults` to have options. `ctx.request` is the request: in
 `onResponse`, the one this plugin passed on; in `onError`, the one the call
 built.
+
+`ctx.route` is the call's method and path as written, before the params are
+filled in: `"GET /users/:id"`, whether the call was
+`api.get("/users/:id", …)` or an [endpoint](#endpoints). It's the same for
+every user ID, so it's what to group logs, metrics and error reports by. It's
+`undefined` for requests sent through `client.httpClient`. A `wrap` reads it
+from its third argument, an Effect like `options`:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+
+import * as Fetch from "@monarcode/effetch";
+
+declare const report: (error: unknown, route: string | undefined) => void;
+
+export const errorReporter = Fetch.plugin({
+  name: "errorReporter",
+  onError: (error, ctx) => Effect.sync(() => report(error, ctx.route)),
+});
+
+export const timing = Fetch.plugin({
+  name: "timing",
+  wrap: (client, _options, route) =>
+    HttpClient.transform(client, (response, request) =>
+      Effect.gen(function* () {
+        const label = (yield* route) ?? request.url;
+        return yield* Effect.withLogSpan(response, label);
+      }),
+    ),
+});
+```
 
 The classic example turns a `401` into a typed `SessionExpired`, after
 signing out:
@@ -470,7 +614,7 @@ export const deadline = Fetch.plugin({
   `Fetch.Plugin.Any[]` erases the plugins' types.
 
 [`examples/`](examples) has complete programs with built-in and custom
-plugins.
+plugins, with endpoints, and with several backends, each with its own client.
 
 ## Testing
 
@@ -558,8 +702,7 @@ page's URL.
 
 - A path parameter is a whole segment: `/files/:name.json` has one parameter
   called `name.json`.
-- No query schemas or optional path parameters yet, and no endpoint
-  definitions: each call passes its own schemas.
+- No query schemas or optional path parameters yet.
 - Paths shouldn't contain `?` or `#`. Pass query parameters with `query`.
 - `timeout` and the logged duration cover the time until the response
   headers arrive, not downloading the body.
@@ -570,6 +713,9 @@ page's URL.
 `@monarcode/effetch`:
 
 - `make`, `ClientConfig`, `Client`: making a client and its methods.
+- `Endpoint`, `EndpointMethod`, `EndpointDefinition`, `EndpointOptions`,
+  `EndpointBody`, `EndpointArgs`, `EndpointRoute`, `ValidRoute`,
+  `RouteMethod`, `RoutePath`: [endpoints](#endpoints).
 - `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,
   `FetchError`, `isFetchError`: [errors](#errors).
 - `plugin`, `Plugin` (and the `Plugin.*` helper types), `PluginContext`:
