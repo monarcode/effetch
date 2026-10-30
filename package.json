@@ -1,6 +1,6 @@
 {
 	"name": "@monarcode/effetch",
-	"version": "0.1.0-rc.0",
+	"version": "0.1.0-rc.1",
 	"description": "Typed, schema-driven HTTP calls on Effect v4's HttpClient: path params, object queries, decoded responses and plugins",
 	"keywords": [
 		"effect",
