@@ -1,6 +1,9 @@
 export { make } from "./Client.js";
 export type { Client, ClientConfig } from "./Client.js";
+export { endpoint } from "./Endpoint.js";
 export type {
+	BindMethod,
+	BindOptions,
 	Endpoint,
 	EndpointArgs,
 	EndpointBody,
@@ -10,6 +13,8 @@ export type {
 	EndpointRoute,
 	RouteMethod,
 	RoutePath,
+	UnboundDefinition,
+	UnboundEndpoint,
 	ValidRoute,
 } from "./Endpoint.js";
 export {

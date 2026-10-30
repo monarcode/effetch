@@ -4,9 +4,15 @@ import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpMethod from "effect/http/HttpMethod";
 import type * as Schema from "effect/Schema";
 
-import type { EndpointMethod } from "./Endpoint.js";
+import type { BindMethod, EndpointMethod } from "./Endpoint.js";
 import type { NetworkError } from "./Errors.js";
-import { makeEndpoint, type RuntimeDefinition } from "./internal/endpoint.js";
+import {
+	bindEndpoint,
+	makeEndpoint,
+	type RuntimeBindOptions,
+	type RuntimeDefinition,
+	type RuntimeUnboundEndpoint,
+} from "./internal/endpoint.js";
 import { makeApplyDefaults, mapClientErrors } from "./internal/pipeline.js";
 import {
 	applyPlugins,
@@ -363,6 +369,59 @@ export interface Client<
 	 * ```
 	 */
 	readonly endpoint: EndpointMethod<Ps, EB>;
+
+	/**
+	 * Binds an endpoint defined with `Fetch.endpoint` to this client. You get
+	 * back the same endpoint `client.endpoint` makes from the same route and
+	 * definition: `api.bind(Fetch.endpoint("GET /users/:id", { output: User }))`
+	 * is `api.endpoint("GET /users/:id", { output: User })`.
+	 *
+	 * - Without its own `error`, the endpoint uses this client's
+	 *   `defaultError`.
+	 * - `plugins` overrides are given here, checked against this client's
+	 *   plugins. A call's own override wins.
+	 * - `headers` given here are sent over the definition's. A call's own
+	 *   header wins over both.
+	 *
+	 * Binding does nothing on its own, and one definition can be bound to
+	 * several clients: each endpoint sends to its own client's `baseUrl`,
+	 * with its plugins.
+	 *
+	 * @example
+	 * ```ts
+	 * import * as Context from "effect/Context";
+	 * import * as Effect from "effect/Effect";
+	 * import * as Schema from "effect/Schema";
+	 * import * as Fetch from "@monarcode/effetch";
+	 * import { bearer } from "@monarcode/effetch/plugins";
+	 *
+	 * const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+	 * const Session = Schema.Struct({ token: Schema.String });
+	 *
+	 * // Next to the schemas, without a client.
+	 * const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+	 * const refresh = Fetch.endpoint("POST /auth/refresh", { output: Session });
+	 *
+	 * const makeApi = Effect.gen(function* () {
+	 *   const api = yield* Fetch.make({
+	 *     baseUrl: "https://api.example.com",
+	 *     plugins: [bearer({ token: "token" })],
+	 *   });
+	 *   return {
+	 *     getUser: api.bind(getUser),
+	 *     refresh: api.bind(refresh, { plugins: { bearer: false } }),
+	 *   };
+	 * });
+	 *
+	 * class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()("Api") {}
+	 *
+	 * const program = Effect.gen(function* () {
+	 *   const { getUser } = yield* Api;
+	 *   return yield* getUser({ params: { id: 1 } });
+	 * });
+	 * ```
+	 */
+	readonly bind: BindMethod<Ps, EB>;
 }
 
 /**
@@ -502,7 +561,11 @@ export const make = <
 			patch: call("PATCH"),
 			del: call("DELETE"),
 			endpoint: (route: string, definition?: RuntimeDefinition) =>
-				makeEndpoint(call, route, definition),
+				makeEndpoint(call, config.defaultError, route, definition),
+			bind: (
+				definition: RuntimeUnboundEndpoint,
+				options?: RuntimeBindOptions,
+			) => bindEndpoint(call, config.defaultError, definition, options),
 		};
 		return client as unknown as Client<Ps, EB>;
 	});

@@ -3,6 +3,7 @@ import * as UrlParams from "effect/http/UrlParams";
 import { describe, expect, it } from "vitest";
 
 import { toUrlParams } from "../src/internal/query.js";
+import { redacted, supportsRedactedQuery } from "./utils/redacted.js";
 
 const entries = (query: Parameters<typeof toUrlParams>[0]) => [
 	...toUrlParams(query),
@@ -61,6 +62,17 @@ describe("toUrlParams", () => {
 	it("omits empty arrays", () => {
 		expect(entries({ tags: [] })).toEqual([]);
 	});
+
+	it.runIf(supportsRedactedQuery)(
+		"keeps Redacted values, and serialises them as their value",
+		() => {
+			const token = redacted("s3cret");
+			const params = toUrlParams({ token, ids: [redacted("a b"), 2] });
+			expect(entries({ token })).toEqual([["token", token]]);
+			expect(UrlParams.toString(params)).toBe("token=s3cret&ids=a+b&ids=2");
+			expect(JSON.stringify(params)).not.toContain("s3cret");
+		},
+	);
 
 	it("serialises with URL encoding", () => {
 		expect(

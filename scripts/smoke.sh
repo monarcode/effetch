@@ -185,6 +185,14 @@ const rejected = (
 	api.endpoint("GET /todos", { input: Todo });
 	// @ts-expect-error the body is required with an input
 	api.endpoint("POST /todos", { input: Todo })();
+	// @ts-expect-error the method is misspelled
+	Fetch.endpoint("GTE /todos");
+	// @ts-expect-error plugin overrides are given when binding
+	Fetch.endpoint("GET /todos", { plugins: { bearer: false } });
+	// @ts-expect-error no plugin is called "requestID"
+	api.bind(Fetch.endpoint("GET /todos"), { plugins: { requestID: false } });
+	// @ts-expect-error the :id path param is required
+	api.bind(Fetch.endpoint("GET /todos/:id"))({});
 };
 void rejected;
 
@@ -214,6 +222,13 @@ const endpointProgram = Effect.gen(function* () {
 	) {
 		throw new Error("Unexpected endpoint route, method or path");
 	}
+	if (
+		getTodo.output !== Todo ||
+		getTodo.error !== Schema.Unknown ||
+		getTodo.input !== undefined
+	) {
+		throw new Error("Unexpected endpoint output, error or input");
+	}
 	return yield* getTodo({ params: { id: 2 } });
 }).pipe(Effect.provideService(HttpClient.HttpClient, mock));
 
@@ -226,6 +241,41 @@ if (
 	routes.join() !== "GET /todos/:id"
 ) {
 	throw new Error(`Unexpected endpoint request: ${seen.at(-1)}`);
+}
+
+// Defined at module level, without a client, then bound.
+const getTodoDefinition = Fetch.endpoint("GET /todos/:id", { output: Todo });
+if (
+	!Object.isFrozen(getTodoDefinition) ||
+	getTodoDefinition.route !== "GET /todos/:id" ||
+	getTodoDefinition.method !== "GET" ||
+	getTodoDefinition.path !== "/todos/:id" ||
+	getTodoDefinition.output !== Todo
+) {
+	throw new Error("Unexpected definition");
+}
+
+const boundProgram = Effect.gen(function* () {
+	const api = yield* Fetch.make({
+		baseUrl: "https://api.test",
+		plugins: [requestId, routeSeen],
+	});
+	const getTodo = api.bind(getTodoDefinition, {
+		plugins: { requestId: { id: "bound" } },
+	});
+	if (getTodo.route !== "GET /todos/:id" || getTodo.output !== Todo) {
+		throw new Error("Unexpected bound endpoint");
+	}
+	return yield* getTodo({ params: { id: 3 } });
+}).pipe(Effect.provideService(HttpClient.HttpClient, mock));
+
+const viaBind: { readonly id: number } = await Effect.runPromise(boundProgram);
+if (
+	viaBind.id !== 1 ||
+	seen.at(-1) !== "GET https://api.test/todos/3 bound undefined" ||
+	routes.join() !== "GET /todos/:id,GET /todos/:id"
+) {
+	throw new Error(`Unexpected bound request: ${seen.at(-1)}`);
 }
 
 console.log("smoke: ok");

@@ -12,11 +12,16 @@ import { describe, expectTypeOf, it } from "vitest";
 
 import type { DecodeError, HttpError, NetworkError } from "../../src/Errors.js";
 import type {
+	AnySchema,
 	BaseOptions,
 	BodyMethod,
+	CallEffect,
+	CallError,
+	CallServices,
 	NoBodyMethod,
 	QueryInput,
 	RequestMethod,
+	Success,
 } from "../../src/Options.js";
 import type { Plugin } from "../../src/Plugin.js";
 
@@ -267,6 +272,38 @@ describe("return type", () => {
 			{ readonly code: string } | undefined
 		>();
 	});
+
+	it("fits CallEffect, CallError and CallServices in generic code", () => {
+		// The methods write these types out (so hovers show the members);
+		// wrappers generic over the schemas must still accept them.
+		const getAs = <O extends AnySchema, EB extends AnySchema>(
+			method: NoBodyMethod<Ps, EB>,
+			output: O,
+		): CallEffect<O, EB, Schema.Unknown, Ps> => method("/x", { output });
+		const postAs = <O extends AnySchema, I extends AnySchema>(
+			output: O,
+			input: I,
+			body: I["Type"],
+		): Effect.Effect<
+			Success<O>,
+			CallError<O, Schema.Unknown, Ps>,
+			CallServices<O, Schema.Unknown, I>
+		> => post("/x", { output, input, body });
+		const requestAs = <
+			O extends AnySchema,
+			P extends ReadonlyArray<Plugin.Any>,
+		>(
+			method: RequestMethod<P, Schema.Unknown>,
+			output: O,
+		): Effect.Effect<
+			Success<O>,
+			CallError<O, Schema.Unknown, P>,
+			CallServices<O, Schema.Unknown, Schema.Unknown>
+		> => method("DELETE", "/x", { output });
+		expectTypeOf(getAs).toBeFunction();
+		expectTypeOf(postAs).toBeFunction();
+		expectTypeOf(requestAs).toBeFunction();
+	});
 });
 
 describe("services", () => {
@@ -295,6 +332,60 @@ describe("services", () => {
 	it("include the error schema's decoding services", () => {
 		const call = get("/x", { error: Localized });
 		expectTypeOf<Effect.Services<typeof call>>().toEqualTypeOf<Locale>();
+	});
+
+	class Signer extends Context.Service<
+		Signer,
+		{ readonly sign: (s: string) => string }
+	>()("Signer") {}
+	const Signed = Schema.String.pipe(
+		Schema.decode({
+			decode: SchemaGetter.passthrough(),
+			encode: SchemaGetter.transformEffect((s: string) =>
+				Effect.map(Effect.service(Signer), (signer) => signer.sign(s)),
+			),
+		}),
+	);
+	type Spelled<
+		O extends AnySchema,
+		EB extends AnySchema,
+		I extends AnySchema,
+	> = Effect.Effect<Success<O>, CallError<O, EB, Ps>, CallServices<O, EB, I>>;
+
+	it("match CallEffect, CallError and CallServices exactly", () => {
+		// The signatures write these types out, so check they still agree.
+		const fromOutput = get("/x", { output: Localized, error: ApiError });
+		expectTypeOf(fromOutput).toEqualTypeOf<
+			Spelled<typeof Localized, typeof ApiError, Schema.Unknown>
+		>();
+		expectTypeOf(fromOutput).toEqualTypeOf<
+			CallEffect<typeof Localized, typeof ApiError, Schema.Unknown, Ps>
+		>();
+		const fromError = get("/x", { output: Todo, error: Localized });
+		expectTypeOf(fromError).toEqualTypeOf<
+			Spelled<typeof Todo, typeof Localized, Schema.Unknown>
+		>();
+		const posted = post("/x", { input: Signed, body: "x", output: Todo });
+		expectTypeOf(posted).toEqualTypeOf<
+			Spelled<typeof Todo, Schema.Unknown, typeof Signed>
+		>();
+		expectTypeOf(posted).toEqualTypeOf<
+			CallEffect<typeof Todo, Schema.Unknown, typeof Signed, Ps>
+		>();
+		const requested = request("PATCH", "/x", {
+			input: Signed,
+			body: "x",
+			output: Localized,
+		});
+		expectTypeOf(requested).toEqualTypeOf<
+			Spelled<typeof Localized, Schema.Unknown, typeof Signed>
+		>();
+		expectTypeOf(requested).toEqualTypeOf<
+			CallEffect<typeof Localized, Schema.Unknown, typeof Signed, Ps>
+		>();
+		expectTypeOf<Effect.Services<typeof requested>>().toEqualTypeOf<
+			Locale | Signer
+		>();
 	});
 });
 

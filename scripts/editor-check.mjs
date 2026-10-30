@@ -5,8 +5,11 @@ import ts from "typescript";
 
 const dir = process.cwd();
 const probe = path.join(dir, "editor.ts");
-const source = `import * as Fetch from "@monarcode/effetch";
-import { bearer } from "@monarcode/effetch/plugins";
+const source = `import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { bearer, type TimeoutPlugin } from "@monarcode/effetch/plugins";
 
 export const make = Fetch./*make*/make({
 	plugins: [/*bearer*/bearer({ token: "token" })],
@@ -27,6 +30,47 @@ export const list = api./*query*/get("/users", { query: listUsersParams });
 export const route = api.endpoint("");
 export const /*getUser*/getUser = api./*endpoint*/endpoint("GET /users/:id");
 export const user = getUser({ params: { /*endpointParams*/ } });
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+const ApiError = Schema.Struct({ code: Schema.String });
+declare const typed: Fetch.Client<[], typeof ApiError>;
+declare const timed: Fetch.Client<[TimeoutPlugin]>;
+
+export const /*todoCall*/todoCall = typed.get("/todos/:id", { params: { id: 1 }, output: Todo });
+export const /*todoProgram*/todoProgram = Effect.gen(function* () {
+	const todo = yield* typed.get("/todos/:id", { params: { id: 1 }, output: Todo });
+	return todo.title;
+});
+const getTodo = typed.endpoint("GET /todos/:id", { output: Todo });
+export const /*endpointCall*/endpointCall = getTodo({ params: { id: 1 } });
+export const /*timedCall*/timedCall = timed.get("/todos", { output: Todo });
+export const /*postCall*/postCall = typed.post("/todos", {
+	input: Todo,
+	body: { id: 1, title: "x" },
+	output: Todo,
+});
+export const /*requestCall*/requestCall = typed.request("PATCH", "/todos/:id", {
+	params: { id: 1 },
+	output: Todo,
+});
+
+export const defined = Fetch.endpoint(/*definedRoute*/"");
+export const badRoute = Fetch.endpoint(/*badRoute*/"GET todos");
+export const badEndpointRoute = typed.endpoint(/*badEndpointRoute*/"GET todos");
+const getTodoDefinition = Fetch./*define*/endpoint("GET /todos/:id", { output: Todo });
+export const /*bound*/bound = typed./*bind*/bind(getTodoDefinition);
+export const /*boundCall*/boundCall = bound({ params: { id: 1 } });
+export const boundParams = bound({ params: { /*boundParams*/ } });
+
+interface Locale { readonly locale: string }
+interface Signer { readonly sign: (s: string) => string }
+declare const Localized: Schema.Codec<{ readonly id: number }, unknown, Locale>;
+declare const Signed: Schema.Codec<string, string, never, Signer>;
+export const /*servicesCall*/servicesCall = typed.post("/x", {
+	input: Signed,
+	body: "x",
+	output: Localized,
+});
 `;
 
 const config = ts.getParsedCommandLineOfConfigFile(
@@ -82,6 +126,8 @@ for (const [marker, file, docs] of [
 	["get", "Client.d.ts", "Sends a `GET` request"],
 	["bearer", path.join("plugins", "bearer.d.ts"), "Sends `Authorization"],
 	["endpoint", "Client.d.ts", "Defines an endpoint"],
+	["define", "Endpoint.d.ts", "Defines an endpoint without a client"],
+	["bind", "Client.d.ts", "Binds an endpoint defined with"],
 ]) {
 	const definitions = service.getDefinitionAtPosition(probe, at(marker)) ?? [];
 	const targets = definitions.map((definition) =>
@@ -101,6 +147,7 @@ for (const [marker, file, docs] of [
 	expect(
 		marker === "get" ||
 			marker === "endpoint" ||
+			marker === "bind" ||
 			(tags.includes("example") && tags.includes("since")),
 		`Hover on ${marker} lacks @example or @since: ${tags.join(", ")}`,
 	);
@@ -128,6 +175,32 @@ expect(
 	`endpoint("") doesn't suggest the methods: ${routes.slice(0, 10).join(", ")}`,
 );
 
+const definedRoutes = (
+	service.getCompletionsAtPosition(probe, at("definedRoute") + 1, undefined)
+		?.entries ?? []
+).map((entry) => entry.name);
+expect(
+	definedRoutes.includes("GET /") && definedRoutes.includes("POST /"),
+	`Fetch.endpoint("") doesn't suggest the methods: ${definedRoutes.slice(0, 10).join(", ")}`,
+);
+
+// A malformed route is reported on the route itself, as a route error, for
+// both ways of defining an endpoint.
+const diagnostics = service.getSemanticDiagnostics(probe);
+for (const marker of ["badRoute", "badEndpointRoute"]) {
+	const messages = diagnostics
+		.filter((diagnostic) => diagnostic.start === at(marker))
+		.map((diagnostic) =>
+			ts.flattenDiagnosticMessageText(diagnostic.messageText, " "),
+		);
+	expect(
+		messages.length === 1 &&
+			messages[0].includes("GET /") &&
+			!messages[0].includes("No overload matches"),
+		`A malformed route at ${marker} isn't reported as a route error: ${messages.join("; ") || "no error"}`,
+	);
+}
+
 const endpointParams = (
 	service.getCompletionsAtPosition(probe, at("endpointParams"), undefined)
 		?.entries ?? []
@@ -137,6 +210,15 @@ expect(
 	`params of a "GET /users/:id" endpoint don't complete id: ${endpointParams.slice(0, 10).join(", ")}`,
 );
 
+const boundParams = (
+	service.getCompletionsAtPosition(probe, at("boundParams"), undefined)
+		?.entries ?? []
+).map((entry) => entry.name);
+expect(
+	boundParams.includes("id"),
+	`params of a bound "GET /todos/:id" endpoint don't complete id: ${boundParams.slice(0, 10).join(", ")}`,
+);
+
 const endpointHover = ts.displayPartsToString(
 	service.getQuickInfoAtPosition(probe, at("getUser"))?.displayParts,
 );
@@ -144,6 +226,77 @@ expect(
 	endpointHover.includes('Endpoint<"GET /users/:id"'),
 	`Hover on an endpoint doesn't name its type and route: ${endpointHover}`,
 );
+
+const boundHover = ts.displayPartsToString(
+	service.getQuickInfoAtPosition(probe, at("bound"))?.displayParts,
+);
+expect(
+	boundHover.includes('Endpoint<"GET /todos/:id"'),
+	`Hover on a bound endpoint doesn't name its type and route: ${boundHover}`,
+);
+
+// Splits `text` at `separator`, outside any brackets.
+const splitTopLevel = (text, separator) => {
+	const parts = [];
+	let depth = 0;
+	let start = 0;
+	for (let index = 0; index < text.length; index++) {
+		if ("<{([".includes(text[index])) {
+			depth++;
+		} else if (">})]".includes(text[index])) {
+			depth--;
+		} else if (depth === 0 && text.startsWith(separator, index)) {
+			parts.push(text.slice(start, index).trim());
+			start = index + separator.length;
+		}
+	}
+	return [...parts, text.slice(start).trim()];
+};
+
+// The member names of a union, such as `["NetworkError", "HttpError.With"]`.
+const members = (union) =>
+	splitTopLevel(union, "|")
+		.map((member) => member.replace(/^Fetch\./, "").replace(/<.*$/, ""))
+		.sort();
+
+// The error and services of a hover such as `const x: Effect.Effect<A, E, R>`.
+const errorsAndServices = (hover) => {
+	const flat = hover.replace(/\s+/g, " ");
+	const start = flat.indexOf(": Effect.Effect<");
+	if (start === -1 || !flat.endsWith(">")) {
+		return undefined;
+	}
+	const args = splitTopLevel(
+		flat.slice(start + ": Effect.Effect<".length, -1),
+		",",
+	);
+	return args.length === 3
+		? { errors: members(args[1]), services: members(args[2]) }
+		: undefined;
+};
+
+const callErrors = ["DecodeError", "HttpError.With", "NetworkError"];
+for (const [marker, errors, services] of [
+	["todoCall", callErrors, ["never"]],
+	["todoProgram", callErrors, ["never"]],
+	["endpointCall", callErrors, ["never"]],
+	["boundCall", callErrors, ["never"]],
+	["postCall", callErrors, ["never"]],
+	["requestCall", callErrors, ["never"]],
+	["timedCall", [...callErrors, "TimeoutError"].sort(), ["never"]],
+	["servicesCall", callErrors, ["Locale", "Signer"]],
+]) {
+	const hover = ts.displayPartsToString(
+		service.getQuickInfoAtPosition(probe, at(marker))?.displayParts,
+	);
+	const shown = errorsAndServices(hover);
+	expect(
+		shown !== undefined &&
+			shown.errors.join(" | ") === errors.join(" | ") &&
+			shown.services.join(" | ") === services.join(" | "),
+		`Hover on ${marker} doesn't show Effect.Effect<…, ${errors.join(" | ")}, ${services.join(" | ")}>: ${hover}`,
+	);
+}
 
 const queryStart = source.lastIndexOf("\n", at("query")) + 1;
 const queryEnd = source.indexOf("\n", at("query"));

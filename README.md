@@ -25,7 +25,7 @@ const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
 const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 // Effect<{ readonly id: number; readonly title: string },
-//        NetworkError | HttpError | DecodeError>
+//        NetworkError | DecodeError | HttpError.With<unknown>, never>
 ```
 
 > **Release candidate.** effetch is close to its first stable release
@@ -70,6 +70,7 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
   - [Tips](#tips)
 - [Endpoints](#endpoints)
   - [Defining endpoints](#defining-endpoints)
+  - [Defining endpoints without a client](#defining-endpoints-without-a-client)
   - [Calling an endpoint](#calling-an-endpoint)
   - [Defaults and overrides](#defaults-and-overrides)
   - [Why use endpoints](#why-use-endpoints)
@@ -370,7 +371,9 @@ has parameters, `params` is required, with exactly those names, and when it
 has none, `params` isn't allowed. Values are URI-encoded for you.
 
 `query` is a plain object. Arrays repeat the key, and `null` and `undefined`
-are dropped, so you can pass optional filters as they are.
+are dropped, so you can pass optional filters as they are. With Effect 4.1 or
+later, a value can also be `Redacted`, such as `Redacted.make(apiKey)`: it's
+sent as its value, and Effect keeps it out of its own logs and traces.
 
 ### Sending a body
 
@@ -906,6 +909,66 @@ The route is an uppercase method, one space, then a path that starts with `/`
 or a full `http(s)://` URL. TypeScript checks it as you type: `"GTE /users"`
 and `"get /users"` don't compile, and your editor suggests the methods.
 
+### Defining endpoints without a client
+
+`api.endpoint` needs a client, and a client only exists inside an Effect, so
+those endpoints only exist once the layer that makes them is built.
+`Fetch.endpoint` takes the same route and definition with no client, and
+returns plain data you can read at module level. `api.bind` then makes it an
+endpoint of that client:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const Session = Schema.Struct({ token: Schema.String });
+
+// At module level, next to the schemas
+export const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+export const login = Fetch.endpoint("POST /auth/login", { output: Session });
+
+getUser.route; // "GET /users/:id"
+getUser.output; // User
+
+// Where the client is
+export const makeApi = Effect.gen(function* () {
+  const api = yield* Fetch.make({
+    baseUrl: "https://api.example.com",
+    plugins: [bearer({ token: "token" })],
+  });
+  return {
+    getUser: api.bind(getUser),
+    login: api.bind(login, { plugins: { bearer: false } }),
+  };
+});
+```
+
+`api.bind(Fetch.endpoint(route, definition))` is the endpoint
+`api.endpoint(route, definition)` makes, with the same type and the same
+calls. Since a definition doesn't know its client:
+
+- **Plugin overrides are given when binding,** where they're checked against
+  the client's plugins. A definition takes no `plugins`.
+- **A definition without an `error` schema** uses the `defaultError` of the
+  client it's bound to.
+- **Headers can be given in both.** The binding's win over the definition's.
+
+The route is checked as you type, as with `api.endpoint`, and `Fetch.endpoint`
+throws on a malformed one, so a bad route fails as soon as its module is
+imported.
+
+Define endpoints this way when:
+
+- they should be listed next to their schemas, in a file with no client (see
+  [a feature-sliced app](#a-feature-sliced-app));
+- one definition serves several clients, such as staging and production;
+- a tool works from your endpoints, and needs their routes and schemas
+  without a client.
+
 ### Calling an endpoint
 
 What's fixed goes in the definition, and what changes goes in each call:
@@ -925,16 +988,22 @@ What's fixed goes in the definition, and what changes goes in each call:
 ### Defaults and overrides
 
 - **Headers.** A call's headers win over the endpoint's, which win over the
-  client's. Unlike the client's, an endpoint's headers can set
+  client's. A bound endpoint's headers are the binding's over the
+  definition's. Unlike the client's, an endpoint's headers can set
   `content-type`.
-- **Plugins.** A call's plugin override wins over the endpoint's, and when
-  both give options, they're merged. An endpoint defined with `retry: false`
-  can still be retried in one call with `plugins: { retry: { times: 2 } }`.
+- **Plugins.** A call's plugin override wins over the endpoint's (given to
+  `api.endpoint`, or when binding), and when both give options, they're
+  merged. An endpoint defined with `retry: false` can still be retried in one
+  call with `plugins: { retry: { times: 2 } }`.
 - **Schemas** belong to the endpoint, and can't be changed per call.
 
 Each endpoint also has `route`, `method` and `path` properties, for log labels
 or cache keys. Plugins see the same route, as
-[`ctx.route`](#knowing-the-route).
+[`ctx.route`](#knowing-the-route). Its `output`, `error` and `input`
+properties are its schemas, for things like decoding cached data or building
+test fixtures: `output` and `input` are `undefined` when the endpoint has
+none, and `error` is the schema error bodies are decoded with, the
+endpoint's, else the client's `defaultError`, else `Schema.Unknown`.
 
 ### Why use endpoints
 
@@ -985,17 +1054,22 @@ Avoid:
 
 - **`api.endpoint(…)(…)` at a call site.** That's a method call written
   twice: use the method.
-- **Defining endpoints in code that runs on every request.** Define them once,
-  when the layer that holds them is built.
+- **Making or binding endpoints in code that runs on every request.** Do it
+  once, when the layer that holds them is built.
+- **Passing a bound endpoint's plugin overrides at every call.** A definition
+  can't hold them, since it doesn't know the client's plugins: give them once,
+  when binding, as in `api.bind(login, { plugins: { bearer: false } })`.
 - **Spreading several groups of endpoints into one object.** When two use the
   same name, the later one silently wins. Nest them instead:
   `{ users, todos }`.
 
 ## Structuring an app
 
-Endpoints are made from a client, so you define them wherever a client is
-available: in a layer that reads it, or in a function that takes it. Where
-that is depends on the size of your app.
+An endpoint calls through a client, so it's made, or bound, wherever a client
+is available: in a layer that reads it, or in a function that takes it. Its
+definition can live elsewhere: [`Fetch.endpoint`](#defining-endpoints-without-a-client)
+needs no client, so definitions can sit next to their schemas, and only the
+binding needs the client. Where each goes depends on the size of your app.
 
 ### A small app
 
@@ -1063,8 +1137,8 @@ errors are typed with your `defaultError`.
 
 When your app is split into feature modules, each with its own schemas, turn
 it around. The client becomes shared infrastructure that knows nothing about
-the modules, and each module defines its own endpoints from it, next to its
-schemas:
+the modules. Each module defines its endpoints next to its schemas, with no
+client, and binds them to the client in its data layer:
 
 ```text
 src/
@@ -1072,8 +1146,8 @@ src/
 │   └── app-api-client.ts  the client: base URL, error body, plugins
 ├── modules/
 │   ├── todos/
-│   │   ├── contract/      schemas
-│   │   ├── data/          endpoints, made from AppApiClient
+│   │   ├── contract/      schemas, and endpoints defined with Fetch.endpoint
+│   │   ├── data/          the endpoints, bound to AppApiClient
 │   │   ├── application/   workflows that take more than one call
 │   │   └── public.ts
 │   └── wallet/
@@ -1083,8 +1157,8 @@ src/
 > **This layout is a personal preference,** the one effetch's author uses in
 > their own apps, and effetch doesn't depend on it. Rename, merge or split the
 > folders to suit your project. What carries over is that modules import the
-> client, never the other way around, and that endpoints are defined once, in
-> a layer.
+> client, never the other way around, and that endpoints are bound once, in a
+> layer.
 
 ```ts
 import * as Config from "effect/Config";
@@ -1106,15 +1180,24 @@ export class AppApiClient extends Context.Service<
 
 export const AppApiClientLive = Layer.effect(AppApiClient)(makeAppApiClient);
 
-// modules/todos/contract/todos.ts
+// modules/todos/contract/todos.ts: schemas and endpoints, no client
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 const NewTodo = Schema.Struct({ title: Schema.String });
 
-// modules/todos/data/todo.api.ts: the module's endpoints, as its service
+export const listTodos = Fetch.endpoint("GET /todos", {
+  output: Schema.Array(Todo),
+});
+export const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
+export const createTodo = Fetch.endpoint("POST /todos", {
+  input: NewTodo,
+  output: Todo,
+});
+
+// modules/todos/data/todo.api.ts: the endpoints, bound, as the module's service
 const makeTodoApi = AppApiClient.useSync((client) => ({
-  list: client.endpoint("GET /todos", { output: Schema.Array(Todo) }),
-  get: client.endpoint("GET /todos/:id", { output: Todo }),
-  create: client.endpoint("POST /todos", { input: NewTodo, output: Todo }),
+  list: client.bind(listTodos),
+  get: client.bind(getTodo),
+  create: client.bind(createTodo),
 }));
 
 export class TodoApi extends Context.Service<
@@ -1143,9 +1226,10 @@ This scales well as the app grows:
 - **The client file stays the same size,** however many endpoints the app
   has, and it never imports a module: dependencies point from the modules to
   the infrastructure.
-- **A module with 20 endpoints has 20 one-line definitions** in its own
-  `data/` folder, beside its own schemas. When they serve separate concerns,
-  split them into several services, each in its own file.
+- **A module with 20 endpoints has 20 definitions** in its own `contract/`
+  folder, beside their schemas, and 20 one-line bindings in `data/`. When
+  they serve separate concerns, split them into several services, each in its
+  own file.
 - **Every module's data service is its endpoints,** as `TodoApi` is here: one
   line per operation, and every type inferred, so every module's `data/`
   folder looks the same.
@@ -1156,8 +1240,12 @@ This scales well as the app grows:
   implementation,** such as an offline one or a fake for UI work, and
   implement it with the endpoints.
 
+`client.endpoint` fits this layout too: make the endpoints in `data/`, and
+import only the schemas from `contract/`. Define them with `Fetch.endpoint`
+when something should read the routes and schemas without a client.
 [`examples/app`](examples/app) is a complete app in this layout, with two
-modules and two backends.
+modules and two backends: `todos` binds definitions, and `wallet` uses
+`client.endpoint`.
 
 ### Several backends
 
@@ -1284,6 +1372,9 @@ page's URL.
 - `Endpoint`, `EndpointMethod`, `EndpointDefinition`, `EndpointOptions`,
   `EndpointBody`, `EndpointArgs`, `EndpointRoute`, `ValidRoute`,
   `RouteMethod`, `RoutePath`: [endpoints](#endpoints).
+- `endpoint`, `UnboundEndpoint`, `UnboundDefinition`, `BindMethod`,
+  `BindOptions`:
+  [endpoints without a client](#defining-endpoints-without-a-client).
 - `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,
   `FetchError`, `isFetchError`: [errors](#handling-errors).
 - `plugin`, `Plugin` (and the `Plugin.*` helper types), `PluginContext`:
@@ -1293,7 +1384,9 @@ page's URL.
   `ParamsOption`, `QueryInput`, `QueryOf`, `QueryValue`, `AnySchema`,
   `Args`, `Success`, `CallError`, `CallServices`, `CallEffect`,
   `NoBodyMethod`, `BodyMethod`, `RequestMethod`, `PathParamNames`,
-  `PathParams`, `PathParamValue`.
+  `PathParams`, `PathParamValue`. `CallEffect` types a function that
+  returns a call; to take a call as an argument, accept any
+  `Effect.Effect<A, E, R>`.
 
 `@monarcode/effetch/plugins`:
 

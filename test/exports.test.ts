@@ -9,6 +9,7 @@ describe("public entry points", () => {
 			"DecodeError",
 			"HttpError",
 			"NetworkError",
+			"endpoint",
 			"isFetchError",
 			"make",
 			"plugin",

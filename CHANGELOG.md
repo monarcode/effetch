@@ -2,6 +2,53 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## 0.1.0-rc.1
+
+### Added
+
+- Endpoints have `output`, `error` and `input` properties: the schemas they
+  were defined with, for things like decoding cached data or building test
+  fixtures. `output` and `input` are `undefined` when the endpoint has none.
+  `error` is the schema `HttpError.body` is decoded with: the endpoint's
+  `error`, else the client's `defaultError`, else `Schema.Unknown`. Values
+  typed as `Endpoint` that you build by hand, such as test doubles, need the
+  three properties too.
+- `Fetch.endpoint(route, definition)` defines an endpoint without a client:
+  frozen data with its `route`, `method`, `path`, schemas and headers, which
+  can be exported at module level next to its schemas. `client.bind` makes it
+  an endpoint of that client, the same one `client.endpoint` makes from the
+  same route and definition. Plugin overrides are given when binding, where
+  they're checked against the client's plugins, and a definition without an
+  `error` schema uses the client's `defaultError`. Headers given when binding
+  win over the definition's. The route is checked by the types, and
+  `Fetch.endpoint` throws on a malformed one. New types: `UnboundEndpoint`,
+  `UnboundDefinition`, `BindMethod` and `BindOptions`. Values typed as
+  `Client` that you build by hand need `bind` too.
+
+### Changed
+
+- Calls and endpoints return `Effect.Effect<…>` with their errors and
+  services written out, rather than `CallEffect<…>`, so editors show what a
+  call succeeds with, fails with and needs. Hovering a call, or a program
+  built from calls, shows
+  `Effect<{ readonly id: number }, NetworkError | DecodeError | HttpError.With<unknown>, never>`
+  instead of `CallEffect<…>` and `CallError<…>` with the schemas. The types
+  are structurally the same, and a `CallEffect` you write yourself prints
+  the same way once it's used in a program.
+  - TypeScript can no longer infer `CallEffect`'s type parameters from a
+    call. A helper that takes `call: CallEffect<O, EB, I, Ps>` and is passed
+    a call gets their constraints instead, so `Success<O>` is `unknown`.
+    Accept any Effect: `<A, E, R>(call: Effect.Effect<A, E, R>)`.
+    Functions that return a call typed as `CallEffect`, or as
+    `Effect.Effect` with `CallError` and `CallServices`, work as before.
+
+### Fixed
+
+- A `Redacted` query value is sent as its value. From Effect 4.1,
+  `QueryValue` (Effect's `UrlParams.Coercible`) accepts `Redacted`, but
+  effetch converted it with `String()`, so `{ token: Redacted.make(key) }`
+  sent `token=<redacted>`.
+
 ## 0.1.0-rc.0
 
 ### Added

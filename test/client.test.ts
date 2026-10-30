@@ -23,6 +23,7 @@ import {
 	type RecordedRequest,
 	type Script,
 } from "./utils/mockClient.js";
+import { redacted, supportsRedactedQuery } from "./utils/redacted.js";
 import { reply } from "./utils/reply.js";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
@@ -166,6 +167,29 @@ describe("path params and query", () => {
 			yield* api.get("/todos", { query: params });
 			expect(wire(mock).url).toBe("https://api.test/todos?limit=5");
 		}),
+	);
+
+	it.effect.runIf(supportsRedactedQuery)(
+		"send a Redacted query value as its value, not in errors",
+		() =>
+			Effect.gen(function* () {
+				const { mock, api } = yield* setup([
+					reply.json({}, { status: 500 }),
+				]);
+				const error = yield* Effect.flip(
+					api.get("/todos", {
+						query: { token: redacted("s3cret"), page: 1 },
+					}),
+				);
+				expect(wire(mock).url).toBe(
+					"https://api.test/todos?token=s3cret&page=1",
+				);
+				expect(error).toMatchObject({
+					_tag: "HttpError",
+					url: "https://api.test/todos",
+				});
+				expect(JSON.stringify(error)).not.toContain("s3cret");
+			}),
 	);
 
 	it.effect("make the call defect when a param is missing at runtime", () =>
