@@ -65,10 +65,10 @@
 	},
 	"devDependencies": {
 		"@arethetypeswrong/cli": "0.18.5",
-		"@effect/language-service": "0.87.4",
-		"@effect/vitest": "4.0.2",
+		"@effect/language-service": "0.87.5",
+		"@effect/vitest": "4.1.0",
 		"@types/node": "26.6.5",
-		"effect": "4.0.2",
+		"effect": "4.1.0",
 		"husky": "9.1.7",
 		"oxfmt": "0.72.0",
 		"oxlint": "1.87.0",
