@@ -20,7 +20,11 @@
    lands on `.d.ts` (no source, no declaration maps are shipped). Every public
    export needs JSDoc with a description, `@example`, and `@since 0.1.0`.
    Public types must be **named, exported interfaces/aliases**, not giant
-   inline conditional types.
+   inline conditional types. One exception: `CallEffect` and the call
+   signatures (`NoBodyMethod`, `BodyMethod`, `RequestMethod`, `Endpoint`)
+   write out the members of `CallError` and `CallServices`, so hovers show
+   the errors rather than the alias. Keep them in sync; the type tests check
+   each one against the aliases.
 4. **Runtime targets: browsers, React Native (Hermes/Metro), Node ≥ 20, Bun,
    Deno.** No `node:` imports, no Node globals, **no `new URL()`** (React
    Native's URL support is incomplete) — join URLs with string operations. No

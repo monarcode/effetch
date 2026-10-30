@@ -358,6 +358,49 @@ describe("services", () => {
 		});
 		expectTypeOf<Effect.Services<typeof input>>().toEqualTypeOf<Locale>();
 	});
+
+	it("match CallEffect, CallError and CallServices exactly", () => {
+		// The call signature writes these types out, so check they still agree.
+		const fromOutput = endpoint("GET /x", {
+			output: Localized,
+			error: ApiError,
+		})();
+		expectTypeOf(fromOutput).toEqualTypeOf<
+			Effect.Effect<
+				Success<typeof Localized>,
+				CallError<typeof Localized, typeof ApiError, Ps>,
+				CallServices<typeof Localized, typeof ApiError, undefined>
+			>
+		>();
+		expectTypeOf(fromOutput).toEqualTypeOf<
+			CallEffect<typeof Localized, typeof ApiError, undefined, Ps>
+		>();
+		const fromError = endpoint("GET /x", {
+			output: Todo,
+			error: Localized,
+		})();
+		expectTypeOf(fromError).toEqualTypeOf<
+			Effect.Effect<
+				Todo,
+				CallError<typeof Todo, typeof Localized, Ps>,
+				CallServices<typeof Todo, typeof Localized, undefined>
+			>
+		>();
+		const posted = endpoint("POST /x", {
+			input: LocalizedInput,
+			output: Todo,
+		})({ body: "x" });
+		expectTypeOf(posted).toEqualTypeOf<
+			Effect.Effect<
+				Todo,
+				CallError<typeof Todo, Schema.Unknown, Ps>,
+				CallServices<typeof Todo, Schema.Unknown, typeof LocalizedInput>
+			>
+		>();
+		expectTypeOf(posted).toEqualTypeOf<
+			CallEffect<typeof Todo, Schema.Unknown, typeof LocalizedInput, Ps>
+		>();
+	});
 });
 
 describe("on a client", () => {

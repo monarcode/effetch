@@ -25,7 +25,7 @@ const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
 const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 // Effect<{ readonly id: number; readonly title: string },
-//        NetworkError | DecodeError | HttpError.With<unknown>>
+//        NetworkError | DecodeError | HttpError.With<unknown>, never>
 ```
 
 > **Release candidate.** effetch is close to its first stable release
@@ -1293,7 +1293,9 @@ page's URL.
   `ParamsOption`, `QueryInput`, `QueryOf`, `QueryValue`, `AnySchema`,
   `Args`, `Success`, `CallError`, `CallServices`, `CallEffect`,
   `NoBodyMethod`, `BodyMethod`, `RequestMethod`, `PathParamNames`,
-  `PathParams`, `PathParamValue`.
+  `PathParams`, `PathParamValue`. `CallEffect` types a function that
+  returns a call; to take a call as an argument, accept any
+  `Effect.Effect<A, E, R>`.
 
 `@monarcode/effetch/plugins`:
 

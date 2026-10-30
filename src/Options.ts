@@ -368,6 +368,10 @@ export type CallServices<
  *   has none).
  * - `Ps`: the client's plugins.
  *
+ * Use it to type functions that return a call. To take a call as an
+ * argument, accept any `Effect.Effect<A, E, R>`: TypeScript can't infer
+ * these parameters from a call.
+ *
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";

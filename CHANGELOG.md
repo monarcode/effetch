@@ -4,14 +4,22 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ## 0.1.0-rc.1
 
-### Fixed
+### Changed
 
-- Hovering a call, or a program built from calls, shows its success, error
-  and service types, such as
-  `Effect<{ readonly id: number }, NetworkError | DecodeError | HttpError.With<unknown>, never>`,
+- Calls and endpoints return `Effect.Effect<…>` with their errors and
+  services written out, rather than `CallEffect<…>`, so editors show what a
+  call succeeds with, fails with and needs. Hovering a call, or a program
+  built from calls, shows
+  `Effect<{ readonly id: number }, NetworkError | DecodeError | HttpError.With<unknown>, never>`
   instead of `CallEffect<…>` and `CallError<…>` with the schemas. The types
-  are unchanged; only how editors print them. A `CallEffect` you write
-  yourself prints the same way once it's used in a program.
+  are structurally the same, and a `CallEffect` you write yourself prints
+  the same way once it's used in a program.
+  - TypeScript can no longer infer `CallEffect`'s type parameters from a
+    call. A helper that takes `call: CallEffect<O, EB, I, Ps>` and is passed
+    a call gets their constraints instead, so `Success<O>` is `unknown`.
+    Accept any Effect: `<A, E, R>(call: Effect.Effect<A, E, R>)`.
+    Functions that return a call typed as `CallEffect`, or as
+    `Effect.Effect` with `CallError` and `CallServices`, work as before.
 
 ## 0.1.0-rc.0
 

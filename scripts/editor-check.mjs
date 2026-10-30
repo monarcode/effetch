@@ -44,6 +44,25 @@ export const /*todoProgram*/todoProgram = Effect.gen(function* () {
 const getTodo = typed.endpoint("GET /todos/:id", { output: Todo });
 export const /*endpointCall*/endpointCall = getTodo({ params: { id: 1 } });
 export const /*timedCall*/timedCall = timed.get("/todos", { output: Todo });
+export const /*postCall*/postCall = typed.post("/todos", {
+	input: Todo,
+	body: { id: 1, title: "x" },
+	output: Todo,
+});
+export const /*requestCall*/requestCall = typed.request("PATCH", "/todos/:id", {
+	params: { id: 1 },
+	output: Todo,
+});
+
+interface Locale { readonly locale: string }
+interface Signer { readonly sign: (s: string) => string }
+declare const Localized: Schema.Codec<{ readonly id: number }, unknown, Locale>;
+declare const Signed: Schema.Codec<string, string, never, Signer>;
+export const /*servicesCall*/servicesCall = typed.post("/x", {
+	input: Signed,
+	body: "x",
+	output: Localized,
+});
 `;
 
 const config = ts.getParsedCommandLineOfConfigFile(
@@ -162,22 +181,65 @@ expect(
 	`Hover on an endpoint doesn't name its type and route: ${endpointHover}`,
 );
 
-for (const [marker, members] of [
-	["todoCall", ["NetworkError", "DecodeError", "HttpError.With<"]],
-	["todoProgram", ["NetworkError", "DecodeError", "HttpError.With<"]],
-	["endpointCall", ["NetworkError", "DecodeError", "HttpError.With<"]],
-	["timedCall", ["NetworkError", "DecodeError", "TimeoutError"]],
+// Splits `text` at `separator`, outside any brackets.
+const splitTopLevel = (text, separator) => {
+	const parts = [];
+	let depth = 0;
+	let start = 0;
+	for (let index = 0; index < text.length; index++) {
+		if ("<{([".includes(text[index])) {
+			depth++;
+		} else if (">})]".includes(text[index])) {
+			depth--;
+		} else if (depth === 0 && text.startsWith(separator, index)) {
+			parts.push(text.slice(start, index).trim());
+			start = index + separator.length;
+		}
+	}
+	return [...parts, text.slice(start).trim()];
+};
+
+// The member names of a union, such as `["NetworkError", "HttpError.With"]`.
+const members = (union) =>
+	splitTopLevel(union, "|")
+		.map((member) => member.replace(/^Fetch\./, "").replace(/<.*$/, ""))
+		.sort();
+
+// The error and services of a hover such as `const x: Effect.Effect<A, E, R>`.
+const errorsAndServices = (hover) => {
+	const flat = hover.replace(/\s+/g, " ");
+	const start = flat.indexOf(": Effect.Effect<");
+	if (start === -1 || !flat.endsWith(">")) {
+		return undefined;
+	}
+	const args = splitTopLevel(
+		flat.slice(start + ": Effect.Effect<".length, -1),
+		",",
+	);
+	return args.length === 3
+		? { errors: members(args[1]), services: members(args[2]) }
+		: undefined;
+};
+
+const callErrors = ["DecodeError", "HttpError.With", "NetworkError"];
+for (const [marker, errors, services] of [
+	["todoCall", callErrors, ["never"]],
+	["todoProgram", callErrors, ["never"]],
+	["endpointCall", callErrors, ["never"]],
+	["postCall", callErrors, ["never"]],
+	["requestCall", callErrors, ["never"]],
+	["timedCall", [...callErrors, "TimeoutError"].sort(), ["never"]],
+	["servicesCall", callErrors, ["Locale", "Signer"]],
 ]) {
 	const hover = ts.displayPartsToString(
 		service.getQuickInfoAtPosition(probe, at(marker))?.displayParts,
 	);
+	const shown = errorsAndServices(hover);
 	expect(
-		hover.includes(": Effect.Effect<") &&
-			members.every((member) => hover.includes(member)) &&
-			!["CallEffect<", "CallError<", "CallServices<"].some((alias) =>
-				hover.includes(alias),
-			),
-		`Hover on ${marker} doesn't show Effect.Effect<…> with ${members.join(", ")}: ${hover}`,
+		shown !== undefined &&
+			shown.errors.join(" | ") === errors.join(" | ") &&
+			shown.services.join(" | ") === services.join(" | "),
+		`Hover on ${marker} doesn't show Effect.Effect<…, ${errors.join(" | ")}, ${services.join(" | ")}>: ${hover}`,
 	);
 }
 
