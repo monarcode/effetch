@@ -502,7 +502,7 @@ export const make = <
 			patch: call("PATCH"),
 			del: call("DELETE"),
 			endpoint: (route: string, definition?: RuntimeDefinition) =>
-				makeEndpoint(call, route, definition),
+				makeEndpoint(call, config.defaultError, route, definition),
 		};
 		return client as unknown as Client<Ps, EB>;
 	});

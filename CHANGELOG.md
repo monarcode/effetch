@@ -4,6 +4,16 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ## 0.1.0-rc.1
 
+### Added
+
+- Endpoints have `output`, `error` and `input` properties: the schemas they
+  were defined with, for things like decoding cached data or building test
+  fixtures. `output` and `input` are `undefined` when the endpoint has none.
+  `error` is the schema `HttpError.body` is decoded with: the endpoint's
+  `error`, else the client's `defaultError`, else `Schema.Unknown`. Values
+  typed as `Endpoint` that you build by hand, such as test doubles, need the
+  three properties too.
+
 ### Changed
 
 - Calls and endpoints return `Effect.Effect<…>` with their errors and

@@ -214,6 +214,13 @@ const endpointProgram = Effect.gen(function* () {
 	) {
 		throw new Error("Unexpected endpoint route, method or path");
 	}
+	if (
+		getTodo.output !== Todo ||
+		getTodo.error !== Schema.Unknown ||
+		getTodo.input !== undefined
+	) {
+		throw new Error("Unexpected endpoint output, error or input");
+	}
 	return yield* getTodo({ params: { id: 2 } });
 }).pipe(Effect.provideService(HttpClient.HttpClient, mock));
 

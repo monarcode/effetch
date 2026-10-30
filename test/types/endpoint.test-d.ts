@@ -125,6 +125,38 @@ describe("route", () => {
 	});
 });
 
+describe("schemas", () => {
+	it("are the ones defined, or undefined", () => {
+		const createTodo = endpoint("POST /todos", {
+			input: NewTodo,
+			output: Todo,
+			error: ApiError,
+		});
+		expectTypeOf(createTodo.output).toEqualTypeOf<typeof Todo>();
+		expectTypeOf(createTodo.error).toEqualTypeOf<typeof ApiError>();
+		expectTypeOf(createTodo.input).toEqualTypeOf<typeof NewTodo>();
+		const listTodos = endpoint("GET /todos");
+		expectTypeOf(listTodos.output).toEqualTypeOf<undefined>();
+		expectTypeOf(listTodos.input).toEqualTypeOf<undefined>();
+	});
+
+	it("give error the client's defaultError when the endpoint has none", () => {
+		expectTypeOf(
+			endpoint("GET /todos").error,
+		).toEqualTypeOf<Schema.Unknown>();
+		const withDefault = null as unknown as EndpointMethod<
+			[],
+			typeof ApiError
+		>;
+		expectTypeOf(withDefault("GET /todos").error).toEqualTypeOf<
+			typeof ApiError
+		>();
+		expectTypeOf(
+			withDefault("GET /todos", { error: NewTodo }).error,
+		).toEqualTypeOf<typeof NewTodo>();
+	});
+});
+
 describe("params", () => {
 	const getTodo = endpoint("GET /todos/:id", { output: Todo });
 	const listTodos = endpoint("GET /todos", { output: Schema.Array(Todo) });

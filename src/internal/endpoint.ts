@@ -1,5 +1,6 @@
 import * as Headers from "effect/http/Headers";
 import * as HttpMethod from "effect/http/HttpMethod";
+import * as Schema from "effect/Schema";
 
 import type { AnySchema } from "../Options.js";
 import { mergeOverrides, type OverrideMap } from "./plugins.js";
@@ -21,6 +22,12 @@ export interface RuntimeEndpoint {
 	readonly route: string;
 	readonly method: HttpMethod.HttpMethod;
 	readonly path: string;
+	/** The `output` schema, or `undefined` without one. */
+	readonly output: AnySchema | undefined;
+	/** The `error` schema, else the client's `defaultError`, else `Schema.Unknown`. */
+	readonly error: AnySchema;
+	/** The `input` schema, or `undefined` without one. */
+	readonly input: AnySchema | undefined;
 }
 
 /**
@@ -52,9 +59,13 @@ export const parseRoute = (
  * Makes an endpoint: a function that sends `route` with `definition` and
  * one call's options on top. The definition's schemas are fixed; its
  * headers and plugin overrides are defaults the call can override.
+ *
+ * `defaultError` is the client's, used for the endpoint's `error` property
+ * when the definition has none. Calls fall back to it on their own.
  */
 export const makeEndpoint = (
 	call: (method: HttpMethod.HttpMethod) => Call,
+	defaultError: AnySchema | undefined,
 	route: string,
 	definition: RuntimeDefinition = {},
 ): RuntimeEndpoint => {
@@ -76,5 +87,12 @@ export const makeEndpoint = (
 					: Headers.merge(headers, Headers.fromInput(options.headers)),
 			plugins: mergeOverrides(definition.plugins, options.plugins),
 		});
-	return Object.assign(endpoint, { route, method, path });
+	return Object.assign(endpoint, {
+		route,
+		method,
+		path,
+		output: definition.output,
+		error: definition.error ?? defaultError ?? Schema.Unknown,
+		input: definition.input,
+	});
 };

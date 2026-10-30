@@ -343,6 +343,37 @@ describe("the endpoint", () => {
 		}),
 	);
 
+	it.effect("carries its schemas, or undefined without them", () =>
+		Effect.gen(function* () {
+			const { api } = yield* setup([]);
+			const createTodo = api.endpoint("POST /todos", {
+				input: NewTodo,
+				output: Todo,
+				error: ApiError,
+			});
+			expect(createTodo.input).toBe(NewTodo);
+			expect(createTodo.output).toBe(Todo);
+			expect(createTodo.error).toBe(ApiError);
+			const listTodos = api.endpoint("GET /todos");
+			expect(listTodos.input).toBeUndefined();
+			expect(listTodos.output).toBeUndefined();
+		}),
+	);
+
+	it.effect(
+		"carries the client's defaultError, else Schema.Unknown, without an error",
+		() =>
+			Effect.gen(function* () {
+				const { api: typed } = yield* setup([], { defaultError: ApiError });
+				expect(typed.endpoint("GET /todos").error).toBe(ApiError);
+				expect(typed.endpoint("GET /todos", { error: NewTodo }).error).toBe(
+					NewTodo,
+				);
+				const { api: plain } = yield* setup([]);
+				expect(plain.endpoint("GET /todos").error).toBe(Schema.Unknown);
+			}),
+	);
+
 	it.effect("keeps its schemas, whatever a call passes", () =>
 		Effect.gen(function* () {
 			const { api } = yield* setup([reply.json(todo)]);

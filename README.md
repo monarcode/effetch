@@ -934,7 +934,11 @@ What's fixed goes in the definition, and what changes goes in each call:
 
 Each endpoint also has `route`, `method` and `path` properties, for log labels
 or cache keys. Plugins see the same route, as
-[`ctx.route`](#knowing-the-route).
+[`ctx.route`](#knowing-the-route). Its `output`, `error` and `input`
+properties are its schemas, for things like decoding cached data or building
+test fixtures: `output` and `input` are `undefined` when the endpoint has
+none, and `error` is the schema error bodies are decoded with, the
+endpoint's, else the client's `defaultError`, else `Schema.Unknown`.
 
 ### Why use endpoints
 

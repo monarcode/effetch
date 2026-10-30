@@ -255,7 +255,8 @@ type Requirements<
  * equivalent client method.
  *
  * It also carries its `route`, `method` and `path`, for things like log
- * labels and cache keys.
+ * labels and cache keys, and its `output`, `error` and `input` schemas, for
+ * things like decoding cached data or building test fixtures.
  *
  * - `R`: the route, such as `"GET /users/:id"`.
  * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`O` and `I`
@@ -272,6 +273,7 @@ type Requirements<
  * const users = (api: Fetch.Client) => {
  *   const getUser = api.endpoint("GET /users/:id", { output: User });
  *   getUser.route; // "GET /users/:id"
+ *   getUser.output; // User
  *   return getUser({ params: { id: 1 } });
  * };
  * ```
@@ -304,6 +306,15 @@ export interface Endpoint<
 	readonly method: RouteMethod<R>;
 	/** The route's path, with its `:params` unfilled, such as `"/users/:id"`. */
 	readonly path: RoutePath<R>;
+	/** The schema the response is decoded with, or `undefined` without `output`. */
+	readonly output: O;
+	/**
+	 * The schema `HttpError.body` is decoded with: the endpoint's `error`, or
+	 * else the client's `defaultError`, or else `Schema.Unknown`.
+	 */
+	readonly error: EB;
+	/** The schema the body is encoded with, or `undefined` without `input`. */
+	readonly input: I;
 }
 
 /**
