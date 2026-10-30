@@ -3,6 +3,11 @@ import type * as Headers from "effect/http/Headers";
 import type * as HttpMethod from "effect/http/HttpMethod";
 
 import type { DecodeError, HttpError, NetworkError } from "./Errors.js";
+import {
+	makeUnboundEndpoint,
+	type RuntimeUnboundDefinition,
+	type RuntimeUnboundEndpoint,
+} from "./internal/endpoint.js";
 import type {
 	AnySchema,
 	ParamsOption,
@@ -250,9 +255,9 @@ type Requirements<
 > = ParamsOption<RoutePath<R>> & EndpointBody<R, I>;
 
 /**
- * An endpoint made by `client.endpoint`: a function that sends its request
- * with the options of one call, and returns the same Effect as the
- * equivalent client method.
+ * An endpoint made by `client.endpoint` or `client.bind`: a function that
+ * sends its request with the options of one call, and returns the same
+ * Effect as the equivalent client method.
  *
  * It also carries its `route`, `method` and `path`, for things like log
  * labels and cache keys, and its `output`, `error` and `input` schemas, for
@@ -351,4 +356,259 @@ export interface EndpointMethod<
 		route: ValidRoute<R>,
 		definition?: EndpointDefinition<R, O, EB, I, Ps>,
 	): Endpoint<R, O, EB, I, Ps>;
+}
+
+/**
+ * What {@link endpoint} defines an endpoint with, besides its route: an
+ * {@link EndpointDefinition} without `plugins`. Everything is optional.
+ *
+ * - `output`: decodes the 2xx JSON body. Without it, the endpoint succeeds
+ *   with the raw `HttpClientResponse`.
+ * - `error`: decodes non-2xx bodies into `HttpError.body`. Without it, the
+ *   endpoint uses the `defaultError` of the client it's bound to.
+ * - `input`: encodes `body` before it's sent as JSON, and makes `body`
+ *   required on every call. Not allowed on `GET`, `HEAD`, `OPTIONS` and
+ *   `TRACE` endpoints, which take no body.
+ * - `headers`: sent with every call, over the client's headers. Headers
+ *   given when binding, then a call's own, win over them. Unlike the
+ *   client's headers, these can set `content-type`.
+ *
+ * Plugin overrides are given when binding, in {@link BindOptions}: a
+ * definition doesn't know which plugins a client has.
+ *
+ * - `R`: the route, for the method and the path.
+ * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`undefined`
+ *   when absent).
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * const Todo = Schema.Struct({ id: Schema.Finite, done: Schema.Boolean });
+ * const TodoPatch = Schema.Struct({ done: Schema.Boolean });
+ *
+ * const update: Fetch.UnboundEndpointDefinition<
+ *   "PATCH /todos/:id",
+ *   typeof Todo,
+ *   undefined,
+ *   typeof TodoPatch
+ * > = {
+ *   input: TodoPatch,
+ *   output: Todo,
+ *   headers: { "content-type": "application/merge-patch+json" },
+ * };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export interface UnboundEndpointDefinition<
+	R extends string,
+	O extends AnySchema | undefined,
+	EB extends AnySchema | undefined,
+	I extends AnySchema | undefined,
+> {
+	/** Decodes the 2xx JSON body. Without it, calls return the raw response. */
+	readonly output?: O;
+	/** Decodes non-2xx bodies into `HttpError.body`. Without it, the client's `defaultError` does. */
+	readonly error?: EB;
+	/** Encodes `body` as JSON, and makes `body` required on every call. */
+	readonly input?: NoBodyRoute<R> extends true ? undefined : I;
+	/** Headers for every call, over the client's. Binding and call headers win. */
+	readonly headers?: Headers.Input | undefined;
+}
+
+/**
+ * An endpoint defined without a client, by {@link endpoint}: its route,
+ * schemas and headers, as plain data. `client.bind` turns it into an
+ * {@link Endpoint} of that client, the same one `client.endpoint` makes
+ * from the same route and definition.
+ *
+ * It needs no client, so it can be exported from module level next to its
+ * schemas, read by code that has no client (cache keys, test fixtures,
+ * tools), and bound to more than one client.
+ *
+ * - `R`: the route, such as `"GET /users/:id"`.
+ * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`undefined`
+ *   when absent; without `error`, the bound endpoint uses the client's
+ *   `defaultError`).
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import * as Fetch from "@monarcode/effetch";
+ *
+ * const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+ *
+ * export const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+ * getUser.route; // "GET /users/:id"
+ * getUser.output; // User
+ *
+ * const user = (api: Fetch.Client, id: number) =>
+ *   api.bind(getUser)({ params: { id } });
+ * ```
+ *
+ * @since 0.1.0
+ */
+export interface UnboundEndpoint<
+	R extends string,
+	O extends AnySchema | undefined,
+	EB extends AnySchema | undefined,
+	I extends AnySchema | undefined,
+> {
+	/** The route the endpoint was defined with, such as `"GET /users/:id"`. */
+	readonly route: R;
+	/** The route's HTTP method, such as `"GET"`. */
+	readonly method: RouteMethod<R>;
+	/** The route's path, with its `:params` unfilled, such as `"/users/:id"`. */
+	readonly path: RoutePath<R>;
+	/** The schema the response is decoded with, or `undefined` without `output`. */
+	readonly output: O;
+	/**
+	 * The schema `HttpError.body` is decoded with, or `undefined` to use the
+	 * `defaultError` of the client it's bound to.
+	 */
+	readonly error: EB;
+	/** The schema the body is encoded with, or `undefined` without `input`. */
+	readonly input: I;
+	/** The headers sent with every call, or `undefined` without any. */
+	readonly headers: Headers.Headers | undefined;
+}
+
+/**
+ * What `client.bind` takes besides the definition: headers and plugin
+ * overrides for every call of the bound endpoint.
+ *
+ * - `headers`: sent with every call, over the definition's headers. A
+ *   call's own header of the same name wins.
+ * - `plugins`: per-plugin overrides, as in a call's `plugins` option,
+ *   checked against the client's plugins. A call's own override for a
+ *   plugin wins, and when both give options, they're merged.
+ *
+ * - `Ps`: the client's plugins.
+ *
+ * @example
+ * ```ts
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * const options: Fetch.BindOptions<[Fetch.Plugin<"bearer">]> = {
+ *   headers: { "x-client": "web" },
+ *   plugins: { bearer: false },
+ * };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export interface BindOptions<Ps extends ReadonlyArray<Plugin.Any>> {
+	/** Headers for every call, over the definition's. A call's own header wins. */
+	readonly headers?: Headers.Input | undefined;
+	/** Plugin overrides for every call. A call's own override wins. */
+	readonly plugins?: Plugin.Overrides<Ps> | undefined;
+}
+
+/**
+ * The signature of `client.bind`: turns an {@link UnboundEndpoint} into an
+ * {@link Endpoint} of the client, the same one `client.endpoint` makes from
+ * the same route and definition.
+ *
+ * - `Ps`: the client's plugins.
+ * - `DefaultEB`: the client's `defaultError` schema, used when the
+ *   definition has no `error`.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import * as Fetch from "@monarcode/effetch";
+ *
+ * declare const bind: Fetch.BindMethod<[], Schema.Unknown>;
+ *
+ * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+ * const getTodo = bind(Fetch.endpoint("GET /todos/:id", { output: Todo }));
+ * ```
+ *
+ * @since 0.1.0
+ */
+export interface BindMethod<
+	Ps extends ReadonlyArray<Plugin.Any>,
+	DefaultEB extends AnySchema,
+> {
+	<
+		R extends string,
+		O extends AnySchema | undefined,
+		EB extends AnySchema | undefined,
+		I extends AnySchema | undefined,
+	>(
+		definition: UnboundEndpoint<R, O, EB, I>,
+		options?: BindOptions<Ps>,
+	): Endpoint<R, O, EB extends AnySchema ? EB : DefaultEB, I, Ps>;
+}
+
+/**
+ * Defines an endpoint without a client: a route like `"GET /users/:id"` and
+ * the schemas and headers to call it with. You get back plain data, an
+ * {@link UnboundEndpoint}, that you can export from module level next to
+ * its schemas. `client.bind(definition)` turns it into an {@link Endpoint}
+ * of that client: the same one `client.endpoint(route, definition)` makes.
+ *
+ * - The route is checked as you type, as with `client.endpoint`. A route
+ *   that isn't valid (which the types prevent) throws here, when the
+ *   module loads.
+ * - With an `input` schema, `body` is required on every call and typed by
+ *   it. `GET`, `HEAD`, `OPTIONS` and `TRACE` endpoints take no `input`.
+ * - Without `error`, the endpoint uses the `defaultError` of the client
+ *   it's bound to.
+ * - Plugin overrides are given when binding: a definition doesn't know
+ *   which plugins a client has.
+ *
+ * Use it when endpoints should be listed next to their schemas, read
+ * without a client, or bound to more than one client. Otherwise
+ * `client.endpoint` does the same in one step.
+ *
+ * @example
+ * ```ts
+ * import * as Effect from "effect/Effect";
+ * import * as Schema from "effect/Schema";
+ * import * as Fetch from "@monarcode/effetch";
+ * import { bearer } from "@monarcode/effetch/plugins";
+ *
+ * const Credentials = Schema.Struct({ user: Schema.String, password: Schema.String });
+ * const Session = Schema.Struct({ token: Schema.String });
+ * const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+ *
+ * // At module level, without a client.
+ * export const login = Fetch.endpoint("POST /auth/login", {
+ *   input: Credentials,
+ *   output: Session,
+ * });
+ * export const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+ *
+ * // Bound once there is a client.
+ * const makeApi = Effect.gen(function* () {
+ *   const api = yield* Fetch.make({
+ *     baseUrl: "https://api.example.com",
+ *     plugins: [bearer({ token: "token" })],
+ *   });
+ *   return {
+ *     login: api.bind(login, { plugins: { bearer: false } }),
+ *     getUser: api.bind(getUser),
+ *   };
+ * });
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function endpoint<
+	const R extends string,
+	O extends AnySchema | undefined = undefined,
+	EB extends AnySchema | undefined = undefined,
+	I extends AnySchema | undefined = undefined,
+>(
+	route: ValidRoute<R>,
+	definition?: UnboundEndpointDefinition<R, O, EB, I>,
+): UnboundEndpoint<R, O, EB, I>;
+export function endpoint(
+	route: string,
+	definition?: RuntimeUnboundDefinition,
+): RuntimeUnboundEndpoint {
+	return makeUnboundEndpoint(route, definition);
 }

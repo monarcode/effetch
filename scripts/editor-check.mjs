@@ -54,6 +54,14 @@ export const /*requestCall*/requestCall = typed.request("PATCH", "/todos/:id", {
 	output: Todo,
 });
 
+export const defined = Fetch.endpoint(/*definedRoute*/"");
+export const badRoute = Fetch.endpoint(/*badRoute*/"GET todos");
+export const badEndpointRoute = typed.endpoint(/*badEndpointRoute*/"GET todos");
+const getTodoDefinition = Fetch./*define*/endpoint("GET /todos/:id", { output: Todo });
+export const /*bound*/bound = typed./*bind*/bind(getTodoDefinition);
+export const /*boundCall*/boundCall = bound({ params: { id: 1 } });
+export const boundParams = bound({ params: { /*boundParams*/ } });
+
 interface Locale { readonly locale: string }
 interface Signer { readonly sign: (s: string) => string }
 declare const Localized: Schema.Codec<{ readonly id: number }, unknown, Locale>;
@@ -118,6 +126,8 @@ for (const [marker, file, docs] of [
 	["get", "Client.d.ts", "Sends a `GET` request"],
 	["bearer", path.join("plugins", "bearer.d.ts"), "Sends `Authorization"],
 	["endpoint", "Client.d.ts", "Defines an endpoint"],
+	["define", "Endpoint.d.ts", "Defines an endpoint without a client"],
+	["bind", "Client.d.ts", "Binds an endpoint defined with"],
 ]) {
 	const definitions = service.getDefinitionAtPosition(probe, at(marker)) ?? [];
 	const targets = definitions.map((definition) =>
@@ -137,6 +147,7 @@ for (const [marker, file, docs] of [
 	expect(
 		marker === "get" ||
 			marker === "endpoint" ||
+			marker === "bind" ||
 			(tags.includes("example") && tags.includes("since")),
 		`Hover on ${marker} lacks @example or @since: ${tags.join(", ")}`,
 	);
@@ -164,6 +175,32 @@ expect(
 	`endpoint("") doesn't suggest the methods: ${routes.slice(0, 10).join(", ")}`,
 );
 
+const definedRoutes = (
+	service.getCompletionsAtPosition(probe, at("definedRoute") + 1, undefined)
+		?.entries ?? []
+).map((entry) => entry.name);
+expect(
+	definedRoutes.includes("GET /") && definedRoutes.includes("POST /"),
+	`Fetch.endpoint("") doesn't suggest the methods: ${definedRoutes.slice(0, 10).join(", ")}`,
+);
+
+// A malformed route is reported on the route itself, as a route error, for
+// both ways of defining an endpoint.
+const diagnostics = service.getSemanticDiagnostics(probe);
+for (const marker of ["badRoute", "badEndpointRoute"]) {
+	const messages = diagnostics
+		.filter((diagnostic) => diagnostic.start === at(marker))
+		.map((diagnostic) =>
+			ts.flattenDiagnosticMessageText(diagnostic.messageText, " "),
+		);
+	expect(
+		messages.length === 1 &&
+			messages[0].includes("GET /") &&
+			!messages[0].includes("No overload matches"),
+		`A malformed route at ${marker} isn't reported as a route error: ${messages.join("; ") || "no error"}`,
+	);
+}
+
 const endpointParams = (
 	service.getCompletionsAtPosition(probe, at("endpointParams"), undefined)
 		?.entries ?? []
@@ -173,12 +210,29 @@ expect(
 	`params of a "GET /users/:id" endpoint don't complete id: ${endpointParams.slice(0, 10).join(", ")}`,
 );
 
+const boundParams = (
+	service.getCompletionsAtPosition(probe, at("boundParams"), undefined)
+		?.entries ?? []
+).map((entry) => entry.name);
+expect(
+	boundParams.includes("id"),
+	`params of a bound "GET /todos/:id" endpoint don't complete id: ${boundParams.slice(0, 10).join(", ")}`,
+);
+
 const endpointHover = ts.displayPartsToString(
 	service.getQuickInfoAtPosition(probe, at("getUser"))?.displayParts,
 );
 expect(
 	endpointHover.includes('Endpoint<"GET /users/:id"'),
 	`Hover on an endpoint doesn't name its type and route: ${endpointHover}`,
+);
+
+const boundHover = ts.displayPartsToString(
+	service.getQuickInfoAtPosition(probe, at("bound"))?.displayParts,
+);
+expect(
+	boundHover.includes('Endpoint<"GET /todos/:id"'),
+	`Hover on a bound endpoint doesn't name its type and route: ${boundHover}`,
 );
 
 // Splits `text` at `separator`, outside any brackets.
@@ -226,6 +280,7 @@ for (const [marker, errors, services] of [
 	["todoCall", callErrors, ["never"]],
 	["todoProgram", callErrors, ["never"]],
 	["endpointCall", callErrors, ["never"]],
+	["boundCall", callErrors, ["never"]],
 	["postCall", callErrors, ["never"]],
 	["requestCall", callErrors, ["never"]],
 	["timedCall", [...callErrors, "TimeoutError"].sort(), ["never"]],

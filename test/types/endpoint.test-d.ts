@@ -11,13 +11,16 @@ import * as SchemaGetter from "effect/SchemaGetter";
 import { describe, expectTypeOf, it } from "vitest";
 
 import type { Client } from "../../src/Client.js";
+import { endpoint as define } from "../../src/Endpoint.js";
 import type {
+	BindMethod,
 	Endpoint,
 	EndpointArgs,
 	EndpointMethod,
 	EndpointRoute,
 	RouteMethod,
 	RoutePath,
+	UnboundEndpoint,
 	ValidRoute,
 } from "../../src/Endpoint.js";
 import type { DecodeError, HttpError, NetworkError } from "../../src/Errors.js";
@@ -39,6 +42,7 @@ type Ps = [
 ];
 
 declare const endpoint: EndpointMethod<Ps, Schema.Unknown>;
+declare const bind: BindMethod<Ps, Schema.Unknown>;
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
@@ -449,5 +453,130 @@ describe("on a client", () => {
 		expectTypeOf<
 			Extract<E, { _tag: "TimeoutError" }>
 		>().toEqualTypeOf<TimeoutError>();
+	});
+});
+
+describe("defined without a client", () => {
+	const ApiErrorBind = null as unknown as BindMethod<Ps, typeof ApiError>;
+
+	it("checks the route", () => {
+		define("GET /todos/:id");
+		define("POST https://uploads.test/files/:name");
+		// @ts-expect-error misspelled method
+		define("GTE /todos");
+		// @ts-expect-error no space
+		define("GET/todos");
+		// @ts-expect-error path doesn't start with "/"
+		define("GET todos");
+		const route: string = "GET /todos";
+		// @ts-expect-error the route must be known statically
+		define(route);
+	});
+
+	it("carries its route, schemas and headers", () => {
+		const updateTodo = define("PATCH /todos/:id", {
+			input: NewTodo,
+			output: Todo,
+			headers: { "content-type": "application/merge-patch+json" },
+		});
+		expectTypeOf(updateTodo).toEqualTypeOf<
+			UnboundEndpoint<
+				"PATCH /todos/:id",
+				typeof Todo,
+				undefined,
+				typeof NewTodo
+			>
+		>();
+		expectTypeOf(updateTodo.method).toEqualTypeOf<"PATCH">();
+		expectTypeOf(updateTodo.path).toEqualTypeOf<"/todos/:id">();
+		const listTodos = define("GET /todos");
+		expectTypeOf(listTodos).toEqualTypeOf<
+			UnboundEndpoint<"GET /todos", undefined, undefined, undefined>
+		>();
+	});
+
+	it("rejects input on routes without a body, and plugin overrides", () => {
+		// @ts-expect-error GET takes no input
+		define("GET /todos", { input: NewTodo });
+		// @ts-expect-error HEAD takes no input
+		define("HEAD /todos", { input: NewTodo });
+		// @ts-expect-error plugin overrides are given when binding
+		define("GET /todos", { plugins: { bearer: false } });
+	});
+
+	it("binds to the endpoint client.endpoint makes", () => {
+		expectTypeOf(
+			bind(define("GET /todos/:id", { output: Todo })),
+		).toEqualTypeOf(endpoint("GET /todos/:id", { output: Todo }));
+		expectTypeOf(
+			bind(
+				define("POST /todos", {
+					input: NewTodo,
+					output: Todo,
+					error: ApiError,
+				}),
+			),
+		).toEqualTypeOf(
+			endpoint("POST /todos", {
+				input: NewTodo,
+				output: Todo,
+				error: ApiError,
+			}),
+		);
+		expectTypeOf(bind(define("DELETE /todos/:id"))).toEqualTypeOf(
+			endpoint("DELETE /todos/:id"),
+		);
+		expectTypeOf(
+			bind(define("GET /todos/:id", { output: Todo })),
+		).toEqualTypeOf<
+			Endpoint<"GET /todos/:id", typeof Todo, Schema.Unknown, undefined, Ps>
+		>();
+	});
+
+	it("needs params and body as client.endpoint's do", () => {
+		const getTodo = bind(define("GET /todos/:id", { output: Todo }));
+		getTodo({ params: { id: 1 } });
+		// @ts-expect-error params are required
+		getTodo();
+		// @ts-expect-error GET takes no body
+		getTodo({ params: { id: 1 }, body: {} });
+		const createTodo = bind(define("POST /todos", { input: NewTodo }));
+		createTodo({ body: { title: "x", due: new Date() } });
+		// @ts-expect-error the body is required with an input
+		createTodo();
+		// @ts-expect-error the body is typed by the input
+		createTodo({ body: { title: 1, due: new Date() } });
+	});
+
+	it("uses the client's default error unless it has its own", () => {
+		const list = ApiErrorBind(define("GET /todos"));
+		expectTypeOf(list.error).toEqualTypeOf<typeof ApiError>();
+		type E = Effect.Error<ReturnType<typeof list>>;
+		expectTypeOf<Extract<E, { _tag: "HttpError" }>["body"]>().toEqualTypeOf<
+			{ readonly code: string } | undefined
+		>();
+		const own = ApiErrorBind(define("GET /todos", { error: NewTodo }));
+		expectTypeOf(own.error).toEqualTypeOf<typeof NewTodo>();
+	});
+
+	it("takes plugin overrides when bound, typed from the client's plugins", () => {
+		const login = bind(define("POST /login"), {
+			headers: { "x-client": "web" },
+			plugins: { bearer: false },
+		});
+		login({ plugins: { retry: { times: 0 }, timeout: { duration: "1s" } } });
+		// @ts-expect-error unknown plugin name
+		bind(define("POST /login"), { plugins: { logger: false } });
+		// @ts-expect-error bearer only accepts false
+		bind(define("POST /login"), { plugins: { bearer: {} } });
+	});
+
+	it("is available on a client, with its plugins and default error", () => {
+		const getTodo = define("GET /todos/:id", { output: Todo });
+		const bound = (api: Client<Ps, typeof ApiError>) =>
+			api.bind(getTodo, { plugins: { retry: { times: 1 } } });
+		expectTypeOf<ReturnType<typeof bound>>().toEqualTypeOf<
+			Endpoint<"GET /todos/:id", typeof Todo, typeof ApiError, undefined, Ps>
+		>();
 	});
 });

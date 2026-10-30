@@ -421,3 +421,168 @@ describe("the endpoint", () => {
 		}),
 	);
 });
+
+describe("defined without a client", () => {
+	it.effect("send, once bound, what client.endpoint sends", () =>
+		Effect.gen(function* () {
+			const { mock, api } = yield* setup([reply.json(todo)], {
+				plugins: [flags],
+			});
+			const definition = {
+				input: NewTodo,
+				output: Todo,
+				headers: { "x-endpoint": "1" },
+			};
+			const viaEndpoint = api.endpoint("POST /lists/:list/todos", {
+				...definition,
+				plugins: { flags: { a: "endpoint" } },
+			});
+			const viaBind = api.bind(
+				Fetch.endpoint("POST /lists/:list/todos", definition),
+				{ plugins: { flags: { a: "endpoint" } } },
+			);
+			const options = {
+				params: { list: "home" },
+				query: { notify: true },
+				headers: { "x-trace": "1" },
+				body: {
+					title: "Write docs",
+					due: new Date("2026-01-02T03:04:05.000Z"),
+				},
+			};
+			expect(yield* viaEndpoint(options)).toEqual(todo);
+			expect(yield* viaBind(options)).toEqual(todo);
+			expect(sent(wire(mock, 1))).toEqual(sent(wire(mock, 0)));
+			expect(wire(mock, 1)).toMatchObject({
+				method: "POST",
+				url: `${base}/lists/home/todos?notify=true`,
+			});
+			expect(wire(mock, 1).headers).toMatchObject({
+				"x-endpoint": "1",
+				"x-a": "endpoint",
+				"x-trace": "1",
+			});
+			expect(viaBind.route).toBe("POST /lists/:list/todos");
+			expect(viaBind.output).toBe(Todo);
+			expect(viaBind.input).toBe(NewTodo);
+		}),
+	);
+
+	it.effect(
+		"send the definition's headers under the binding's and a call's",
+		() =>
+			Effect.gen(function* () {
+				const { mock, api } = yield* setup([reply.json({})], {
+					headers: { "x-client": "client" },
+				});
+				const list = api.bind(
+					Fetch.endpoint("GET /todos", {
+						headers: {
+							"X-Definition": "definition",
+							"x-bound": "definition",
+							"x-call": "definition",
+						},
+					}),
+					{ headers: { "x-bound": "bound", "X-Call": "bound" } },
+				);
+				yield* list();
+				yield* list({ headers: { "x-call": "call" } });
+				expect(wire(mock, 0).headers).toMatchObject({
+					"x-client": "client",
+					"x-definition": "definition",
+					"x-bound": "bound",
+					"x-call": "bound",
+				});
+				expect(wire(mock, 1).headers).toMatchObject({
+					"x-definition": "definition",
+					"x-bound": "bound",
+					"x-call": "call",
+				});
+			}),
+	);
+
+	it.effect("take plugin overrides when bound, merged with a call's", () =>
+		Effect.gen(function* () {
+			const { mock, api } = yield* setup([reply.json({})], {
+				plugins: [flags, tag],
+			});
+			const login = api.bind(Fetch.endpoint("POST /login"), {
+				plugins: { tag: false, flags: { a: "bound", b: "bound" } },
+			});
+			yield* login();
+			yield* login({ plugins: { flags: { b: "call" } } });
+			expect(wire(mock, 0).headers["x-tag"]).toBeUndefined();
+			expect(wire(mock, 0).headers).toMatchObject({
+				"x-a": "bound",
+				"x-b": "bound",
+			});
+			expect(wire(mock, 1).headers).toMatchObject({
+				"x-a": "bound",
+				"x-b": "call",
+			});
+		}),
+	);
+
+	it.effect("use each client's base URL, plugins and default error", () =>
+		Effect.gen(function* () {
+			const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
+			const first = yield* setup([reply.json(todo)], { plugins: [tag] });
+			const second = yield* setup(
+				[reply.json({ code: "gone" }, { status: 404 })],
+				{ baseUrl: "https://staging.test", defaultError: ApiError },
+			);
+			const fromFirst = first.api.bind(getTodo);
+			const fromSecond = second.api.bind(getTodo);
+			expect(yield* fromFirst({ params: { id: 1 } })).toEqual(todo);
+			const error = yield* Effect.flip(fromSecond({ params: { id: 1 } }));
+			expect(wire(first.mock)).toMatchObject({ url: `${base}/todos/1` });
+			expect(wire(first.mock).headers["x-tag"]).toBe("yes");
+			expect(wire(second.mock)).toMatchObject({
+				url: "https://staging.test/todos/1",
+			});
+			expect(wire(second.mock).headers["x-tag"]).toBeUndefined();
+			expect(error).toMatchObject({ status: 404, body: { code: "gone" } });
+			expect(fromFirst.error).toBe(Schema.Unknown);
+			expect(fromSecond.error).toBe(ApiError);
+		}),
+	);
+
+	it("are frozen data with their route, schemas and headers", () => {
+		const update = Fetch.endpoint("PATCH /todos/:id", {
+			input: NewTodo,
+			output: Todo,
+			error: ApiError,
+			headers: { "Content-Type": "application/merge-patch+json" },
+		});
+		expect(Object.isFrozen(update)).toBe(true);
+		expect(update.route).toBe("PATCH /todos/:id");
+		expect(update.method).toBe("PATCH");
+		expect(update.path).toBe("/todos/:id");
+		expect(update.input).toBe(NewTodo);
+		expect(update.output).toBe(Todo);
+		expect(update.error).toBe(ApiError);
+		expect(update.headers?.["content-type"]).toBe(
+			"application/merge-patch+json",
+		);
+		const list = Fetch.endpoint("GET /todos");
+		expect(list.output).toBeUndefined();
+		expect(list.error).toBeUndefined();
+		expect(list.input).toBeUndefined();
+		expect(list.headers).toBeUndefined();
+	});
+
+	it.each([
+		"get /todos",
+		"GTE /todos",
+		"GET/todos",
+		"GET  /todos",
+		"GET todos",
+		"/todos",
+		"",
+		42,
+	])("throw for the invalid route %j", (route) => {
+		expect(() => Fetch.endpoint(route as "GET /")).toThrow(
+			/^Invalid endpoint route .*: expected an uppercase HTTP method/,
+		);
+	});
+});

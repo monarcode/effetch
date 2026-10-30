@@ -37,9 +37,9 @@ app/
 ├── modules/
 │   ├── todos/
 │   │   ├── contract/
-│   │   │   └── todos.ts             schemas: Todo, NewTodo, …
+│   │   │   └── todos.ts             schemas and endpoints: Todo, getTodo, …
 │   │   ├── data/
-│   │   │   └── todo.api.ts          TodoApi: the module's endpoints
+│   │   │   └── todo.api.ts          TodoApi: the endpoints, bound to a client
 │   │   ├── todo.layer.ts            the module's live layers
 │   │   └── public.ts                what other code may import
 │   └── wallet/
@@ -63,11 +63,16 @@ Read it in that order: a client, a module, the runtime, then `main.ts`.
    URL, the body of its errors and its plugins. It holds no endpoints and no
    module schemas, and never imports a module, so it stays the same size
    however many endpoints the app has.
-2. **A module defines its endpoints from the client it talks to,** in its
-   `data/` folder, importing the schemas from its own `contract/` folder.
-   Dependencies point one way: module → infrastructure, never back.
-3. **Endpoints are defined once, when the module's layer is built,** never in
-   code that runs per request.
+2. **A module's endpoints sit next to its schemas, and its `data/` folder
+   connects them to the client it talks to.** `todos` defines them in
+   `contract/todos.ts` with `Fetch.endpoint`, which needs no client, and
+   binds them in `data/` with `client.bind`. `wallet` makes them in `data/`
+   with `client.endpoint`, importing the schemas from `contract/`. Both give
+   the same endpoints; use the first when something should read the routes
+   and schemas without a client. Either way, dependencies point one way:
+   module → infrastructure, never back.
+3. **Endpoints are bound or made once, when the module's layer is built,**
+   never in code that runs per request.
 4. **Every module's data service is its endpoints** (`TodoApi`,
    `WalletApi`): one line per operation, and every type inferred, so every
    `data/` folder looks the same.
@@ -83,8 +88,8 @@ Read it in that order: a client, a module, the runtime, then `main.ts`.
 
 ### As modules grow
 
-- A module with 20 or more endpoints still has one line per endpoint, in its
-  own `data/` folder, beside its own schemas. Nothing outside the module grows.
+- A module with 20 or more endpoints still has one definition and one line in
+  `data/` per endpoint, inside the module. Nothing outside the module grows.
 - When one module's endpoints serve separate concerns, split them into
   several services, each in its own file (`wallet.api.ts` and
   `transaction.api.ts`), and merge their layers in the module's

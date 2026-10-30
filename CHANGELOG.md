@@ -13,6 +13,18 @@ All notable changes to `@monarcode/effetch`, newest first.
   `error`, else the client's `defaultError`, else `Schema.Unknown`. Values
   typed as `Endpoint` that you build by hand, such as test doubles, need the
   three properties too.
+- `Fetch.endpoint(route, definition)` defines an endpoint without a client:
+  frozen data with its `route`, `method`, `path`, schemas and headers, which
+  can be exported at module level next to its schemas. `client.bind` makes it
+  an endpoint of that client, the same one `client.endpoint` makes from the
+  same route and definition. Plugin
+  overrides are given when binding, where they're checked against the
+  client's plugins, and a definition without an `error` schema uses the
+  client's `defaultError`. Headers given when binding win over the
+  definition's. The route is checked by the types, and `Fetch.endpoint`
+  throws on a malformed one. New types: `UnboundEndpoint`,
+  `UnboundEndpointDefinition`, `BindMethod` and `BindOptions`. Values typed as
+  `Client` that you build by hand need `bind` too.
 
 ### Changed
 

@@ -30,6 +30,35 @@ export interface RuntimeEndpoint {
 	readonly input: AnySchema | undefined;
 }
 
+/** A definition made without a client, as seen at runtime: no plugins. */
+export type RuntimeUnboundDefinition = Omit<RuntimeDefinition, "plugins">;
+
+/** An endpoint defined without a client, as seen at runtime. */
+export interface RuntimeUnboundEndpoint {
+	readonly route: string;
+	readonly method: HttpMethod.HttpMethod;
+	readonly path: string;
+	readonly output: AnySchema | undefined;
+	readonly error: AnySchema | undefined;
+	readonly input: AnySchema | undefined;
+	readonly headers: Headers.Headers | undefined;
+}
+
+/** What a definition is bound with, as seen at runtime. */
+export interface RuntimeBindOptions {
+	readonly headers?: Headers.Input | undefined;
+	readonly plugins?: OverrideMap | undefined;
+}
+
+/** `over` merged over `base`, where either may be absent. */
+const mergeHeaders = (
+	base: Headers.Headers | undefined,
+	over: Headers.Input | undefined,
+): Headers.Input | undefined =>
+	base === undefined || over === undefined
+		? (over ?? base)
+		: Headers.merge(base, Headers.fromInput(over));
+
 /**
  * Splits `route` into its method and path, with the same rules as the
  * `EndpointRoute` type: an uppercase method, one space, then a path that
@@ -81,10 +110,7 @@ export const makeEndpoint = (
 			output: definition.output,
 			error: definition.error,
 			input: definition.input,
-			headers:
-				headers === undefined || options.headers === undefined
-					? (options.headers ?? headers)
-					: Headers.merge(headers, Headers.fromInput(options.headers)),
+			headers: mergeHeaders(headers, options.headers),
 			plugins: mergeOverrides(definition.plugins, options.plugins),
 		});
 	return Object.assign(endpoint, {
@@ -96,3 +122,45 @@ export const makeEndpoint = (
 		input: definition.input,
 	});
 };
+
+/**
+ * Defines an endpoint without a client: the route, checked now, and the
+ * definition as frozen data, for `bindEndpoint` to turn into an endpoint.
+ */
+export const makeUnboundEndpoint = (
+	route: string,
+	definition: RuntimeUnboundDefinition = {},
+): RuntimeUnboundEndpoint => {
+	const { method, path } = parseRoute(route);
+	return Object.freeze({
+		route,
+		method,
+		path,
+		output: definition.output,
+		error: definition.error,
+		input: definition.input,
+		headers:
+			definition.headers === undefined
+				? undefined
+				: Headers.fromInput(definition.headers),
+	});
+};
+
+/**
+ * Binds a definition to a client: the endpoint `makeEndpoint` makes from the
+ * same route and definition, with the binding's headers over the
+ * definition's and its plugin overrides.
+ */
+export const bindEndpoint = (
+	call: (method: HttpMethod.HttpMethod) => Call,
+	defaultError: AnySchema | undefined,
+	unbound: RuntimeUnboundEndpoint,
+	options: RuntimeBindOptions = {},
+): RuntimeEndpoint =>
+	makeEndpoint(call, defaultError, unbound.route, {
+		output: unbound.output,
+		error: unbound.error,
+		input: unbound.input,
+		headers: mergeHeaders(unbound.headers, options.headers),
+		plugins: options.plugins,
+	});
