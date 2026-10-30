@@ -23,7 +23,7 @@ All notable changes to `@monarcode/effetch`, newest first.
   client's `defaultError`. Headers given when binding win over the
   definition's. The route is checked by the types, and `Fetch.endpoint`
   throws on a malformed one. New types: `UnboundEndpoint`,
-  `UnboundEndpointDefinition`, `BindMethod` and `BindOptions`. Values typed as
+  `UnboundDefinition`, `BindMethod` and `BindOptions`. Values typed as
   `Client` that you build by hand need `bind` too.
 
 ### Changed

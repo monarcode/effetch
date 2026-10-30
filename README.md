@@ -1370,7 +1370,7 @@ page's URL.
 - `Endpoint`, `EndpointMethod`, `EndpointDefinition`, `EndpointOptions`,
   `EndpointBody`, `EndpointArgs`, `EndpointRoute`, `ValidRoute`,
   `RouteMethod`, `RoutePath`: [endpoints](#endpoints).
-- `endpoint`, `UnboundEndpoint`, `UnboundEndpointDefinition`, `BindMethod`,
+- `endpoint`, `UnboundEndpoint`, `UnboundDefinition`, `BindMethod`,
   `BindOptions`:
   [endpoints without a client](#defining-endpoints-without-a-client).
 - `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,

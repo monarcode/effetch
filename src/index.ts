@@ -13,8 +13,8 @@ export type {
 	EndpointRoute,
 	RouteMethod,
 	RoutePath,
+	UnboundDefinition,
 	UnboundEndpoint,
-	UnboundEndpointDefinition,
 	ValidRoute,
 } from "./Endpoint.js";
 export {

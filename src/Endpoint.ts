@@ -388,7 +388,7 @@ export interface EndpointMethod<
  * const Todo = Schema.Struct({ id: Schema.Finite, done: Schema.Boolean });
  * const TodoPatch = Schema.Struct({ done: Schema.Boolean });
  *
- * const update: Fetch.UnboundEndpointDefinition<
+ * const update: Fetch.UnboundDefinition<
  *   "PATCH /todos/:id",
  *   typeof Todo,
  *   undefined,
@@ -402,7 +402,7 @@ export interface EndpointMethod<
  *
  * @since 0.1.0
  */
-export interface UnboundEndpointDefinition<
+export interface UnboundDefinition<
 	R extends string,
 	O extends AnySchema | undefined,
 	EB extends AnySchema | undefined,
@@ -604,7 +604,7 @@ export function endpoint<
 	I extends AnySchema | undefined = undefined,
 >(
 	route: ValidRoute<R>,
-	definition?: UnboundEndpointDefinition<R, O, EB, I>,
+	definition?: UnboundDefinition<R, O, EB, I>,
 ): UnboundEndpoint<R, O, EB, I>;
 export function endpoint(
 	route: string,
