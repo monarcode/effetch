@@ -371,7 +371,9 @@ has parameters, `params` is required, with exactly those names, and when it
 has none, `params` isn't allowed. Values are URI-encoded for you.
 
 `query` is a plain object. Arrays repeat the key, and `null` and `undefined`
-are dropped, so you can pass optional filters as they are.
+are dropped, so you can pass optional filters as they are. With Effect 4.1 or
+later, a value can also be `Redacted`, such as `Redacted.make(apiKey)`: it's
+sent as its value, and Effect keeps it out of its own logs and traces.
 
 ### Sending a body
 

@@ -10,6 +10,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
 import { describe, expect } from "vitest";
@@ -165,6 +166,25 @@ describe("path params and query", () => {
 			const { mock, api } = yield* setup([reply.json({})]);
 			yield* api.get("/todos", { query: params });
 			expect(wire(mock).url).toBe("https://api.test/todos?limit=5");
+		}),
+	);
+
+	it.effect("send a Redacted query value as its value, not in errors", () =>
+		Effect.gen(function* () {
+			const { mock, api } = yield* setup([reply.json({}, { status: 500 })]);
+			const error = yield* Effect.flip(
+				api.get("/todos", {
+					query: { token: Redacted.make("s3cret"), page: 1 },
+				}),
+			);
+			expect(wire(mock).url).toBe(
+				"https://api.test/todos?token=s3cret&page=1",
+			);
+			expect(error).toMatchObject({
+				_tag: "HttpError",
+				url: "https://api.test/todos",
+			});
+			expect(JSON.stringify(error)).not.toContain("s3cret");
 		}),
 	);
 

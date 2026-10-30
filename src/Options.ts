@@ -12,7 +12,9 @@ import type { Plugin } from "./Plugin.js";
 /**
  * A single query value. effetch drops `null` and `undefined` (Effect's own
  * `UrlParams` would send `null` as the string `"null"`); other values are
- * converted with `String()`.
+ * converted with `String()`. With Effect 4.1 or later, a value can also be
+ * `Redacted`: it's sent as its value, and stays redacted in Effect's own logs
+ * and traces.
  *
  * @example
  * ```ts

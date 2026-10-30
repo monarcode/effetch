@@ -42,6 +42,13 @@ All notable changes to `@monarcode/effetch`, newest first.
     Functions that return a call typed as `CallEffect`, or as
     `Effect.Effect` with `CallError` and `CallServices`, work as before.
 
+### Fixed
+
+- A `Redacted` query value is sent as its value. From Effect 4.1,
+  `QueryValue` (Effect's `UrlParams.Coercible`) accepts `Redacted`, but
+  effetch converted it with `String()`, so `{ token: Redacted.make(key) }`
+  sent `token=<redacted>`.
+
 ## 0.1.0-rc.0
 
 ### Added
