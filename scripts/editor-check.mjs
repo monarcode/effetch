@@ -5,8 +5,11 @@ import ts from "typescript";
 
 const dir = process.cwd();
 const probe = path.join(dir, "editor.ts");
-const source = `import * as Fetch from "@monarcode/effetch";
-import { bearer } from "@monarcode/effetch/plugins";
+const source = `import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { bearer, type TimeoutPlugin } from "@monarcode/effetch/plugins";
 
 export const make = Fetch./*make*/make({
 	plugins: [/*bearer*/bearer({ token: "token" })],
@@ -27,6 +30,20 @@ export const list = api./*query*/get("/users", { query: listUsersParams });
 export const route = api.endpoint("");
 export const /*getUser*/getUser = api./*endpoint*/endpoint("GET /users/:id");
 export const user = getUser({ params: { /*endpointParams*/ } });
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+const ApiError = Schema.Struct({ code: Schema.String });
+declare const typed: Fetch.Client<[], typeof ApiError>;
+declare const timed: Fetch.Client<[TimeoutPlugin]>;
+
+export const /*todoCall*/todoCall = typed.get("/todos/:id", { params: { id: 1 }, output: Todo });
+export const /*todoProgram*/todoProgram = Effect.gen(function* () {
+	const todo = yield* typed.get("/todos/:id", { params: { id: 1 }, output: Todo });
+	return todo.title;
+});
+const getTodo = typed.endpoint("GET /todos/:id", { output: Todo });
+export const /*endpointCall*/endpointCall = getTodo({ params: { id: 1 } });
+export const /*timedCall*/timedCall = timed.get("/todos", { output: Todo });
 `;
 
 const config = ts.getParsedCommandLineOfConfigFile(
@@ -144,6 +161,25 @@ expect(
 	endpointHover.includes('Endpoint<"GET /users/:id"'),
 	`Hover on an endpoint doesn't name its type and route: ${endpointHover}`,
 );
+
+for (const [marker, members] of [
+	["todoCall", ["NetworkError", "DecodeError", "HttpError.With<"]],
+	["todoProgram", ["NetworkError", "DecodeError", "HttpError.With<"]],
+	["endpointCall", ["NetworkError", "DecodeError", "HttpError.With<"]],
+	["timedCall", ["NetworkError", "DecodeError", "TimeoutError"]],
+]) {
+	const hover = ts.displayPartsToString(
+		service.getQuickInfoAtPosition(probe, at(marker))?.displayParts,
+	);
+	expect(
+		hover.includes(": Effect.Effect<") &&
+			members.every((member) => hover.includes(member)) &&
+			!["CallEffect<", "CallError<", "CallServices<"].some((alias) =>
+				hover.includes(alias),
+			),
+		`Hover on ${marker} doesn't show Effect.Effect<…> with ${members.join(", ")}: ${hover}`,
+	);
+}
 
 const queryStart = source.lastIndexOf("\n", at("query")) + 1;
 const queryEnd = source.indexOf("\n", at("query"));

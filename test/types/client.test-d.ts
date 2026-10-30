@@ -12,11 +12,16 @@ import { describe, expectTypeOf, it } from "vitest";
 
 import type { DecodeError, HttpError, NetworkError } from "../../src/Errors.js";
 import type {
+	AnySchema,
 	BaseOptions,
 	BodyMethod,
+	CallEffect,
+	CallError,
+	CallServices,
 	NoBodyMethod,
 	QueryInput,
 	RequestMethod,
+	Success,
 } from "../../src/Options.js";
 import type { Plugin } from "../../src/Plugin.js";
 
@@ -266,6 +271,38 @@ describe("return type", () => {
 		expectTypeOf<Extract<E, { _tag: "HttpError" }>["body"]>().toEqualTypeOf<
 			{ readonly code: string } | undefined
 		>();
+	});
+
+	it("fits CallEffect, CallError and CallServices in generic code", () => {
+		// The methods write these types out (so hovers show the members);
+		// wrappers generic over the schemas must still accept them.
+		const getAs = <O extends AnySchema, EB extends AnySchema>(
+			method: NoBodyMethod<Ps, EB>,
+			output: O,
+		): CallEffect<O, EB, Schema.Unknown, Ps> => method("/x", { output });
+		const postAs = <O extends AnySchema, I extends AnySchema>(
+			output: O,
+			input: I,
+			body: I["Type"],
+		): Effect.Effect<
+			Success<O>,
+			CallError<O, Schema.Unknown, Ps>,
+			CallServices<O, Schema.Unknown, I>
+		> => post("/x", { output, input, body });
+		const requestAs = <
+			O extends AnySchema,
+			P extends ReadonlyArray<Plugin.Any>,
+		>(
+			method: RequestMethod<P, Schema.Unknown>,
+			output: O,
+		): Effect.Effect<
+			Success<O>,
+			CallError<O, Schema.Unknown, P>,
+			CallServices<O, Schema.Unknown, Schema.Unknown>
+		> => method("DELETE", "/x", { output });
+		expectTypeOf(getAs).toBeFunction();
+		expectTypeOf(postAs).toBeFunction();
+		expectTypeOf(requestAs).toBeFunction();
 	});
 });
 

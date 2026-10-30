@@ -1,12 +1,14 @@
+import type * as Effect from "effect/Effect";
 import type * as Headers from "effect/http/Headers";
 import type * as HttpMethod from "effect/http/HttpMethod";
 
+import type { DecodeError, HttpError, NetworkError } from "./Errors.js";
 import type {
 	AnySchema,
-	CallEffect,
 	ParamsOption,
 	QueryInput,
 	QueryOf,
+	Success,
 } from "./Options.js";
 import type { Plugin } from "./Plugin.js";
 
@@ -285,7 +287,17 @@ export interface Endpoint<
 > {
 	<Q extends QueryOf<Q> = QueryInput>(
 		...args: EndpointArgs<R, I, EndpointOptions<R, I, Ps, Q>>
-	): CallEffect<O, EB, I, Ps>;
+	): Effect.Effect<
+		Success<O>,
+		// CallError and CallServices, written out (see CallEffect)
+		| NetworkError
+		| HttpError.With<EB["Type"]>
+		| (O extends AnySchema ? DecodeError : never)
+		| Plugin.Errors<Ps>,
+		| (O extends AnySchema ? O["DecodingServices"] : never)
+		| EB["DecodingServices"]
+		| (I extends AnySchema ? I["EncodingServices"] : never)
+	>;
 	/** The route the endpoint was defined with, such as `"GET /users/:id"`. */
 	readonly route: R;
 	/** The route's HTTP method, such as `"GET"`. */

@@ -315,7 +315,7 @@ export type Success<O extends AnySchema | undefined> = O extends AnySchema
  *   Schema.Struct<{ code: Schema.String }>,
  *   []
  * >;
- * //   ^? NetworkError | HttpError.With<{ readonly code: string }> | DecodeError
+ * //   ^? NetworkError | DecodeError | HttpError.With<{ readonly code: string }>
  * ```
  *
  * @since 0.1.0
@@ -379,7 +379,7 @@ export type CallServices<
  *   Schema.Unknown,
  *   []
  * >;
- * //   ^? Effect<{ readonly id: number }, NetworkError | HttpError.With<unknown> | DecodeError, never>
+ * //   ^? Effect<{ readonly id: number }, NetworkError | DecodeError | HttpError.With<unknown>, never>
  * ```
  *
  * @since 0.1.0
@@ -389,7 +389,19 @@ export type CallEffect<
 	EB extends AnySchema,
 	I extends AnySchema | undefined,
 	Ps extends ReadonlyArray<Plugin.Any>,
-> = Effect.Effect<Success<O>, CallError<O, EB, Ps>, CallServices<O, EB, I>>;
+> = Effect.Effect<
+	Success<O>,
+	// CallError and CallServices, written out: through the aliases, editors
+	// print `CallError<…>` rather than the members. The method and endpoint
+	// signatures spell them out the same way.
+	| NetworkError
+	| HttpError.With<EB["Type"]>
+	| (O extends AnySchema ? DecodeError : never)
+	| Plugin.Errors<Ps>,
+	| (O extends AnySchema ? O["DecodingServices"] : never)
+	| EB["DecodingServices"]
+	| (I extends AnySchema ? I["EncodingServices"] : never)
+>;
 
 /**
  * The signature of `get`, `head` and `options`: no `body` or `input`.
@@ -423,7 +435,16 @@ export interface NoBodyMethod<
 	>(
 		path: P,
 		...args: Args<P, NoBodyRequestOptions<P, O, EB, Ps, Q>>
-	): CallEffect<O, EB, Schema.Unknown, Ps>;
+	): Effect.Effect<
+		Success<O>,
+		// CallError and CallServices, written out (see CallEffect)
+		| NetworkError
+		| HttpError.With<EB["Type"]>
+		| (O extends AnySchema ? DecodeError : never)
+		| Plugin.Errors<Ps>,
+		| (O extends AnySchema ? O["DecodingServices"] : never)
+		| EB["DecodingServices"]
+	>;
 }
 
 /**
@@ -464,7 +485,17 @@ export interface BodyMethod<
 	>(
 		path: P,
 		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q>>
-	): CallEffect<O, EB, I, Ps>;
+	): Effect.Effect<
+		Success<O>,
+		// CallError and CallServices, written out (see CallEffect)
+		| NetworkError
+		| HttpError.With<EB["Type"]>
+		| (O extends AnySchema ? DecodeError : never)
+		| Plugin.Errors<Ps>,
+		| (O extends AnySchema ? O["DecodingServices"] : never)
+		| EB["DecodingServices"]
+		| (I extends AnySchema ? I["EncodingServices"] : never)
+	>;
 }
 
 /**
@@ -506,5 +537,15 @@ export interface RequestMethod<
 		method: HttpMethod.HttpMethod,
 		path: P,
 		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q>>
-	): CallEffect<O, EB, I, Ps>;
+	): Effect.Effect<
+		Success<O>,
+		// CallError and CallServices, written out (see CallEffect)
+		| NetworkError
+		| HttpError.With<EB["Type"]>
+		| (O extends AnySchema ? DecodeError : never)
+		| Plugin.Errors<Ps>,
+		| (O extends AnySchema ? O["DecodingServices"] : never)
+		| EB["DecodingServices"]
+		| (I extends AnySchema ? I["EncodingServices"] : never)
+	>;
 }

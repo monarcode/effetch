@@ -21,6 +21,13 @@ import type {
 	ValidRoute,
 } from "../../src/Endpoint.js";
 import type { DecodeError, HttpError, NetworkError } from "../../src/Errors.js";
+import type {
+	AnySchema,
+	CallEffect,
+	CallError,
+	CallServices,
+	Success,
+} from "../../src/Options.js";
 import type { Plugin } from "../../src/Plugin.js";
 
 class TimeoutError extends Data.TaggedError("TimeoutError")<{}> {}
@@ -295,6 +302,21 @@ describe("return type", () => {
 		expectTypeOf(getTodo).toEqualTypeOf<
 			Endpoint<"GET /todos/:id", typeof Todo, Schema.Unknown, undefined, Ps>
 		>();
+	});
+
+	it("fits CallEffect, CallError and CallServices in generic code", () => {
+		const callAs = <O extends AnySchema, EB extends AnySchema>(
+			getTodo: Endpoint<"GET /todos/:id", O, EB, undefined, Ps>,
+		): Effect.Effect<
+			Success<O>,
+			CallError<O, EB, Ps>,
+			CallServices<O, EB, undefined>
+		> => getTodo({ params: { id: 1 } });
+		const callAsEffect = <O extends AnySchema, EB extends AnySchema>(
+			getTodo: Endpoint<"GET /todos/:id", O, EB, undefined, Ps>,
+		): CallEffect<O, EB, undefined, Ps> => getTodo({ params: { id: 1 } });
+		expectTypeOf(callAs).toBeFunction();
+		expectTypeOf(callAsEffect).toBeFunction();
 	});
 });
 

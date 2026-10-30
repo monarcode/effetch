@@ -2,6 +2,17 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## 0.1.0-rc.1
+
+### Fixed
+
+- Hovering a call, or a program built from calls, shows its success, error
+  and service types, such as
+  `Effect<{ readonly id: number }, NetworkError | DecodeError | HttpError.With<unknown>, never>`,
+  instead of `CallEffect<…>` and `CallError<…>` with the schemas. The types
+  are unchanged; only how editors print them. A `CallEffect` you write
+  yourself prints the same way once it's used in a program.
+
 ## 0.1.0-rc.0
 
 ### Added

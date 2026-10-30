@@ -25,7 +25,7 @@ const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
 const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 // Effect<{ readonly id: number; readonly title: string },
-//        NetworkError | HttpError | DecodeError>
+//        NetworkError | DecodeError | HttpError.With<unknown>>
 ```
 
 > **Release candidate.** effetch is close to its first stable release
