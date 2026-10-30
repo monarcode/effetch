@@ -10,9 +10,13 @@ type Param = UrlParams.UrlParams["params"][number][1];
  * A `Redacted` value is kept as it is (Effect 4.1 accepts them in
  * `UrlParams`, unwraps them for the URL and redacts them in its own logs);
  * anything else goes through `String()`.
+ *
+ * The cast compiles with Effect 4.0 too, where `Param` is `string`. There,
+ * only a value cast to `QueryValue` can be `Redacted`, and Effect 4.0 sends
+ * it as `<redacted>`, as before 4.1.
  */
 const toParam = (value: unknown): Param =>
-	Redacted.isRedacted(value) ? (value as Param) : String(value);
+	(Redacted.isRedacted(value) ? value : String(value)) as Param;
 
 /**
  * Converts the `query` option into `UrlParams`, in key order. Arrays repeat
