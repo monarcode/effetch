@@ -7,7 +7,7 @@ import * as Schema from "effect/Schema";
 import * as Fetch from "@monarcode/effetch";
 import { logger, timeout } from "@monarcode/effetch/plugins";
 
-import { auth, reportErrors } from "./plugins.js";
+import { auth, reportErrors, SessionExpired } from "./plugins.js";
 
 // A second backend, with its own base URL, error body and plugins: one
 // client per backend, each in its own service.
@@ -21,6 +21,11 @@ export const WalletApiError = Schema.Struct({
 const makeWalletApiClient = Fetch.make({
 	baseUrl: Config.String("WALLET_API_URL"),
 	defaultError: WalletApiError,
+	// The shared error, read from this backend's body: its message is
+	// `reason`.
+	statusErrors: {
+		401: SessionExpired.pipe(Schema.encodeKeys({ message: "reason" })),
+	},
 	plugins: [
 		logger(),
 		reportErrors("wallet"),

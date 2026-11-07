@@ -3,14 +3,15 @@
 Complete programs using effetch. They're typechecked with the package
 (`pnpm run typecheck`), so they always match the current API.
 
-| Example                        | What it shows                                                                                                       |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| [`basic.ts`](basic.ts)         | A client in a service, the methods (`get`, `post`, `patch`, `del`) and handling each error.                         |
-| [`builtins.ts`](builtins.ts)   | The built-in plugins (`logger`, `retry`, `timeout`, `bearer`) and per-call overrides.                               |
-| [`plugins.ts`](plugins.ts)     | Writing plugins: auth with a service, a header with options, a `wrap` with its own error, error reporting.          |
-| [`endpoints.ts`](endpoints.ts) | The same app as `builtins.ts` with endpoints: one client, its endpoints as the service's methods.                   |
-| [`backends.ts`](backends.ts)   | Two backends in one file: one client each, shared plugins, and each backend's errors caught next to its calls.      |
-| [`app/`](app)                  | A feature-sliced app: clients as shared infrastructure, each module defining its own endpoints next to its schemas. |
+| Example                                | What it shows                                                                                                          |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| [`basic.ts`](basic.ts)                 | A client in a service, the methods (`get`, `post`, `patch`, `del`) and handling each error.                            |
+| [`builtins.ts`](builtins.ts)           | The built-in plugins (`logger`, `retry`, `timeout`, `bearer`) and per-call overrides.                                  |
+| [`plugins.ts`](plugins.ts)             | Writing plugins: auth with a service, a header with options, a `wrap` with its own error, error reporting.             |
+| [`endpoints.ts`](endpoints.ts)         | The same app as `builtins.ts` with endpoints: one client, its endpoints as the service's methods.                      |
+| [`backends.ts`](backends.ts)           | Two backends in one file: one client each, shared plugins, and each backend's errors caught next to its calls.         |
+| [`status-errors.ts`](status-errors.ts) | Your own errors by status: client-wide, per endpoint, a 400 told apart by its `code`, a renamed field, a one-off call. |
+| [`app/`](app)                          | A feature-sliced app: clients as shared infrastructure, each module defining its own endpoints next to its schemas.    |
 
 `endpoints.ts` and `backends.ts` keep everything in one file, which suits a
 small app. `app/` is a layout for an app with many endpoints and modules.
@@ -31,20 +32,20 @@ it builds: `makeApi` builds `Api`, `makeAppApiClient` builds `AppApiClient`,
 app/
 ├── infrastructure/
 │   └── http/
-│       ├── plugins.ts               shared plugins: auth, error reporting
+│       ├── plugins.ts               shared plugins and errors: auth, SessionExpired
 │       ├── app-api-client.ts        AppApiClient: the main backend's client
 │       └── wallet-api-client.ts     WalletApiClient: a second backend's client
 ├── modules/
 │   ├── todos/
 │   │   ├── contract/
-│   │   │   └── todos.ts             schemas and endpoints: Todo, getTodo, …
+│   │   │   └── todos.ts             schemas, errors, endpoints: Todo, TodoNotFound, getTodo, …
 │   │   ├── data/
 │   │   │   └── todo.api.ts          TodoApi: the endpoints, bound to a client
 │   │   ├── todo.layer.ts            the module's live layers
 │   │   └── public.ts                what other code may import
 │   └── wallet/
 │       ├── contract/
-│       │   └── wallet.ts            schemas: Balance, Transfer, Receipt
+│       │   └── wallet.ts            schemas and errors: Balance, Transfer, TransferLimitExceeded
 │       ├── data/
 │       │   └── wallet.api.ts        WalletApi: the module's endpoints
 │       ├── application/
@@ -60,9 +61,10 @@ Read it in that order: a client, a module, the runtime, then `main.ts`.
 ### The rules it follows
 
 1. **A client file says how to reach a backend, and nothing else:** its base
-   URL, the body of its errors and its plugins. It holds no endpoints and no
-   module schemas, and never imports a module, so it stays the same size
-   however many endpoints the app has.
+   URL, the body of its errors, what a status means from every endpoint (its
+   `statusErrors`, such as `401: SessionExpired`) and its plugins. It holds
+   no endpoints and no module schemas, and never imports a module, so it
+   stays the same size however many endpoints the app has.
 2. **A module's endpoints sit next to its schemas, and its `data/` folder
    connects them to the client it talks to.** `todos` defines them in
    `contract/todos.ts` with `Fetch.endpoint`, which needs no client, and
@@ -70,7 +72,9 @@ Read it in that order: a client, a module, the runtime, then `main.ts`.
    with `client.endpoint`, importing the schemas from `contract/`. Both give
    the same endpoints; use the first when something should read the routes
    and schemas without a client. Either way, dependencies point one way:
-   module → infrastructure, never back.
+   module → infrastructure, never back. An endpoint's own `statusErrors`
+   (`404: TodoNotFound`) sit with it, and the module's `public.ts` exports
+   those errors, so other code can catch them.
 3. **Endpoints are bound or made once, when the module's layer is built,**
    never in code that runs per request.
 4. **Every module's data service is its endpoints** (`TodoApi`,

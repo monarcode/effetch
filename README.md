@@ -494,7 +494,9 @@ export const archive = api.post("/todos/:id/archive", {
 ### What can go wrong
 
 A call can fail in three ways, each with its own tagged error. Plugins can add
-their own, such as `timeout`'s `TimeoutError`.
+their own, such as `timeout`'s `TimeoutError`, and
+[`statusErrors`](#errors-by-status) can turn an `HttpError` into one of your
+own.
 
 | Error                   | When                                                                               | Fields                                               |
 | ----------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
@@ -554,6 +556,124 @@ the raw body is always on `text`.
 
 `Fetch.HttpError.With<B>` is the type of an `HttpError` whose `body` is `B`,
 for your own function signatures.
+
+### Errors by status
+
+Often a status, or a status with a given body, means a specific error in
+your app: a 404 from `GET /todos/:id` is "todo not found", a 400 with
+`"code": "INVALID_ROLE"` is "invalid role", a 401 from anywhere is "session
+expired". `statusErrors` maps statuses to your own error schemas, and the
+call fails with your error instead of an `HttpError`:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+  message: Schema.String,
+}) {}
+
+class InvalidRole extends Schema.TaggedError<InvalidRole>()("InvalidRole", {
+  code: Schema.Literal("INVALID_ROLE"),
+  message: Schema.String,
+}) {}
+
+class RoleTaken extends Schema.TaggedError<RoleTaken>()("RoleTaken", {
+  code: Schema.Literal("ROLE_TAKEN"),
+  message: Schema.String,
+}) {}
+
+class SessionExpired extends Schema.TaggedError<SessionExpired>()(
+  "SessionExpired",
+  { message: Schema.String },
+) {}
+
+const ApiError = Schema.Struct({ code: Schema.String });
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+const User = Schema.Struct({ id: Schema.Finite, role: Schema.String });
+
+export const getTodo = Fetch.endpoint("GET /todos/:id", {
+  output: Todo,
+  statusErrors: { 404: TodoNotFound },
+});
+
+export const assignRole = Fetch.endpoint("POST /users/:id/roles", {
+  input: Schema.Struct({ role: Schema.String }),
+  output: User,
+  statusErrors: { 400: [InvalidRole, RoleTaken] }, // tried in order
+});
+
+export const program = Effect.gen(function* () {
+  const api = yield* Fetch.make({
+    baseUrl: "https://api.example.com",
+    defaultError: ApiError,
+    statusErrors: { 401: SessionExpired }, // for every call
+  });
+  const todo = yield* api
+    .bind(getTodo)({ params: { id: 1 } })
+    .pipe(Effect.catchTag("TodoNotFound", () => Effect.succeed(undefined)));
+  const user = yield* api
+    .bind(assignRole)({ params: { id: 1 }, body: { role: "owner" } })
+    .pipe(
+      Effect.catchTags({
+        InvalidRole: (error) => Effect.fail(error.message),
+        RoleTaken: (error) => Effect.fail(error.message),
+      }),
+    );
+  return { todo, user };
+});
+```
+
+`assignRole`'s calls fail with
+`InvalidRole | RoleTaken | SessionExpired | HttpError.With<{ readonly code: string }> | NetworkError | DecodeError`.
+`HttpError` stays: a response can always fail to match.
+
+How a non-2xx response is resolved:
+
+1. If the body is empty or isn't JSON, it's an `HttpError`.
+2. Otherwise the schemas listed for its status are tried in order: the
+   call's, then the endpoint's, then the client's. The first one that
+   decodes the body is the error.
+3. If none does, it's the `HttpError` you'd get without `statusErrors`, its
+   `body` decoded with `error` or `defaultError`.
+
+| Response                                         | Fails with                   |
+| ------------------------------------------------ | ---------------------------- |
+| 400 `{ "code": "INVALID_ROLE", "message": "…" }` | `InvalidRole`                |
+| 400 `{ "code": "ROLE_TAKEN", "message": "…" }`   | `RoleTaken`                  |
+| 400 `{ "code": "MISSING_FIELD" }`                | `HttpError` with `body.code` |
+| 400 with an empty or non-JSON body               | `HttpError`                  |
+| 401 from any endpoint                            | `SessionExpired`             |
+| 500                                              | `HttpError`                  |
+
+A few details:
+
+- **The `_tag`.** Backends don't send one, so when a schema has a literal
+  `_tag`, as `Schema.TaggedError` classes do, effetch adds it to the body
+  before decoding. A body that has its own `_tag` is decoded as it is.
+- **Renamed fields.** To read `error_code` into `code`, use
+  `Schema.encodeKeys`:
+  `InvalidRole.pipe(Schema.encodeKeys({ code: "error_code" }))`.
+- **Lists, not unions.** A `Schema.Union` is decoded as it is, without a
+  `_tag`: list its members instead.
+- **2xx entries never apply**, since a 2xx is decoded with `output`.
+- Plugins see the response before any of this, so `retry` still retries by
+  status. `onError` receives your error, and `api.httpClient` stays raw.
+- Maps are copied when they're given, so changing one afterwards changes
+  nothing. `api.statusErrors` and a `Fetch.endpoint` definition's
+  `statusErrors` are those copies, frozen; an endpoint's `statusErrors`
+  joins its own with the client's, each status listing its schemas in the
+  order they're tried.
+- [`examples/status-errors.ts`](examples/status-errors.ts) puts all of this
+  in one program, and [`examples/app`](examples/app) uses it across modules.
+- `Fetch.StatusError<M>` is the union of the errors in a map `M`, and
+  `Fetch.StatusErrorSchema<M>` the union of its schemas, for your own
+  function signatures.
+- A client's type includes its map: `Fetch.Client<Ps, EB, SE>`. A client
+  with a map can't be passed where a plain `Fetch.Client` is expected,
+  since that would hide its errors.
 
 ### Safe to log
 
@@ -1413,6 +1533,8 @@ they always match the current API:
   endpoints.
 - [`backends.ts`](examples/backends.ts): two backends in one file, with shared
   plugins.
+- [`status-errors.ts`](examples/status-errors.ts): your own errors by status,
+  for every call, per endpoint and for one call.
 - [`app/`](examples/app): a feature-sliced app, with clients as shared
   infrastructure and each module defining its own endpoints.
 

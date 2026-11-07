@@ -71,6 +71,29 @@ export const /*servicesCall*/servicesCall = typed.post("/x", {
 	body: "x",
 	output: Localized,
 });
+
+class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+	message: Schema.String,
+}) {}
+class SessionExpired extends Schema.TaggedError<SessionExpired>()("SessionExpired", {
+	message: Schema.String,
+}) {}
+declare const mapped: Fetch.Client<[], typeof ApiError, { 401: typeof SessionExpired }>;
+export const /*statusGet*/statusGet = typed.get("/todos/:id", {
+	params: { id: 1 },
+	output: Todo,
+	statusErrors: { 404: TodoNotFound },
+});
+const getMapped = mapped.endpoint("GET /todos/:id", {
+	output: Todo,
+	statusErrors: { 404: TodoNotFound },
+});
+export const /*statusEndpoint*/statusEndpoint = getMapped({ params: { id: 1 } });
+const definedMapped = Fetch.endpoint("GET /todos/:id", {
+	output: Todo,
+	statusErrors: { 404: TodoNotFound },
+});
+export const /*statusBound*/statusBound = mapped.bind(definedMapped)({ params: { id: 1 } });
 `;
 
 const config = ts.getParsedCommandLineOfConfigFile(
@@ -285,6 +308,17 @@ for (const [marker, errors, services] of [
 	["requestCall", callErrors, ["never"]],
 	["timedCall", [...callErrors, "TimeoutError"].sort(), ["never"]],
 	["servicesCall", callErrors, ["Locale", "Signer"]],
+	["statusGet", [...callErrors, "TodoNotFound"].sort(), ["never"]],
+	[
+		"statusEndpoint",
+		[...callErrors, "SessionExpired", "TodoNotFound"].sort(),
+		["never"],
+	],
+	[
+		"statusBound",
+		[...callErrors, "SessionExpired", "TodoNotFound"].sort(),
+		["never"],
+	],
 ]) {
 	const hover = ts.displayPartsToString(
 		service.getQuickInfoAtPosition(probe, at(marker))?.displayParts,
@@ -319,7 +353,7 @@ const queryHover = ts.displayPartsToString(
 	service.getQuickInfoAtPosition(probe, at("query"))?.displayParts,
 );
 expect(
-	queryHover.includes(", ListUsersParams>") && !queryHover.includes("QueryOf"),
+	/, ListUsersParams[,>]/.test(queryHover) && !queryHover.includes("QueryOf"),
 	`Hover on get with a query doesn't name the query's type: ${queryHover}`,
 );
 

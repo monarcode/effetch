@@ -20,12 +20,14 @@ import {
 	provideRoute,
 } from "./internal/plugins.js";
 import { makeCall, type RuntimeOptions } from "./internal/request.js";
+import { freezeStatusErrors } from "./internal/statusErrors.js";
 import { hasQueryOrFragment } from "./internal/url.js";
 import type {
 	AnySchema,
 	BodyMethod,
 	NoBodyMethod,
 	RequestMethod,
+	StatusErrorMap,
 } from "./Options.js";
 import type { Plugin } from "./Plugin.js";
 
@@ -44,6 +46,9 @@ import type { Plugin } from "./Plugin.js";
  *   header is set here or on the call.
  * - `defaultError`: the schema for non-2xx response bodies of calls that
  *   don't pass their own `error` option. A call's `error` replaces it.
+ * - `statusErrors`: turns error responses into your own errors, by status,
+ *   for every call (see {@link StatusErrorMap}). An endpoint's or a call's
+ *   own `statusErrors` are tried first.
  * - `plugins`: hooks into every call (see {@link Plugin}). `plugins[0]` is
  *   the outermost layer: its `onRequest` runs first and its `onResponse`
  *   last. Names must be unique. Pass the list inline: annotating it as
@@ -80,6 +85,7 @@ export interface ClientConfig<
 	EB extends AnySchema = Schema.Unknown,
 	BaseE = never,
 	BaseR = never,
+	SE extends StatusErrorMap | undefined = undefined,
 > {
 	/** Prepended to relative paths. A string, or an Effect run once by `make`. */
 	readonly baseUrl?: string | Effect.Effect<string, BaseE, BaseR> | undefined;
@@ -87,17 +93,25 @@ export interface ClientConfig<
 	readonly headers?: Headers.Input | undefined;
 	/** Schema for non-2xx response bodies, unless a call passes its own `error`. */
 	readonly defaultError?: EB | undefined;
+	/** Your own errors for error responses, by status, for every call. */
+	// No `| undefined`, unlike the other options: `SE` already allows it, and
+	// with it `statusErrors: undefined` infers the constraint, which widens
+	// the call's errors to `unknown`.
+	readonly statusErrors?: SE;
 	/** Plugins, outermost first. Names must be unique. */
 	readonly plugins?: Ps | undefined;
 }
 
 /**
  * A client made by {@link make}. Every call returns an Effect that needs
- * no services, apart from those the call's own schemas require, and that
- * can fail with the plugins' errors on top of effetch's own.
+ * no services, apart from those its schemas require (the call's or
+ * endpoint's own, and the client's `defaultError` and `statusErrors`), and
+ * that can fail with the plugins' errors and the `statusErrors` that apply,
+ * on top of effetch's own.
  *
  * - `Ps`: the plugins the client was made with.
  * - `EB`: the client's `defaultError` schema.
+ * - `SE`: the client's `statusErrors` map, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -120,12 +134,13 @@ export interface ClientConfig<
 export interface Client<
 	Ps extends ReadonlyArray<Plugin.Any> = [],
 	EB extends AnySchema = Schema.Unknown,
+	SE extends StatusErrorMap | undefined = undefined,
 > {
 	/**
 	 * The configured `HttpClient` underneath. It adds the base URL and the
 	 * default headers to the requests you give it and runs every plugin
-	 * with its defaults, but does no status check, no decoding and no
-	 * `onError` hooks.
+	 * with its defaults, but does no status check, no decoding, no
+	 * `statusErrors` and no `onError` hooks.
 	 *
 	 * Transport failures are `NetworkError`s, next to the plugins' own
 	 * errors. Use it for anything the methods don't cover, such as
@@ -151,6 +166,31 @@ export interface Client<
 	>;
 
 	/**
+	 * The `statusErrors` the client was made with, as a frozen copy, or
+	 * `undefined` without any. They apply to every call, after the call's
+	 * or the endpoint's own.
+	 *
+	 * @example
+	 * ```ts
+	 * import * as Schema from "effect/Schema";
+	 * import type * as Fetch from "@monarcode/effetch";
+	 *
+	 * class SessionExpired extends Schema.TaggedError<SessionExpired>()(
+	 *   "SessionExpired",
+	 *   { message: Schema.String },
+	 * ) {}
+	 *
+	 * declare const api: Fetch.Client<
+	 *   [],
+	 *   Schema.Unknown,
+	 *   { 401: typeof SessionExpired }
+	 * >;
+	 * api.statusErrors[401]; // SessionExpired
+	 * ```
+	 */
+	readonly statusErrors: SE;
+
+	/**
 	 * Sends a request with any HTTP method. The other methods are shorthand
 	 * for this one.
 	 *
@@ -169,7 +209,7 @@ export interface Client<
 	 *   });
 	 * ```
 	 */
-	readonly request: RequestMethod<Ps, EB>;
+	readonly request: RequestMethod<Ps, EB, SE>;
 
 	/**
 	 * Sends a `GET` request. Takes no body.
@@ -192,7 +232,7 @@ export interface Client<
 	 *   api.get("/todos/:id", { params: { id }, output: Todo });
 	 * ```
 	 */
-	readonly get: NoBodyMethod<Ps, EB>;
+	readonly get: NoBodyMethod<Ps, EB, SE>;
 
 	/**
 	 * Sends a `HEAD` request. Takes no body.
@@ -209,7 +249,7 @@ export interface Client<
 	 *   );
 	 * ```
 	 */
-	readonly head: NoBodyMethod<Ps, EB>;
+	readonly head: NoBodyMethod<Ps, EB, SE>;
 
 	/**
 	 * Sends an `OPTIONS` request. Takes no body.
@@ -223,7 +263,7 @@ export interface Client<
 	 *   Effect.map(api.options("/todos"), (response) => response.headers["allow"]);
 	 * ```
 	 */
-	readonly options: NoBodyMethod<Ps, EB>;
+	readonly options: NoBodyMethod<Ps, EB, SE>;
 
 	/**
 	 * Sends a `POST` request. `body` is sent according to its type, or
@@ -251,7 +291,7 @@ export interface Client<
 	 * };
 	 * ```
 	 */
-	readonly post: BodyMethod<Ps, EB>;
+	readonly post: BodyMethod<Ps, EB, SE>;
 
 	/**
 	 * Sends a `PUT` request. `body` is sent according to its type, or
@@ -273,7 +313,7 @@ export interface Client<
 	 *   });
 	 * ```
 	 */
-	readonly put: BodyMethod<Ps, EB>;
+	readonly put: BodyMethod<Ps, EB, SE>;
 
 	/**
 	 * Sends a `PATCH` request. `body` is sent according to its type, or
@@ -294,7 +334,7 @@ export interface Client<
 	 *   });
 	 * ```
 	 */
-	readonly patch: BodyMethod<Ps, EB>;
+	readonly patch: BodyMethod<Ps, EB, SE>;
 
 	/**
 	 * Sends a `DELETE` request. Named `del` because `delete` is a reserved
@@ -308,7 +348,7 @@ export interface Client<
 	 *   api.del("/todos/:id", { params: { id } });
 	 * ```
 	 */
-	readonly del: BodyMethod<Ps, EB>;
+	readonly del: BodyMethod<Ps, EB, SE>;
 
 	/**
 	 * Defines an endpoint: a route like `"GET /users/:id"` and the schemas,
@@ -368,7 +408,7 @@ export interface Client<
 	 * });
 	 * ```
 	 */
-	readonly endpoint: EndpointMethod<Ps, EB>;
+	readonly endpoint: EndpointMethod<Ps, EB, SE>;
 
 	/**
 	 * Binds an endpoint defined with `Fetch.endpoint` to this client. You get
@@ -377,7 +417,8 @@ export interface Client<
 	 * is `api.endpoint("GET /users/:id", { output: User })`.
 	 *
 	 * - Without its own `error`, the endpoint uses this client's
-	 *   `defaultError`.
+	 *   `defaultError`. This client's `statusErrors` are tried after the
+	 *   definition's.
 	 * - `plugins` overrides are given here, checked against this client's
 	 *   plugins. A call's own override wins.
 	 * - `headers` given here are sent over the definition's. A call's own
@@ -421,7 +462,7 @@ export interface Client<
 	 * });
 	 * ```
 	 */
-	readonly bind: BindMethod<Ps, EB>;
+	readonly bind: BindMethod<Ps, EB, SE>;
 }
 
 /**
@@ -431,15 +472,16 @@ export interface Client<
  * `FetchHttpClient.layer`, or a mock in tests), whatever the `baseUrl`
  * Effect needs, and the services the plugins need. The client holds on to
  * all of them, so its calls need nothing from the environment apart from
- * the services of their own schemas.
+ * the services of the schemas they decode and encode with.
  *
  * Calls run with the services and references `make` had, plus those of
  * the calling fiber, which win: a reference provided around one call (such
  * as `FetchHttpClient.RequestInit`) overrides the one `make` saw.
  *
  * Calls fail with `NetworkError` when no response arrives, `HttpError` for
- * a non-2xx status, `DecodeError` when `output` doesn't match, and with
- * the plugins' own errors.
+ * a non-2xx status, `DecodeError` when `output` doesn't match, with the
+ * plugins' own errors, and with your own errors where `statusErrors` turn a
+ * status into one.
  *
  * Invalid input is a defect, not a typed error, because it's a mistake in
  * the calling code: two plugins with the same name, a missing path param,
@@ -497,10 +539,11 @@ export const make = <
 	EB extends AnySchema = Schema.Unknown,
 	BaseE = never,
 	BaseR = never,
+	SE extends StatusErrorMap | undefined = undefined,
 >(
-	config: ClientConfig<Ps, EB, BaseE, BaseR> = {},
+	config: ClientConfig<Ps, EB, BaseE, BaseR, SE> = {},
 ): Effect.Effect<
-	Client<Ps, EB>,
+	Client<Ps, EB, SE>,
 	BaseE,
 	HttpClient.HttpClient | BaseR | Plugin.Services<Ps>
 > =>
@@ -539,8 +582,11 @@ export const make = <
 			),
 			applyDefaults,
 		);
+		const statusErrors = freezeStatusErrors(config.statusErrors);
+		const defaults = { defaultError: config.defaultError, statusErrors };
 		const call = makeCall({
 			errorSchema: config.defaultError,
+			statusErrors,
 			applyDefaults,
 			chain,
 			plugins,
@@ -548,6 +594,7 @@ export const make = <
 		});
 		const client = {
 			httpClient,
+			statusErrors,
 			request: (
 				method: HttpMethod.HttpMethod,
 				path: string,
@@ -561,11 +608,11 @@ export const make = <
 			patch: call("PATCH"),
 			del: call("DELETE"),
 			endpoint: (route: string, definition?: RuntimeDefinition) =>
-				makeEndpoint(call, config.defaultError, route, definition),
+				makeEndpoint(call, defaults, route, definition),
 			bind: (
 				definition: RuntimeUnboundEndpoint,
 				options?: RuntimeBindOptions,
-			) => bindEndpoint(call, config.defaultError, definition, options),
+			) => bindEndpoint(call, defaults, definition, options),
 		};
-		return client as unknown as Client<Ps, EB>;
+		return client as unknown as Client<Ps, EB, SE>;
 	});

@@ -94,6 +94,163 @@ export type QueryOf<Q> = {
 export type AnySchema = Schema.Constraint;
 
 /**
+ * The `statusErrors` option: turns error responses into your own errors.
+ * Each key is an HTTP status, and its value is the schema of the error that
+ * status means, or a list of schemas tried in order. The first schema that
+ * decodes the response's JSON body is what the call fails with, in place of
+ * an `HttpError`.
+ *
+ * Usually the schemas are `Schema.TaggedError` classes. Backends don't send
+ * a `_tag`, so when a schema has a literal `_tag`, effetch adds it to the
+ * body before decoding. A literal field, such as
+ * `code: Schema.Literal("INVALID_ROLE")`, is how one 400 becomes your error
+ * while other 400s don't.
+ *
+ * A response that no schema decodes, or whose body is empty or isn't JSON,
+ * fails with the `HttpError` it fails with today. Entries for 2xx statuses
+ * never apply: a 2xx is decoded with `output`, and neither do keys that
+ * aren't statuses. A `Schema.Union` is decoded as it is, without a `_tag`
+ * added: list its members instead.
+ *
+ * Declare a map inline, with a type literal, or with
+ * `satisfies Fetch.StatusErrorMap`. A map typed with an `interface` isn't
+ * accepted: TypeScript gives interfaces no index signature.
+ *
+ * A client, an endpoint and a call can each have a map. For a given status,
+ * the call's schemas are tried first, then the endpoint's, then the
+ * client's.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+ *   message: Schema.String,
+ * }) {}
+ * class InvalidRole extends Schema.TaggedError<InvalidRole>()("InvalidRole", {
+ *   code: Schema.Literal("INVALID_ROLE"),
+ *   message: Schema.String,
+ * }) {}
+ * class RoleTaken extends Schema.TaggedError<RoleTaken>()("RoleTaken", {
+ *   code: Schema.Literal("ROLE_TAKEN"),
+ *   message: Schema.String,
+ * }) {}
+ *
+ * const statusErrors = {
+ *   404: TodoNotFound,
+ *   400: [InvalidRole, RoleTaken],
+ * } satisfies Fetch.StatusErrorMap;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type StatusErrorMap = {
+	readonly [status: number]: AnySchema | ReadonlyArray<AnySchema>;
+};
+
+/** The `Type` of a `StatusErrorMap` entry's schemas. */
+type EntryType<E> =
+	E extends ReadonlyArray<infer S extends AnySchema>
+		? S["Type"]
+		: E extends AnySchema
+			? E["Type"]
+			: never;
+
+/** The schemas of a `StatusErrorMap` entry. */
+type EntrySchema<E> =
+	E extends ReadonlyArray<infer S extends AnySchema>
+		? S
+		: E extends AnySchema
+			? E
+			: never;
+
+/**
+ * The schemas a {@link StatusErrorMap} lists, as a union, under its numeric
+ * keys only. `M` can be a union of maps, and `undefined` gives `never`.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+ *   message: Schema.String,
+ * }) {}
+ *
+ * type S = Fetch.StatusErrorSchema<{ 404: typeof TodoNotFound }>;
+ * //   ^? typeof TodoNotFound
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type StatusErrorSchema<M extends StatusErrorMap | undefined> =
+	M extends StatusErrorMap ? EntrySchema<M[StatusKey<M>]> : never;
+
+/** The keys of `M` that are statuses: numbers, or numeric strings. */
+type StatusKey<M> = Extract<keyof M, number | `${number}`>;
+
+/** The decoding services of a `StatusErrorMap` entry's schemas. */
+type EntryServices<E> =
+	E extends ReadonlyArray<infer S extends AnySchema>
+		? S["DecodingServices"]
+		: E extends AnySchema
+			? E["DecodingServices"]
+			: never;
+
+/**
+ * The errors a {@link StatusErrorMap} can fail a call with: the union of its
+ * schemas' types. `M` can be a union of maps (the call's, the endpoint's and
+ * the client's), and is `undefined` when there are none, which gives
+ * `never`.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+ *   message: Schema.String,
+ * }) {}
+ * class SessionExpired extends Schema.TaggedError<SessionExpired>()("SessionExpired", {
+ *   message: Schema.String,
+ * }) {}
+ *
+ * type E = Fetch.StatusError<
+ *   { 404: typeof TodoNotFound } | { 401: typeof SessionExpired }
+ * >;
+ * //   ^? TodoNotFound | SessionExpired
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type StatusError<M extends StatusErrorMap | undefined> =
+	M extends StatusErrorMap ? EntryType<M[StatusKey<M>]> : never;
+
+/**
+ * The services decoding a {@link StatusErrorMap}'s errors requires: the
+ * union of its schemas' `DecodingServices`. Like {@link StatusError}, `M`
+ * can be a union of maps, and `undefined` gives `never`.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+ *   message: Schema.String,
+ * }) {}
+ *
+ * type R = Fetch.StatusErrorServices<{ 404: typeof TodoNotFound }>;
+ * //   ^? never
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type StatusErrorServices<M extends StatusErrorMap | undefined> =
+	M extends StatusErrorMap ? EntryServices<M[StatusKey<M>]> : never;
+
+/**
  * The `params` option for path `P`: required (with exactly the path's
  * parameter names) when the path has `:params`, forbidden otherwise.
  *
@@ -128,6 +285,7 @@ export type ParamsOption<P extends string> = string extends P
  * - `Ps`: the client's plugins, for the `plugins` override map.
  * - `Q`: the type of `query`, checked with {@link QueryOf}. Defaults to
  *   {@link QueryInput}.
+ * - `SE`: the call's `statusErrors` map, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -150,6 +308,7 @@ export interface BaseOptions<
 	EB extends AnySchema,
 	Ps extends ReadonlyArray<Plugin.Any>,
 	Q extends QueryOf<Q> = QueryInput,
+	SE extends StatusErrorMap | undefined = undefined,
 > {
 	/** Query parameters. Arrays repeat the key; `null`/`undefined` are dropped. */
 	readonly query?: Q | undefined;
@@ -169,6 +328,15 @@ export interface BaseOptions<
 	readonly output?: O;
 	/** Decodes non-2xx bodies into `HttpError.body`. Overrides the client's. */
 	readonly error?: EB | undefined;
+	/**
+	 * Turns error responses into your own errors, by status (see
+	 * {@link StatusErrorMap}). Tried before the client's. A response none of
+	 * them decodes fails with an `HttpError`, its body decoded with `error`.
+	 */
+	// No `| undefined`, unlike the other options: `SE` already allows it, and
+	// with it `statusErrors: undefined` infers the constraint, which widens
+	// the call's errors to `unknown`.
+	readonly statusErrors?: SE;
 	/**
 	 * Per-request plugin overrides, by plugin name: `false` skips the
 	 * plugin's hooks and `wrap` for this call, and a partial of its options
@@ -213,6 +381,7 @@ export interface BodyOptions<I extends AnySchema> {
 
 /**
  * Options of methods that don't send a body: `get`, `head`, `options`.
+ * The type parameters are those of {@link BaseOptions}.
  *
  * @example
  * ```ts
@@ -232,15 +401,17 @@ export type NoBodyRequestOptions<
 	EB extends AnySchema,
 	Ps extends ReadonlyArray<Plugin.Any>,
 	Q extends QueryOf<Q> = QueryInput,
+	SE extends StatusErrorMap | undefined = undefined,
 > = ParamsOption<P> &
-	BaseOptions<O, EB, Ps, Q> & {
+	BaseOptions<O, EB, Ps, Q, SE> & {
 		readonly body?: undefined;
 		readonly input?: undefined;
 	};
 
 /**
  * Options of methods that send a body: `post`, `put`, `patch`, `del` and
- * `request`.
+ * `request`. The type parameters are those of {@link BaseOptions}, and `I`
+ * is the `input` schema.
  *
  * @example
  * ```ts
@@ -261,7 +432,8 @@ export type RequestOptions<
 	I extends AnySchema,
 	Ps extends ReadonlyArray<Plugin.Any>,
 	Q extends QueryOf<Q> = QueryInput,
-> = ParamsOption<P> & BaseOptions<O, EB, Ps, Q> & BodyOptions<I>;
+	SE extends StatusErrorMap | undefined = undefined,
+> = ParamsOption<P> & BaseOptions<O, EB, Ps, Q, SE> & BodyOptions<I>;
 
 /**
  * The rest arguments after the path: the options object `T` is required
@@ -305,7 +477,11 @@ export type Success<O extends AnySchema | undefined> = O extends AnySchema
 /**
  * What a call can fail with: `NetworkError`, `HttpError` (with `body`
  * typed by the `error` schema), `DecodeError` when there's an `output`
- * schema, and the plugins' errors.
+ * schema, the plugins' errors, and the errors of the `statusErrors` maps
+ * that apply (see {@link StatusError}).
+ *
+ * - `SE`: the `statusErrors` maps of the call, the endpoint and the client,
+ *   as a union. `undefined` (the default) when there are none.
  *
  * @example
  * ```ts
@@ -326,15 +502,20 @@ export type CallError<
 	O extends AnySchema | undefined,
 	EB extends AnySchema,
 	Ps extends ReadonlyArray<Plugin.Any>,
+	SE extends StatusErrorMap | undefined = undefined,
 > =
 	| NetworkError
 	| HttpError.With<EB["Type"]>
 	| (O extends AnySchema ? DecodeError : never)
-	| Plugin.Errors<Ps>;
+	| Plugin.Errors<Ps>
+	| StatusError<SE>;
 
 /**
- * The services a call requires: those needed to decode `output` and
- * `error` and to encode `input`.
+ * The services a call requires: those needed to decode `output`, `error`
+ * and the `statusErrors` maps' errors, and to encode `input`.
+ *
+ * - `SE`: the `statusErrors` maps of the call, the endpoint and the client,
+ *   as a union. `undefined` (the default) when there are none.
  *
  * @example
  * ```ts
@@ -355,10 +536,12 @@ export type CallServices<
 	O extends AnySchema | undefined,
 	EB extends AnySchema,
 	I extends AnySchema | undefined,
+	SE extends StatusErrorMap | undefined = undefined,
 > =
 	| (O extends AnySchema ? O["DecodingServices"] : never)
 	| EB["DecodingServices"]
-	| (I extends AnySchema ? I["EncodingServices"] : never);
+	| (I extends AnySchema ? I["EncodingServices"] : never)
+	| StatusErrorServices<SE>;
 
 /**
  * The Effect a call returns: it succeeds with {@link Success}, fails with
@@ -369,6 +552,8 @@ export type CallServices<
  * - `I`: the `input` schema (`Schema.Unknown` or `undefined` when the call
  *   has none).
  * - `Ps`: the client's plugins.
+ * - `SE`: the `statusErrors` maps of the call, the endpoint and the client,
+ *   as a union. `undefined` (the default) when there are none.
  *
  * Use it to type functions that return a call. To take a call as an
  * argument, accept any `Effect.Effect<A, E, R>`: TypeScript can't infer
@@ -395,6 +580,7 @@ export type CallEffect<
 	EB extends AnySchema,
 	I extends AnySchema | undefined,
 	Ps extends ReadonlyArray<Plugin.Any>,
+	SE extends StatusErrorMap | undefined = undefined,
 > = Effect.Effect<
 	Success<O>,
 	// CallError and CallServices, written out: through the aliases, editors
@@ -403,10 +589,12 @@ export type CallEffect<
 	| NetworkError
 	| HttpError.With<EB["Type"]>
 	| (O extends AnySchema ? DecodeError : never)
-	| Plugin.Errors<Ps>,
+	| Plugin.Errors<Ps>
+	| StatusError<SE>,
 	| (O extends AnySchema ? O["DecodingServices"] : never)
 	| EB["DecodingServices"]
 	| (I extends AnySchema ? I["EncodingServices"] : never)
+	| StatusErrorServices<SE>
 >;
 
 /**
@@ -415,6 +603,7 @@ export type CallEffect<
  * - `Ps`: the client's plugins.
  * - `DefaultEB`: the client's `defaultError` schema, used when a call has
  *   no `error`.
+ * - `ClientSE`: the client's `statusErrors` map, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -432,24 +621,30 @@ export type CallEffect<
 export interface NoBodyMethod<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	DefaultEB extends AnySchema,
+	ClientSE extends StatusErrorMap | undefined = undefined,
 > {
 	<
 		P extends string,
 		O extends AnySchema | undefined = undefined,
 		EB extends AnySchema = DefaultEB,
 		Q extends QueryOf<Q> = QueryInput,
+		SE extends StatusErrorMap | undefined = undefined,
 	>(
 		path: P,
-		...args: Args<P, NoBodyRequestOptions<P, O, EB, Ps, Q>>
+		...args: Args<P, NoBodyRequestOptions<P, O, EB, Ps, Q, SE>>
 	): Effect.Effect<
 		Success<O>,
 		// CallError and CallServices, written out (see CallEffect)
 		| NetworkError
 		| HttpError.With<EB["Type"]>
 		| (O extends AnySchema ? DecodeError : never)
-		| Plugin.Errors<Ps>,
+		| Plugin.Errors<Ps>
+		| StatusError<NoInfer<SE>>
+		| StatusError<ClientSE>,
 		| (O extends AnySchema ? O["DecodingServices"] : never)
 		| EB["DecodingServices"]
+		| StatusErrorServices<NoInfer<SE>>
+		| StatusErrorServices<ClientSE>
 	>;
 }
 
@@ -460,6 +655,7 @@ export interface NoBodyMethod<
  * - `Ps`: the client's plugins.
  * - `DefaultEB`: the client's `defaultError` schema, used when a call has
  *   no `error`.
+ * - `ClientSE`: the client's `statusErrors` map, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -481,6 +677,7 @@ export interface NoBodyMethod<
 export interface BodyMethod<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	DefaultEB extends AnySchema,
+	ClientSE extends StatusErrorMap | undefined = undefined,
 > {
 	<
 		P extends string,
@@ -488,19 +685,24 @@ export interface BodyMethod<
 		EB extends AnySchema = DefaultEB,
 		I extends AnySchema = Schema.Unknown,
 		Q extends QueryOf<Q> = QueryInput,
+		SE extends StatusErrorMap | undefined = undefined,
 	>(
 		path: P,
-		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q>>
+		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q, SE>>
 	): Effect.Effect<
 		Success<O>,
 		// CallError and CallServices, written out (see CallEffect)
 		| NetworkError
 		| HttpError.With<EB["Type"]>
 		| (O extends AnySchema ? DecodeError : never)
-		| Plugin.Errors<Ps>,
+		| Plugin.Errors<Ps>
+		| StatusError<NoInfer<SE>>
+		| StatusError<ClientSE>,
 		| (O extends AnySchema ? O["DecodingServices"] : never)
 		| EB["DecodingServices"]
 		| (I extends AnySchema ? I["EncodingServices"] : never)
+		| StatusErrorServices<NoInfer<SE>>
+		| StatusErrorServices<ClientSE>
 	>;
 }
 
@@ -511,6 +713,7 @@ export interface BodyMethod<
  * - `Ps`: the client's plugins.
  * - `DefaultEB`: the client's `defaultError` schema, used when a call has
  *   no `error`.
+ * - `ClientSE`: the client's `statusErrors` map, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -532,6 +735,7 @@ export interface BodyMethod<
 export interface RequestMethod<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	DefaultEB extends AnySchema,
+	ClientSE extends StatusErrorMap | undefined = undefined,
 > {
 	<
 		P extends string,
@@ -539,19 +743,24 @@ export interface RequestMethod<
 		EB extends AnySchema = DefaultEB,
 		I extends AnySchema = Schema.Unknown,
 		Q extends QueryOf<Q> = QueryInput,
+		SE extends StatusErrorMap | undefined = undefined,
 	>(
 		method: HttpMethod.HttpMethod,
 		path: P,
-		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q>>
+		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q, SE>>
 	): Effect.Effect<
 		Success<O>,
 		// CallError and CallServices, written out (see CallEffect)
 		| NetworkError
 		| HttpError.With<EB["Type"]>
 		| (O extends AnySchema ? DecodeError : never)
-		| Plugin.Errors<Ps>,
+		| Plugin.Errors<Ps>
+		| StatusError<NoInfer<SE>>
+		| StatusError<ClientSE>,
 		| (O extends AnySchema ? O["DecodingServices"] : never)
 		| EB["DecodingServices"]
 		| (I extends AnySchema ? I["EncodingServices"] : never)
+		| StatusErrorServices<NoInfer<SE>>
+		| StatusErrorServices<ClientSE>
 	>;
 }

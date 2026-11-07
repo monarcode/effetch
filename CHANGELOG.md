@@ -2,6 +2,46 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## 0.1.0-rc.2
+
+### Added
+
+- `statusErrors` turns error responses into your own errors. It maps an
+  HTTP status to an error schema, usually a `Schema.TaggedError` class, or
+  to a list of schemas tried in order:
+  `statusErrors: { 404: TodoNotFound, 400: [InvalidRole, RoleTaken] }`.
+  The first schema that decodes the JSON body is what the call fails with,
+  so callers write `Effect.catchTag("TodoNotFound", …)` rather than
+  checking `status` and `body`. It can be given to `Fetch.make` (every
+  call), `client.endpoint` and `Fetch.endpoint` (every call of the
+  endpoint) and a call's options. The call's schemas are tried first, then
+  the endpoint's, then the client's.
+  - Backends don't send a `_tag`, so effetch adds the schema's literal
+    `_tag` to the body before decoding. `Schema.encodeKeys` renames fields.
+  - A response that no schema decodes, or with an empty or non-JSON body,
+    fails with the `HttpError` it fails with today, which stays in the
+    error type. Calls without `statusErrors` keep exactly their types and
+    behaviour.
+  - Plugins see the raw response, as before, so `retry` still retries by
+    status. `onError` receives the decoded error.
+  - Maps are copied and frozen where they're given, so changing one later
+    changes nothing. The client has a `statusErrors` property, its copy or
+    `undefined`, and so do `Fetch.endpoint` definitions. Endpoints have a
+    `statusErrors` property too: their map joined with the client's, each
+    status listing its schemas in the order they're tried.
+  - A client's type includes its map, `Client<Ps, EB, SE>`, so a client
+    with a map isn't assignable to a plain `Fetch.Client`, which would hide
+    its errors.
+  - New types: `StatusErrorMap`, `StatusError`, `StatusErrorSchema` and
+    `StatusErrorServices`.
+    `Client`, `ClientConfig`, `Endpoint`, `EndpointDefinition`,
+    `UnboundEndpoint`, `UnboundDefinition`, the option types, the method
+    signatures, `CallEffect`, `CallError` and `CallServices` gain a type
+    parameter for the maps, last and defaulting to `undefined`, so existing
+    type references keep compiling. Values typed as `Client`, `Endpoint` or
+    `UnboundEndpoint` that you build by hand, such as test doubles, need a
+    `statusErrors` property.
+
 ## 0.1.0-rc.1
 
 ### Added

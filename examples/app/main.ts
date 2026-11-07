@@ -23,6 +23,10 @@ const payRent = Effect.gen(function* () {
 	Effect.catchTags({
 		InsufficientFunds: (error) =>
 			Effect.fail(`Only ${error.balance} left, ${error.amount} needed`),
+		TransferLimitExceeded: (error) =>
+			Effect.fail(`Transfer refused: ${error.reason}`),
+		TodoNotFound: () => Effect.fail("The task was deleted meanwhile"),
+		SessionExpired: () => Effect.fail("Please sign in again"),
 		HttpError: (error) =>
 			Effect.fail(`HTTP ${error.status} from ${error.url}`),
 		TimeoutError: (error) =>

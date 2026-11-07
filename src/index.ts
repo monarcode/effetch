@@ -41,6 +41,10 @@ export type {
 	QueryValue,
 	RequestMethod,
 	RequestOptions,
+	StatusError,
+	StatusErrorMap,
+	StatusErrorSchema,
+	StatusErrorServices,
 	Success,
 } from "./Options.js";
 export type { PathParamNames, PathParams, PathParamValue } from "./Path.js";

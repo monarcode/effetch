@@ -6,7 +6,12 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type * as HttpMethod from "effect/http/HttpMethod";
 
-import type { AnySchema, RequestOptions } from "../Options.js";
+import type {
+	AnySchema,
+	QueryInput,
+	RequestOptions,
+	StatusErrorMap,
+} from "../Options.js";
 import type { Plugin } from "../Plugin.js";
 import { encodeBody } from "./body.js";
 import { interpolatePath } from "./path.js";
@@ -26,13 +31,17 @@ export type RuntimeOptions = Omit<
 		AnySchema | undefined,
 		AnySchema,
 		AnySchema,
-		ReadonlyArray<Plugin.Any>
+		ReadonlyArray<Plugin.Any>,
+		QueryInput,
+		StatusErrorMap | undefined
 	>,
 	"plugins"
 > & { readonly plugins?: OverrideMap | undefined };
 
 export interface RequesterState {
 	readonly errorSchema: AnySchema | undefined;
+	/** The client's `statusErrors`, tried after the call's or endpoint's. */
+	readonly statusErrors: StatusErrorMap | undefined;
 	readonly applyDefaults: ApplyDefaults;
 	readonly chain: HttpClient.HttpClient.With<unknown>;
 	readonly plugins: ReadonlyArray<Plugin.Any>;
@@ -86,6 +95,7 @@ const execute = (
 		const checked = yield* checkStatus(
 			response,
 			options.error ?? state.errorSchema,
+			[options.statusErrors, state.statusErrors],
 		);
 		return options.output === undefined
 			? checked

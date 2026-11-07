@@ -17,9 +17,10 @@ export const setup = <
 	EB extends Fetch.AnySchema = Schema.Unknown,
 	E = never,
 	R = never,
+	SE extends Fetch.StatusErrorMap | undefined = undefined,
 >(
 	script: Script,
-	config: Fetch.ClientConfig<Ps, EB, E, R> = {},
+	config: Fetch.ClientConfig<Ps, EB, E, R, SE> = {},
 ) =>
 	Effect.gen(function* () {
 		const mock = makeMockClient(script);

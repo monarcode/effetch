@@ -215,7 +215,7 @@ export declare namespace Plugin {
 
 	/**
 	 * The `onError` hook. `error` is a `FetchError`, another plugin's error,
-	 * or a defect's cause. It can't fail or change the call's outcome: if it
+	 * one of the call's `statusErrors`, or a defect's cause. It can't fail or change the call's outcome: if it
 	 * dies, the defect is logged at Debug level and ignored.
 	 *
 	 * Hooks run in array order, after the status check and decoding. They

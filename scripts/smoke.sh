@@ -278,6 +278,48 @@ if (
 	throw new Error(`Unexpected bound request: ${seen.at(-1)}`);
 }
 
+// An error response turned into the app's own error by statusErrors.
+class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+	message: Schema.String,
+}) {}
+
+const notFound = HttpClient.make((request) =>
+	Effect.succeed(
+		HttpClientResponse.fromWeb(
+			request,
+			new Response(JSON.stringify({ message: "No todo 9" }), {
+				status: 404,
+				headers: { "content-type": "application/json" },
+			}),
+		),
+	),
+);
+
+const getMissing = Fetch.endpoint("GET /todos/:id", {
+	output: Todo,
+	statusErrors: { 404: TodoNotFound },
+});
+if (getMissing.statusErrors[404] !== TodoNotFound) {
+	throw new Error("Unexpected definition statusErrors");
+}
+
+const statusProgram = Effect.gen(function* () {
+	const api = yield* Fetch.make({ baseUrl: "https://api.test" });
+	const bound = api.bind(getMissing);
+	if (bound.statusErrors[404]?.[0] !== TodoNotFound) {
+		throw new Error("Unexpected endpoint statusErrors");
+	}
+	return yield* bound({ params: { id: 9 } }).pipe(
+		Effect.catchTag("TodoNotFound", (error) => Effect.succeed(error.message)),
+	);
+}).pipe(Effect.provideService(HttpClient.HttpClient, notFound));
+
+const missingTodo: string | { readonly id: number } =
+	await Effect.runPromise(statusProgram);
+if (missingTodo !== "No todo 9") {
+	throw new Error(`Unexpected statusErrors result: ${JSON.stringify(missingTodo)}`);
+}
+
 console.log("smoke: ok");
 TS
 
