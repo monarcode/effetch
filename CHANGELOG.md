@@ -41,6 +41,28 @@ All notable changes to `@monarcode/effetch`, newest first.
     type references keep compiling. Values typed as `Client`, `Endpoint` or
     `UnboundEndpoint` that you build by hand, such as test doubles, need a
     `statusErrors` property.
+- Plugins can have an `onExit(exit, ctx)` hook. It runs once per call, when
+  it's over, whatever the outcome: success, failure, defect or interruption.
+  It gets the call's `Exit` (with the decoded `output`, or the response for
+  a call without one) and a `PluginExitContext`: the `PluginContext` fields,
+  the `response` (the one the plugins returned, else the last one the
+  network sent, or `undefined`), and `durationMs`,
+  from sending the request to decoding the body, retries included. Hooks
+  run in array order, after the `onError` hooks, and can't change the
+  outcome; one that dies is logged at Debug level. They don't run for
+  `client.httpClient`, or for a plugin the call skips.
+  - `Plugin.Definition` gains an `RExit` type parameter for the hook's
+    services, last and defaulting to `never`, so existing references keep
+    compiling.
+- `consoleLogger` (from `@monarcode/effetch/plugins`) prints each call to the
+  console while you develop: a line with the route, status, duration, size
+  and outcome, opening a group with the full URL, the request and response
+  headers and bodies, and the error. It redacts sensitive headers, query
+  parameters and body keys (in errors too), reads only text bodies of at
+  most 1 MB and never the body of a raw or interrupted call, colors with CSS
+  or ANSI codes, and can be limited to errors, filtered, or set per call. Its `enabled` option turns it off in
+  production while keeping the client's type. Groups start collapsed,
+  except in React Native, whose Metro terminal drops collapsed groups.
 
 ## 0.1.0-rc.1
 

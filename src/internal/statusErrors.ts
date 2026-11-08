@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 
@@ -111,9 +112,6 @@ export const tagOf = (schema: AnySchema): string | undefined => {
 	return tag ?? undefined;
 };
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-	typeof value === "object" && value !== null && !Array.isArray(value);
-
 /**
  * Decodes an error body with one `statusErrors` schema: some error when it
  * matches, none when it doesn't. Backends don't send a `_tag`, so when the
@@ -126,7 +124,7 @@ export const decodeStatusError = <S extends AnySchema>(
 ): Effect.Effect<Option.Option<S["Type"]>, never, S["DecodingServices"]> => {
 	const tag = tagOf(schema);
 	const body =
-		tag !== undefined && isRecord(json) && !hasOwn(json, "_tag")
+		tag !== undefined && Predicate.isObject(json) && !hasOwn(json, "_tag")
 			? { ...json, _tag: tag }
 			: json;
 	return Effect.option(decodeJson(schema)(body));

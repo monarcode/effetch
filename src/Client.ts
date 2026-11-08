@@ -17,6 +17,7 @@ import { makeApplyDefaults, mapClientErrors } from "./internal/pipeline.js";
 import {
 	applyPlugins,
 	provideOverrides,
+	provideResponseBox,
 	provideRoute,
 } from "./internal/plugins.js";
 import { makeCall, type RuntimeOptions } from "./internal/request.js";
@@ -578,7 +579,11 @@ export const make = <
 		const chain = applyPlugins(mapClientErrors(provided), plugins, context);
 		const httpClient = HttpClient.mapRequestInput(
 			HttpClient.transformResponse(chain, (response) =>
-				response.pipe(provideOverrides(undefined), provideRoute(undefined)),
+				response.pipe(
+					provideOverrides(undefined),
+					provideRoute(undefined),
+					provideResponseBox(undefined),
+				),
 			),
 			applyDefaults,
 		);

@@ -59,6 +59,7 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
   - [Bugs are defects](#bugs-are-defects)
 - [Plugins](#plugins)
   - [Built-in plugins](#built-in-plugins)
+  - [Console logging](#console-logging)
   - [Plugin order](#plugin-order)
   - [Changing plugins for one call](#changing-plugins-for-one-call)
 - [Writing plugins](#writing-plugins)
@@ -730,6 +731,7 @@ export const withEffectToken = bearer({ token: Effect.succeed("token") });
 | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
 | `bearer({ token, scheme? })`                        | Sends `Authorization: Bearer <token>`. The token is a string, a function of the request (sync or async), or an Effect, read for every request. `null`, `undefined` and `""` send no header, and an existing `Authorization` header is kept.                                                         | `false`                 |
 | `logger({ level? })`                                | Logs one entry per call at Debug (or Info): `GET <url> 200 (35ms)`, or `failed` with the cause, with the call's [route](#knowing-the-route) as an annotation. Never logs headers or query strings.                                                                                                  | `false`                 |
+| `consoleLogger(options?)`                           | Prints each call to the console while you develop: a line with the route, status, duration and outcome, opening a group with the full URL, headers, bodies and error. Sensitive headers, query parameters and body keys are redacted. See [Console logging](#console-logging).                      | `false`, its settings   |
 | `retry({ times?, schedule?, methods?, statuses? })` | Retries network errors and 408, 429, 500, 502, 503 and 504, 2 times by default, with jittered exponential backoff from 200ms. Only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) by default, so a `POST` is never sent twice. When retries run out, the last response is returned. | `false`, `{ times }`    |
 | `timeout({ duration })`                             | Fails with `TimeoutError` and aborts the request when the response headers don't arrive in time. Downloading the body isn't covered.                                                                                                                                                                | `false`, `{ duration }` |
 
@@ -737,12 +739,136 @@ A `bearer` token function that throws, or whose promise rejects, makes the
 call die. To fail with a typed error instead, pass an Effect: its error and
 services become the client's, and `make` asks for the services.
 
+### Console logging
+
+`logger` writes one structured entry per call for production logs, and leaves
+headers, query strings and bodies out. `consoleLogger` is for development: it
+prints everything about a call to the console, as a group devtools can
+expand.
+
+```ts
+import * as Fetch from "@monarcode/effetch";
+import { consoleLogger } from "@monarcode/effetch/plugins";
+
+declare const isDevelopment: boolean;
+
+export const makeApi = Fetch.make({
+  baseUrl: "https://api.example.com",
+  plugins: [
+    consoleLogger({
+      enabled: isDevelopment,
+      slow: "1 second",
+      redact: { body: ["otp"] },
+    }),
+  ],
+});
+```
+
+Each call prints a line, which opens a group with the details:
+
+```text
+▸ GET /todos/:id  200 OK  35 ms  1.2 kB
+▸ ✗ GET /todos  3.0 s  → NetworkError: Failed to fetch
+▸ ⚠ GET /reports/:id  200 OK  2.4 s  (slow)
+▾ ✗ POST /users/:id/roles  400 Bad Request  120 ms  → InvalidRole: No such role
+    POST https://api.example.com/users/7/roles
+    request headers  { accept: "application/json", authorization: "<redacted>" }
+    request body     { role: "owner" }
+    response headers { "content-type": "application/json" }
+    response body    { code: "INVALID_ROLE", message: "No such role" }
+    error            InvalidRole { code: "INVALID_ROLE", message: "No such role" }
+```
+
+It prints each call once it's over, with the error it ended with, after
+[`statusErrors`](#errors-by-status) and decoding. Values are printed as
+objects, so devtools can expand them.
+
+| Option          | Default  | What it does                                                                                                                                               |
+| --------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`       | `true`   | `false` prints nothing, and keeps the plugin's type, so it can stay in the list in production.                                                             |
+| `detail`        | `"full"` | `"summary"` prints the line alone; `"headers"` adds the URL, headers and error; `"full"` adds the bodies.                                                  |
+| `only`          | `"all"`  | `"errors"` prints failed calls only.                                                                                                                       |
+| `collapsed`     | `true`   | Whether groups start collapsed. `false` by default in React Native, where Metro's terminal drops collapsed groups. Node, Bun and Deno print them expanded. |
+| `slow`          | `false`  | A duration, such as `"1 second"`: slower calls are flagged.                                                                                                |
+| `maxBodyLength` | `10_000` | Body text longer than this is cut. JSON within it is printed as an object.                                                                                 |
+| `redact`        |          | `{ headers, query, body }`: more names to redact, as strings (ignoring case, `-` and `_`) or regular expressions. `false` redacts nothing.                 |
+| `filter`        |          | `(call) => boolean`: prints only the calls it accepts. `call` has the `route`, the `request`, the `response`, the `exit` and the `durationMs`.             |
+| `color`         | `"auto"` | `"css"` (browser devtools), `"ansi"` (terminals), or `false`. `"auto"` uses `"css"` where there's a `document`, else plain text.                           |
+
+Calls can change `detail`, `only`, `collapsed`, `slow` and `maxBodyLength`, or
+skip it with `false`:
+
+```ts
+import * as Effect from "effect/Effect";
+
+import * as Fetch from "@monarcode/effetch";
+import { consoleLogger } from "@monarcode/effetch/plugins";
+
+export const program = Effect.gen(function* () {
+  const api = yield* Fetch.make({
+    baseUrl: "https://api.example.com",
+    plugins: [consoleLogger()],
+  });
+  yield* api.get("/reports/export", {
+    plugins: { consoleLogger: { detail: "summary" } },
+  });
+  yield* api.get("/health", { plugins: { consoleLogger: false } });
+});
+```
+
+What it redacts, as `<redacted>`, matching names ignoring case, `-` and `_`:
+
+- headers in Effect's `Headers.CurrentRedactedNames` (`authorization`,
+  `cookie`, `set-cookie`, `x-api-key`), `proxy-authorization`,
+  `x-auth-token`, `x-access-token`, `x-refresh-token`, `x-session-token`,
+  `x-csrf-token`, `x-xsrf-token`, `x-client-secret` and
+  `x-amz-security-token`;
+- keys in JSON and form bodies, at any depth: `token`, `accessToken`,
+  `refreshToken`, `idToken`, `authToken`, `apiToken`, `sessionToken`,
+  `csrfToken`, `xsrfToken`, `secret`, `clientSecret`, `apiSecret`,
+  `apiKey`, `privateKey`, and any name containing `password`;
+- query parameters with the same names, `key`, `sig`, `signature` and the
+  signed-URL ones (`X-Amz-Signature`, `X-Goog-Signature`, …), values passed
+  as `Redacted`, and credentials in the URL (`https://user:password@…`).
+
+They're exact names rather than patterns, so fields such as `total_tokens`
+stay visible. Plain-text bodies are printed as they are. A call's error is
+printed as a copy of its fields, redacted like a body, without an
+`HttpError`'s `text` or a `DecodeError`'s `issue`, which the response body
+line shows. Defects are printed as they are.
+
+Good to know:
+
+- It only reads a response body that's text: JSON, `text/*` other than event
+  streams, XML or a form, up to 1 MB. effetch has read it already to check
+  the status or decode it, and Effect caches it. A call without `output`
+  returns the response itself, so its body isn't read, and stays yours to
+  stream. Neither is an interrupted call's.
+- It writes through Effect's `Console`, so you can provide another one, with
+  `console.log` and groups only. React Native turns `console.error` into an
+  error screen.
+- In React Native, groups start expanded: Metro's terminal silently drops
+  `console.groupCollapsed` and everything logged inside it. React Native is
+  detected by `navigator.product`, which it sets to `"ReactNative"`.
+
+- It runs when the call is over, so where it sits in the plugin list doesn't
+  matter: a retried call is one entry, and its duration covers every
+  attempt. The size comes from `content-length`, or from the body when it's
+  read.
+- When a plugin fails on a response, such as an auth plugin on a 401, that
+  response is shown with the plugin's error.
+- `slow` that isn't a duration throws when the plugin is made.
+- The request shown is the one that was sent, after plugins such as `bearer`
+  changed it. When no response came back, it's the one the call built,
+  before plugins ran.
+
 ### Plugin order
 
 The first plugin is the outermost: it runs first on the way out, and last on
 the way back. The order above is the one to use:
 
-- `logger` sees the whole call, retries included;
+- `logger` sees the whole call, retries included (`consoleLogger` sees the
+  whole call wherever it is);
 - each retry gets its own timeout, and asks for the token again;
 - a timed-out attempt isn't retried.
 
@@ -828,10 +954,37 @@ call's override, so a plugin needs `defaults` to take options.
 | `onRequest(request, ctx)`      | Before the request is sent, in array order. Returns the request to send, or fails. It sees the full URL and the client's headers.            |
 | `onResponse(response, ctx)`    | On every response, non-2xx included, in reverse order. Returns the response, or fails. The status check and decoding come after all plugins. |
 | `onError(error, ctx)`          | After a call fails or dies, in array order. It can't change the outcome.                                                                     |
+| `onExit(exit, ctx)`            | After every call, whatever the outcome, in array order, after `onError`. It can't change the outcome.                                        |
 | `wrap(client, options, route)` | Wraps the plugins after it and the network, for retries, timeouts and the like. It can add errors but can't remove them.                     |
 
 `ctx.request` is the request: in `onResponse`, the one this plugin passed on;
-in `onError`, the one the call built.
+in `onError` and `onExit`, the one the call built.
+
+`onExit` gets the call's `Exit`: its result (the decoded `output`, or the
+response for a call without one), or the cause of its failure, defect or
+interruption. Its `ctx` also has the `response` (the one the plugins
+returned; when a plugin failed after a response arrived, the last one the
+network sent; `undefined` when none arrived) and `durationMs`, the time from
+sending the request to decoding the body, retries included. It suits logging
+and metrics, and is what `consoleLogger` uses:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+
+import * as Fetch from "@monarcode/effetch";
+
+declare const record: (route: string, ok: boolean, durationMs: number) => void;
+
+export const metrics = Fetch.plugin({
+  name: "metrics",
+  onExit: (exit, ctx) =>
+    Effect.sync(() => record(ctx.route, Exit.isSuccess(exit), ctx.durationMs)),
+});
+```
+
+The call returns once every `onExit` hook is done, so keep them quick, and
+fork anything slow.
 
 ### Knowing the route
 
@@ -1470,6 +1623,9 @@ page's URL.
   Native 0.79 (Expo SDK 53). On older versions, set
   `resolver.unstable_enablePackageExports = true` in `metro.config.js`.
 - `FetchHttpClient.layer` uses the global `fetch`.
+- Metro's terminal drops `console.groupCollapsed` and everything inside it,
+  so `consoleLogger` doesn't collapse its groups in React Native (see
+  [Console logging](#console-logging)).
 
 ## Reference
 
@@ -1497,7 +1653,8 @@ page's URL.
   [endpoints without a client](#defining-endpoints-without-a-client).
 - `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,
   `FetchError`, `isFetchError`: [errors](#handling-errors).
-- `plugin`, `Plugin` (and the `Plugin.*` helper types), `PluginContext`:
+- `plugin`, `Plugin` (and the `Plugin.*` helper types), `PluginContext`,
+  `PluginExitContext`:
   [writing plugins](#writing-plugins).
 - Option and result types, for wrapping the client in your own functions:
   `RequestOptions`, `NoBodyRequestOptions`, `BaseOptions`, `BodyOptions`,
@@ -1512,6 +1669,9 @@ page's URL.
 
 - `bearer`, `BearerOptions`, `BearerPlugin`, `TokenSource`, `TokenValue`.
 - `logger`, `LoggerOptions`, `LoggerPlugin`.
+- `consoleLogger`, `ConsoleLoggerOptions`, `ConsoleLoggerSettings`,
+  `ConsoleLoggerPlugin`, `ConsoleLoggerDetail`, `ConsoleLoggerRedact`,
+  `ConsoleLoggerCall`, `ConsoleLoggerColor`.
 - `retry`, `RetryOptions`, `RetryPlugin`.
 - `timeout`, `TimeoutOptions`, `TimeoutPlugin`, `TimeoutError`.
 

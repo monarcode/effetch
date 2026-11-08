@@ -6,7 +6,7 @@ Complete programs using effetch. They're typechecked with the package
 | Example                                | What it shows                                                                                                          |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | [`basic.ts`](basic.ts)                 | A client in a service, the methods (`get`, `post`, `patch`, `del`) and handling each error.                            |
-| [`builtins.ts`](builtins.ts)           | The built-in plugins (`logger`, `retry`, `timeout`, `bearer`) and per-call overrides.                                  |
+| [`builtins.ts`](builtins.ts)           | The built-in plugins (`logger`, `consoleLogger`, `retry`, `timeout`, `bearer`) and per-call overrides.                 |
 | [`plugins.ts`](plugins.ts)             | Writing plugins: auth with a service, a header with options, a `wrap` with its own error, error reporting.             |
 | [`endpoints.ts`](endpoints.ts)         | The same app as `builtins.ts` with endpoints: one client, its endpoints as the service's methods.                      |
 | [`backends.ts`](backends.ts)           | Two backends in one file: one client each, shared plugins, and each backend's errors caught next to its calls.         |

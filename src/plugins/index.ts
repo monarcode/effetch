@@ -5,6 +5,16 @@ export type {
 	TokenSource,
 	TokenValue,
 } from "./bearer.js";
+export { consoleLogger } from "./consoleLogger.js";
+export type {
+	ConsoleLoggerCall,
+	ConsoleLoggerColor,
+	ConsoleLoggerDetail,
+	ConsoleLoggerOptions,
+	ConsoleLoggerPlugin,
+	ConsoleLoggerRedact,
+	ConsoleLoggerSettings,
+} from "./consoleLogger.js";
 export { logger } from "./logger.js";
 export type { LoggerOptions, LoggerPlugin } from "./logger.js";
 export { retry } from "./retry.js";

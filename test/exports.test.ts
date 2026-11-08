@@ -20,6 +20,7 @@ describe("public entry points", () => {
 		expect(Object.keys(Plugins).sort()).toEqual([
 			"TimeoutError",
 			"bearer",
+			"consoleLogger",
 			"logger",
 			"retry",
 			"timeout",

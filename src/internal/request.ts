@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
@@ -17,10 +18,14 @@ import { encodeBody } from "./body.js";
 import { interpolatePath } from "./path.js";
 import type { ApplyDefaults } from "./pipeline.js";
 import {
+	hasExitHooks,
 	type OverrideMap,
 	provideOverrides,
+	provideResponseBox,
 	provideRoute,
+	type ResponseBox,
 	runErrorHooks,
+	runExitHooks,
 } from "./plugins.js";
 import { toUrlParams } from "./query.js";
 import { checkStatus, decodeOutput } from "./response.js";
@@ -84,14 +89,13 @@ const buildRequest = (
 		return request;
 	});
 
-const execute = (
+/** Checks the response's status, then decodes its body with `output`. */
+const handle = (
 	state: RequesterState,
-	request: HttpClientRequest.HttpClientRequest,
+	response: HttpClientResponse.HttpClientResponse,
 	options: RuntimeOptions,
 ): Effect.Effect<unknown, unknown, unknown> =>
 	Effect.gen(function* () {
-		const response: HttpClientResponse.HttpClientResponse =
-			yield* state.chain.execute(request);
 		const checked = yield* checkStatus(
 			response,
 			options.error ?? state.errorSchema,
@@ -102,21 +106,91 @@ const execute = (
 			: yield* decodeOutput(checked, options.output);
 	});
 
+/**
+ * Sends `request` through the plugin chain, then handles the response.
+ * With a `box`, the response the chain returns is recorded in it.
+ */
+const execute = (
+	state: RequesterState,
+	request: HttpClientRequest.HttpClientRequest,
+	options: RuntimeOptions,
+	box?: ResponseBox | undefined,
+): Effect.Effect<unknown, unknown, unknown> =>
+	Effect.flatMap(state.chain.execute(request), (response) => {
+		if (box !== undefined) {
+			box.current = response;
+		}
+		return handle(state, response, options);
+	});
+
+/**
+ * Runs `call` (the call's {@link execute}, with its `onError` hooks), then
+ * the `onExit` hooks, whatever the outcome. The duration stops when the
+ * response is handled, so the `onError` hooks don't count.
+ */
+const withExitHooks = (
+	state: RequesterState,
+	request: HttpClientRequest.HttpClientRequest,
+	route: string,
+	run: (
+		execute: Effect.Effect<unknown, unknown, unknown>,
+	) => Effect.Effect<unknown, unknown, unknown>,
+	call: (box: ResponseBox) => Effect.Effect<unknown, unknown, unknown>,
+): Effect.Effect<unknown, unknown, unknown> =>
+	Effect.gen(function* () {
+		const box: ResponseBox = { current: undefined };
+		const start = yield* Clock.currentTimeMillis;
+		let end = start;
+		const timed = call(box).pipe(
+			provideResponseBox(box),
+			Effect.onExit(() =>
+				Effect.map(Clock.currentTimeMillis, (now) => {
+					end = now;
+				}),
+			),
+		);
+		return yield* Effect.onExit(run(timed), (exit) =>
+			runExitHooks(
+				state.plugins,
+				state.context,
+				exit,
+				{
+					request,
+					response: box.current,
+					durationMs: Math.round(end - start),
+				},
+				route,
+			),
+		);
+	});
+
 const send = (
 	state: RequesterState,
 	method: HttpMethod.HttpMethod,
 	path: string,
 	options: RuntimeOptions,
-): Effect.Effect<unknown, unknown, unknown> =>
-	Effect.gen(function* () {
+): Effect.Effect<unknown, unknown, unknown> => {
+	const route = `${method} ${path}`;
+	return Effect.gen(function* () {
 		const request = yield* buildRequest(state, method, path, options);
-		return yield* Effect.tapCause(execute(state, request, options), (cause) =>
-			runErrorHooks(state.plugins, state.context, request, cause),
-		);
+		const withErrorHooks = (
+			effect: Effect.Effect<unknown, unknown, unknown>,
+		) =>
+			Effect.tapCause(effect, (cause) =>
+				runErrorHooks(state.plugins, state.context, request, cause),
+			);
+		return yield* hasExitHooks(state.plugins)
+			? withExitHooks(state, request, route, withErrorHooks, (box) =>
+					execute(state, request, options, box),
+				)
+			: withErrorHooks(execute(state, request, options));
 	}).pipe(
 		provideOverrides(options.plugins),
-		provideRoute(`${method} ${path}`),
+		provideRoute(route),
+		// A call inside another (from a plugin) doesn't record in its box.
+		provideResponseBox(undefined),
 	);
+};
 
 export type Call = (
 	path: string,

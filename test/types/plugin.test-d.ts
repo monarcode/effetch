@@ -1,12 +1,19 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 import { describe, expectTypeOf, it } from "vitest";
 
-import { plugin, type Plugin, type PluginContext } from "../../src/Plugin.js";
+import {
+	plugin,
+	type Plugin,
+	type PluginContext,
+	type PluginExitContext,
+} from "../../src/Plugin.js";
 
 class A extends Data.TaggedError("A")<{}> {}
 class B extends Data.TaggedError("B")<{}> {}
@@ -112,6 +119,54 @@ describe("plugin()", () => {
 		expectTypeOf<Plugin.Services<[typeof p]>>().toEqualTypeOf<
 			Session | Clock
 		>();
+	});
+
+	it("adds the services of onExit", () => {
+		const p = plugin({
+			name: "p",
+			onError: () => Effect.asVoid(Effect.service(Clock)),
+			onExit: () => Effect.asVoid(Effect.service(Session)),
+		});
+		expectTypeOf<Plugin.Services<[typeof p]>>().toEqualTypeOf<
+			Session | Clock
+		>();
+		expectTypeOf<Plugin.Errors<[typeof p]>>().toBeNever();
+	});
+
+	it("gives onExit the exit, the response, the duration and the route", () => {
+		plugin({
+			name: "exits",
+			defaults: { level: "warn" },
+			onExit: (exit, ctx) => {
+				expectTypeOf(exit).toEqualTypeOf<Exit.Exit<unknown, unknown>>();
+				expectTypeOf(ctx).toEqualTypeOf<
+					PluginExitContext<{ level: string }>
+				>();
+				expectTypeOf(ctx.route).toEqualTypeOf<string>();
+				expectTypeOf(ctx.durationMs).toEqualTypeOf<number>();
+				expectTypeOf(ctx.response).toEqualTypeOf<
+					HttpClientResponse.HttpClientResponse | undefined
+				>();
+				return Effect.void;
+			},
+		});
+	});
+
+	it("accepts an onExit annotated with PluginContext", () => {
+		const p = plugin({
+			name: "loose",
+			onExit: (_exit, ctx: PluginContext<undefined>) =>
+				Effect.asVoid(Effect.succeed(ctx.route)),
+		});
+		expectTypeOf<Plugin.Services<[typeof p]>>().toBeNever();
+	});
+
+	it("rejects an onExit that can fail", () => {
+		type Failing = (
+			exit: Exit.Exit<unknown, unknown>,
+			ctx: PluginExitContext<undefined>,
+		) => Effect.Effect<void, A>;
+		expectTypeOf<Failing>().not.toExtend<Plugin.OnExit<undefined, never>>();
 	});
 
 	it("lets wrap add an error", () => {

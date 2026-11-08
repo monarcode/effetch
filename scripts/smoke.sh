@@ -57,6 +57,7 @@ npm install --silent --no-audit --no-fund --no-package-lock \
 	"$tarball" "effect@$effect_version" "typescript@$typescript_version"
 
 cat >consumer.ts <<'TS'
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
@@ -67,6 +68,7 @@ import * as Fetch from "@monarcode/effetch";
 import {
 	bearer,
 	type BearerPlugin,
+	consoleLogger,
 	logger,
 	retry,
 	TimeoutError,
@@ -140,6 +142,7 @@ const program = Effect.gen(function* () {
 		baseUrl: "https://api.test",
 		plugins: [
 			logger(),
+			consoleLogger({ color: false, detail: "summary" }),
 			retry(),
 			timeout({ duration: "5 seconds" }),
 			requestId,
@@ -152,9 +155,21 @@ const program = Effect.gen(function* () {
 		output: Todo,
 		plugins: { requestId: { id: "smoke" } },
 	});
-}).pipe(Effect.provideService(HttpClient.HttpClient, mock));
+}).pipe(
+	Effect.provideService(HttpClient.HttpClient, mock),
+	Effect.provideService(
+		Console.Console,
+		Object.assign(Object.create(console), {
+			log: (...args: ReadonlyArray<unknown>) => printed.push(...args),
+		}),
+	),
+);
 
+const printed: Array<unknown> = [];
 const todo = await Effect.runPromise(program);
+if (!/^GET \/todos\/:id {2}200 OK {2}\d+ ms$/.test(printed.join())) {
+	throw new Error(`Unexpected console output: ${printed.join()}`);
+}
 const typed: { readonly id: number; readonly title: string } = todo;
 if (typed.id !== 1 || typed.title !== "Write docs") {
 	throw new Error(`Unexpected todo: ${JSON.stringify(todo)}`);
