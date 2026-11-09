@@ -3,7 +3,12 @@ import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import { WalletApiClient } from "../../../infrastructure/http/wallet-api-client.js";
-import { Balance, Receipt, Transfer } from "../contract/wallet.js";
+import {
+	Balance,
+	Receipt,
+	Transfer,
+	TransferLimitExceededBody,
+} from "../contract/wallet.js";
 
 // Same shape as `todos`: the module's endpoints are its data service, made
 // from the client of the backend the module talks to. Operations that take
@@ -16,6 +21,7 @@ const makeWalletApi = WalletApiClient.useSync((client) => ({
 	transfer: client.endpoint("POST /transfers", {
 		input: Transfer,
 		output: Receipt,
+		statusErrors: { 422: TransferLimitExceededBody },
 		plugins: { timeout: { duration: "30 seconds" } },
 	}),
 }));

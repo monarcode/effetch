@@ -13,6 +13,10 @@ import type {
 	ParamsOption,
 	QueryInput,
 	QueryOf,
+	StatusError,
+	StatusErrorMap,
+	StatusErrorSchema,
+	StatusErrorServices,
 	Success,
 } from "./Options.js";
 import type { Plugin } from "./Plugin.js";
@@ -107,6 +111,8 @@ type NoBodyRoute<R extends string> = [RouteMethod<R>] extends [
  *   with the raw `HttpClientResponse`.
  * - `error`: decodes non-2xx bodies into `HttpError.body`, replacing the
  *   client's `defaultError`.
+ * - `statusErrors`: turns error responses into your own errors, by status
+ *   (see {@link StatusErrorMap}). Tried before the client's.
  * - `input`: encodes `body` before it's sent as JSON, and makes `body`
  *   required on every call. Not allowed on `GET`, `HEAD`, `OPTIONS` and
  *   `TRACE` endpoints, which take no body.
@@ -121,6 +127,7 @@ type NoBodyRoute<R extends string> = [RouteMethod<R>] extends [
  * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`O` and `I`
  *   are `undefined` when absent).
  * - `Ps`: the client's plugins.
+ * - `SE`: the `statusErrors` map, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -152,11 +159,17 @@ export interface EndpointDefinition<
 	EB extends AnySchema,
 	I extends AnySchema | undefined,
 	Ps extends ReadonlyArray<Plugin.Any>,
+	SE extends StatusErrorMap | undefined = undefined,
 > {
 	/** Decodes the 2xx JSON body. Without it, calls return the raw response. */
 	readonly output?: O;
 	/** Decodes non-2xx bodies into `HttpError.body`. Overrides the client's. */
 	readonly error?: EB | undefined;
+	/** Your own errors for error responses, by status. Tried before the client's. */
+	// No `| undefined`, unlike the other options: `SE` already allows it, and
+	// with it `statusErrors: undefined` infers the constraint, which widens
+	// the call's errors to `unknown`.
+	readonly statusErrors?: SE;
 	/** Encodes `body` as JSON, and makes `body` required on every call. */
 	readonly input?: NoBodyRoute<R> extends true ? undefined : I;
 	/** Headers for every call, over the client's. A call's own header wins. */
@@ -260,13 +273,16 @@ type Requirements<
  * Effect as the equivalent client method.
  *
  * It also carries its `route`, `method` and `path`, for things like log
- * labels and cache keys, and its `output`, `error` and `input` schemas, for
- * things like decoding cached data or building test fixtures.
+ * labels and cache keys, and its `output`, `error`, `statusErrors` and
+ * `input` schemas, for things like decoding cached data or building test
+ * fixtures.
  *
  * - `R`: the route, such as `"GET /users/:id"`.
  * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`O` and `I`
  *   are `undefined` when absent).
  * - `Ps`: the client's plugins.
+ * - `SE`: the `statusErrors` maps of the endpoint and the client, as a
+ *   union, or `undefined` without any.
  *
  * @example
  * ```ts
@@ -291,6 +307,7 @@ export interface Endpoint<
 	EB extends AnySchema,
 	I extends AnySchema | undefined,
 	Ps extends ReadonlyArray<Plugin.Any>,
+	SE extends StatusErrorMap | undefined = undefined,
 > {
 	<Q extends QueryOf<Q> = QueryInput>(
 		...args: EndpointArgs<R, I, EndpointOptions<R, I, Ps, Q>>
@@ -300,10 +317,12 @@ export interface Endpoint<
 		| NetworkError
 		| HttpError.With<EB["Type"]>
 		| (O extends AnySchema ? DecodeError : never)
-		| Plugin.Errors<Ps>,
+		| Plugin.Errors<Ps>
+		| StatusError<SE>,
 		| (O extends AnySchema ? O["DecodingServices"] : never)
 		| EB["DecodingServices"]
 		| (I extends AnySchema ? I["EncodingServices"] : never)
+		| StatusErrorServices<SE>
 	>;
 	/** The route the endpoint was defined with, such as `"GET /users/:id"`. */
 	readonly route: R;
@@ -318,6 +337,14 @@ export interface Endpoint<
 	 * else the client's `defaultError`, or else `Schema.Unknown`.
 	 */
 	readonly error: EB;
+	/**
+	 * The schemas error responses are tried against, by status: for each
+	 * status, the endpoint's `statusErrors`, then the client's, in the order
+	 * they're tried. Empty when neither has any.
+	 */
+	readonly statusErrors: {
+		readonly [status: number]: ReadonlyArray<StatusErrorSchema<SE>>;
+	};
 	/** The schema the body is encoded with, or `undefined` without `input`. */
 	readonly input: I;
 }
@@ -329,6 +356,7 @@ export interface Endpoint<
  * - `Ps`: the client's plugins.
  * - `DefaultEB`: the client's `defaultError` schema, used when the
  *   endpoint has no `error`.
+ * - `ClientSE`: the client's `statusErrors` map, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -346,16 +374,18 @@ export interface Endpoint<
 export interface EndpointMethod<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	DefaultEB extends AnySchema,
+	ClientSE extends StatusErrorMap | undefined = undefined,
 > {
 	<
 		const R extends string,
 		O extends AnySchema | undefined = undefined,
 		EB extends AnySchema = DefaultEB,
 		I extends AnySchema | undefined = undefined,
+		SE extends StatusErrorMap | undefined = undefined,
 	>(
 		route: ValidRoute<R>,
-		definition?: EndpointDefinition<R, O, EB, I, Ps>,
-	): Endpoint<R, O, EB, I, Ps>;
+		definition?: EndpointDefinition<R, O, EB, I, Ps, SE>,
+	): Endpoint<R, O, EB, I, Ps, SE | ClientSE>;
 }
 
 /**
@@ -366,6 +396,9 @@ export interface EndpointMethod<
  *   with the raw `HttpClientResponse`.
  * - `error`: decodes non-2xx bodies into `HttpError.body`. Without it, the
  *   endpoint uses the `defaultError` of the client it's bound to.
+ * - `statusErrors`: turns error responses into your own errors, by status
+ *   (see {@link StatusErrorMap}). Tried before those of the client it's
+ *   bound to.
  * - `input`: encodes `body` before it's sent as JSON, and makes `body`
  *   required on every call. Not allowed on `GET`, `HEAD`, `OPTIONS` and
  *   `TRACE` endpoints, which take no body.
@@ -379,6 +412,7 @@ export interface EndpointMethod<
  * - `R`: the route, for the method and the path.
  * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`undefined`
  *   when absent).
+ * - `SE`: the `statusErrors` map, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -407,11 +441,17 @@ export interface UnboundDefinition<
 	O extends AnySchema | undefined,
 	EB extends AnySchema | undefined,
 	I extends AnySchema | undefined,
+	SE extends StatusErrorMap | undefined = undefined,
 > {
 	/** Decodes the 2xx JSON body. Without it, calls return the raw response. */
 	readonly output?: O;
 	/** Decodes non-2xx bodies into `HttpError.body`. Without it, the client's `defaultError` does. */
 	readonly error?: EB;
+	/** Your own errors for error responses, by status. Tried before the client's. */
+	// No `| undefined`, unlike the other options: `SE` already allows it, and
+	// with it `statusErrors: undefined` infers the constraint, which widens
+	// the call's errors to `unknown`.
+	readonly statusErrors?: SE;
 	/** Encodes `body` as JSON, and makes `body` required on every call. */
 	readonly input?: NoBodyRoute<R> extends true ? undefined : I;
 	/** Headers for every call, over the client's. Binding and call headers win. */
@@ -432,6 +472,7 @@ export interface UnboundDefinition<
  * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`undefined`
  *   when absent; without `error`, the bound endpoint uses the client's
  *   `defaultError`).
+ * - `SE`: the `statusErrors` map, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -455,6 +496,7 @@ export interface UnboundEndpoint<
 	O extends AnySchema | undefined,
 	EB extends AnySchema | undefined,
 	I extends AnySchema | undefined,
+	SE extends StatusErrorMap | undefined = undefined,
 > {
 	/** The route the endpoint was defined with, such as `"GET /users/:id"`. */
 	readonly route: R;
@@ -469,6 +511,11 @@ export interface UnboundEndpoint<
 	 * `defaultError` of the client it's bound to.
 	 */
 	readonly error: EB;
+	/**
+	 * The `statusErrors` map, as given, or `undefined` without one. Once
+	 * bound, the client's are tried after it.
+	 */
+	readonly statusErrors: SE;
 	/** The schema the body is encoded with, or `undefined` without `input`. */
 	readonly input: I;
 	/** The headers sent with every call, or `undefined` without any. */
@@ -514,6 +561,7 @@ export interface BindOptions<Ps extends ReadonlyArray<Plugin.Any>> {
  * - `Ps`: the client's plugins.
  * - `DefaultEB`: the client's `defaultError` schema, used when the
  *   definition has no `error`.
+ * - `ClientSE`: the client's `statusErrors` map, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -531,16 +579,25 @@ export interface BindOptions<Ps extends ReadonlyArray<Plugin.Any>> {
 export interface BindMethod<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	DefaultEB extends AnySchema,
+	ClientSE extends StatusErrorMap | undefined = undefined,
 > {
 	<
 		R extends string,
 		O extends AnySchema | undefined,
 		EB extends AnySchema | undefined,
 		I extends AnySchema | undefined,
+		SE extends StatusErrorMap | undefined,
 	>(
-		definition: UnboundEndpoint<R, O, EB, I>,
+		definition: UnboundEndpoint<R, O, EB, I, SE>,
 		options?: BindOptions<Ps>,
-	): Endpoint<R, O, EB extends AnySchema ? EB : DefaultEB, I, Ps>;
+	): Endpoint<
+		R,
+		O,
+		EB extends AnySchema ? EB : DefaultEB,
+		I,
+		Ps,
+		SE | ClientSE
+	>;
 }
 
 /**
@@ -557,6 +614,8 @@ export interface BindMethod<
  *   it. `GET`, `HEAD`, `OPTIONS` and `TRACE` endpoints take no `input`.
  * - Without `error`, the endpoint uses the `defaultError` of the client
  *   it's bound to.
+ * - `statusErrors` (see {@link StatusErrorMap}) are tried before those of
+ *   the client it's bound to.
  * - Plugin overrides are given when binding: a definition doesn't know
  *   which plugins a client has.
  *
@@ -602,10 +661,11 @@ export function endpoint<
 	O extends AnySchema | undefined = undefined,
 	EB extends AnySchema | undefined = undefined,
 	I extends AnySchema | undefined = undefined,
+	SE extends StatusErrorMap | undefined = undefined,
 >(
 	route: ValidRoute<R>,
-	definition?: UnboundDefinition<R, O, EB, I>,
-): UnboundEndpoint<R, O, EB, I>;
+	definition?: UnboundDefinition<R, O, EB, I, SE>,
+): UnboundEndpoint<R, O, EB, I, SE>;
 export function endpoint(
 	route: string,
 	definition?: RuntimeUnboundDefinition,

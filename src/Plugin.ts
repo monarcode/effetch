@@ -1,4 +1,5 @@
 import type * as Effect from "effect/Effect";
+import type * as Exit from "effect/Exit";
 import type * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -46,8 +47,8 @@ declare const UpstreamServicesTypeId: unique symbol;
  *
  * - `request`: in `onRequest`, the request it receives. In `onResponse`,
  *   the request this plugin passed on (plugins after it may have changed it
- *   further; `response.request` is the one that was sent). In `onError`,
- *   the request as the call built it, before any plugin ran.
+ *   further; `response.request` is the one that was sent). In `onError`
+ *   and `onExit`, the request as the call built it, before any plugin ran.
  * - `options`: the plugin's `defaults` merged with this call's override,
  *   `{ ...defaults, ...override }`, where `undefined` values in the
  *   override keep the default. `undefined` for a plugin without
@@ -92,6 +93,55 @@ export interface PluginContext<Opts> {
 }
 
 /**
+ * What a plugin's `onExit` hook receives besides the call's `Exit`: the
+ * fields of {@link PluginContext}, and
+ *
+ * - `response`: the response the plugin chain returned, whose status was
+ *   checked and whose body was decoded. When a plugin failed after a
+ *   response arrived, the last response the network sent (its body may not
+ *   have been read). `undefined` when no response arrived: a network
+ *   failure, a timeout, or a plugin that failed first. Its `request` is
+ *   the one that was sent, after every plugin's `onRequest`.
+ * - `durationMs`: how long the call took, in whole milliseconds measured
+ *   with Effect's `Clock`, from when its request entered the plugin chain
+ *   until the status was checked and the body decoded. Retries made by a
+ *   plugin's `wrap` are included.
+ *
+ * `route` is always set, as `onExit` doesn't run for requests sent through
+ * `client.httpClient`.
+ *
+ * @example
+ * ```ts
+ * import * as Effect from "effect/Effect";
+ * import * as Exit from "effect/Exit";
+ * import * as Fetch from "@monarcode/effetch";
+ *
+ * const timing = Fetch.plugin({
+ *   name: "timing",
+ *   onExit: (exit, ctx: Fetch.PluginExitContext<undefined>) =>
+ *     Effect.logDebug(
+ *       `${ctx.route} ${ctx.response?.status ?? "no response"}`,
+ *       Exit.isSuccess(exit) ? "ok" : "failed",
+ *       `${ctx.durationMs}ms`,
+ *     ),
+ * });
+ * ```
+ *
+ * @since 0.1.0
+ */
+export interface PluginExitContext<Opts> extends PluginContext<Opts> {
+	/** The call's method and unfilled path, such as `"GET /users/:id"`. */
+	readonly route: string;
+	/**
+	 * The response the plugin chain returned, else the last one the network
+	 * sent, or `undefined` when none arrived.
+	 */
+	readonly response: HttpClientResponse.HttpClientResponse | undefined;
+	/** How long the call took, in whole milliseconds. */
+	readonly durationMs: number;
+}
+
+/**
  * A plugin hooks into every call a client makes.
  *
  * - `onRequest` can change the request, or fail. Plugins run it in array
@@ -101,6 +151,9 @@ export interface PluginContext<Opts> {
  *   and decodes `output` only after the whole plugin chain.
  * - `onError` observes any failure of the call (after status check and
  *   decoding) and can't change the outcome.
+ * - `onExit` observes the end of every call, success included, with its
+ *   outcome, its response and how long it took. It can't change the
+ *   outcome either.
  * - `wrap` wraps the rest of the chain, for retries, timeouts and the like.
  *   It can add errors (`E`) but can't remove the ones from further in.
  *
@@ -153,6 +206,8 @@ export interface Plugin<
 	readonly onResponse?: Plugin.OnResponse<Opts, E, R> | undefined;
 	/** Observes any failure of the call. Can't change the outcome. */
 	readonly onError?: Plugin.OnError<Opts, R> | undefined;
+	/** Observes the end of every call. Can't change the outcome. */
+	readonly onExit?: Plugin.OnExit<Opts, R> | undefined;
 	/** Wraps the rest of the chain. */
 	readonly wrap?: Plugin.Wrap<Opts, E, R> | undefined;
 }
@@ -215,7 +270,7 @@ export declare namespace Plugin {
 
 	/**
 	 * The `onError` hook. `error` is a `FetchError`, another plugin's error,
-	 * or a defect's cause. It can't fail or change the call's outcome: if it
+	 * one of the call's `statusErrors`, or a defect's cause. It can't fail or change the call's outcome: if it
 	 * dies, the defect is logged at Debug level and ignored.
 	 *
 	 * Hooks run in array order, after the status check and decoding. They
@@ -237,6 +292,45 @@ export declare namespace Plugin {
 	export type OnError<Opts, R> = (
 		error: unknown,
 		ctx: PluginContext<Opts>,
+	) => Effect.Effect<void, never, R>;
+
+	/**
+	 * The `onExit` hook: runs once per call, when it's over, with the call's
+	 * `Exit`. On success that holds the call's result (the decoded `output`,
+	 * or the response for a call without one); otherwise the cause of its
+	 * failure, defect or interruption. It sees the final outcome,
+	 * `statusErrors` and decoding included, which suits logging and metrics.
+	 *
+	 * It can't fail or change the outcome: if it dies, the defect is logged
+	 * at Debug level and ignored. The call returns once every hook is done,
+	 * so keep hooks quick and fork anything slow. Hooks can't be
+	 * interrupted.
+	 *
+	 * Hooks run in array order, after the `onError` hooks. Where a plugin
+	 * sits in the list doesn't change what its `onExit` sees: retries made
+	 * by a `wrap` all belong to one call. They don't run when the call dies
+	 * before its request is built, for requests sent through
+	 * `client.httpClient`, or for a plugin the call skips.
+	 *
+	 * @example
+	 * ```ts
+	 * import * as Effect from "effect/Effect";
+	 * import * as Exit from "effect/Exit";
+	 * import type * as Fetch from "@monarcode/effetch";
+	 *
+	 * const report: Fetch.Plugin.OnExit<undefined, never> = (exit, ctx) =>
+	 *   Effect.logDebug(
+	 *     ctx.route,
+	 *     Exit.isSuccess(exit) ? "ok" : "failed",
+	 *     `${ctx.durationMs}ms`,
+	 *   );
+	 * ```
+	 *
+	 * @since 0.1.0
+	 */
+	export type OnExit<Opts, R> = (
+		exit: Exit.Exit<unknown, unknown>,
+		ctx: PluginExitContext<Opts>,
 	) => Effect.Effect<void, never, R>;
 
 	/**
@@ -314,6 +408,8 @@ export declare namespace Plugin {
 		readonly onResponse?: OnResponse<any, any, any> | undefined;
 		/** The plugin's `onError` hook, if any. */
 		readonly onError?: OnError<any, any> | undefined;
+		/** The plugin's `onExit` hook, if any. */
+		readonly onExit?: OnExit<any, any> | undefined;
 		/** The plugin's `wrap` hook, if any. */
 		readonly wrap?:
 			| ((
@@ -415,6 +511,7 @@ export declare namespace Plugin {
 		RError,
 		RWrap,
 		Opts,
+		RExit = never,
 	> {
 		/** Unique within a client. Used as the key for per-request overrides. */
 		readonly name: Name;
@@ -430,6 +527,8 @@ export declare namespace Plugin {
 			| undefined;
 		/** Observes any failure of the call. Can't change the outcome. */
 		readonly onError?: OnError<NoInfer<Opts>, RError> | undefined;
+		/** Observes the end of every call. Can't change the outcome. */
+		readonly onExit?: OnExit<NoInfer<Opts>, RExit> | undefined;
 		/** Wraps the rest of the chain. */
 		readonly wrap?: Wrap<NoInfer<Opts>, EWrap, RWrap> | undefined;
 	}
@@ -577,6 +676,7 @@ export function plugin<
 	RError = never,
 	RWrap = never,
 	Opts = undefined,
+	RExit = never,
 >(
 	definition: Plugin.Definition<
 		Name,
@@ -587,13 +687,18 @@ export function plugin<
 		RResponse,
 		RError,
 		RWrap,
-		Opts
+		Opts,
+		RExit
 	>,
 ): Plugin<
 	Name,
 	Settled<ERequest | EResponse | Exclude<EWrap, Plugin.UpstreamError>>,
 	Settled<
-		RRequest | RResponse | RError | Exclude<RWrap, Plugin.UpstreamServices>
+		| RRequest
+		| RResponse
+		| RError
+		| RExit
+		| Exclude<RWrap, Plugin.UpstreamServices>
 	>,
 	Settled<Opts>
 >;

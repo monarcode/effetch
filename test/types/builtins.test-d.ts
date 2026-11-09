@@ -12,6 +12,8 @@ import * as Fetch from "../../src/index.js";
 import {
 	bearer,
 	type BearerPlugin,
+	consoleLogger,
+	type ConsoleLoggerPlugin,
 	logger,
 	type LoggerPlugin,
 	retry,
@@ -57,9 +59,15 @@ describe("bearer", () => {
 	});
 });
 
-describe("logger, retry and timeout", () => {
+describe("logger, consoleLogger, retry and timeout", () => {
 	it("have named plugin types", () => {
 		expectTypeOf(logger()).toEqualTypeOf<LoggerPlugin>();
+		expectTypeOf(consoleLogger()).toEqualTypeOf<ConsoleLoggerPlugin>();
+		expectTypeOf(
+			consoleLogger({ enabled: false }),
+		).toEqualTypeOf<ConsoleLoggerPlugin>();
+		expectTypeOf<Fetch.Plugin.Errors<[ConsoleLoggerPlugin]>>().toBeNever();
+		expectTypeOf<Fetch.Plugin.Services<[ConsoleLoggerPlugin]>>().toBeNever();
 		expectTypeOf(retry()).toEqualTypeOf<RetryPlugin>();
 		expectTypeOf(
 			timeout({ duration: "1 second" }),
@@ -79,12 +87,31 @@ describe("logger, retry and timeout", () => {
 		timeout({ duration: "soon" });
 		// @ts-expect-error logs at Debug or Info only
 		logger({ level: "Warn" });
+		consoleLogger({
+			enabled: true,
+			detail: "headers",
+			only: "errors",
+			collapsed: false,
+			slow: "1 second",
+			maxBodyLength: 100,
+			redact: { headers: ["x-a"], query: [/^q/], body: ["otp"] },
+			filter: (call) => call.route !== "GET /health",
+			color: "ansi",
+		});
+		consoleLogger({ redact: false, color: false, slow: false });
+		// @ts-expect-error not a detail level
+		consoleLogger({ detail: "everything" });
+		// @ts-expect-error not a duration
+		consoleLogger({ slow: "soon" });
+		// @ts-expect-error not a color mode
+		consoleLogger({ color: true });
 	});
 });
 
 const make = Fetch.make({
 	plugins: [
 		logger(),
+		consoleLogger(),
 		retry(),
 		timeout({ duration: "10 seconds" }),
 		bearer({ token }),
@@ -116,6 +143,7 @@ describe("make with the built-ins", () => {
 		api.get("/todos", {
 			plugins: {
 				logger: false,
+				consoleLogger: { detail: "summary", slow: false },
 				retry: { times: 0 },
 				timeout: { duration: "1 minute" },
 				bearer: false,
@@ -125,6 +153,9 @@ describe("make with the built-ins", () => {
 		api.get("/todos", { plugins: { bearer: { scheme: "Token" } } });
 		// @ts-expect-error logger can only be skipped
 		api.get("/todos", { plugins: { logger: { level: "Info" } } });
+		api.get("/todos", { plugins: { consoleLogger: false } });
+		// @ts-expect-error consoleLogger's color is set once, by make
+		api.get("/todos", { plugins: { consoleLogger: { color: "css" } } });
 		// @ts-expect-error only times can be overridden
 		api.get("/todos", { plugins: { retry: { methods: ["POST"] } } });
 		// @ts-expect-error not a duration

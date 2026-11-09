@@ -5,7 +5,13 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import * as Fetch from "@monarcode/effetch";
-import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
+import {
+	bearer,
+	consoleLogger,
+	logger,
+	retry,
+	timeout,
+} from "@monarcode/effetch/plugins";
 
 const Todo = Schema.Struct({
 	id: Schema.Finite,
@@ -17,6 +23,10 @@ const Tokens = Schema.Struct({ accessToken: Schema.String });
 
 const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
 
+// Set by your bundler, such as `__DEV__` in React Native or
+// `import.meta.env.DEV` in Vite.
+declare const isDevelopment: boolean;
+
 const session: { accessToken: string | undefined } = {
 	accessToken: undefined,
 };
@@ -26,6 +36,12 @@ export const makeApi = Fetch.make({
 	defaultError: ApiError,
 	plugins: [
 		logger({ level: "Info" }),
+		// Prints every call to the console while developing; does nothing
+		// in production builds.
+		consoleLogger({
+			enabled: isDevelopment,
+			slow: "1 second",
+		}),
 		retry(),
 		timeout({ duration: "10 seconds" }),
 		bearer({ token: () => session.accessToken }),
@@ -63,6 +79,8 @@ export const exportTodos = Effect.gen(function* () {
 		plugins: {
 			timeout: { duration: "2 minutes" },
 			retry: { times: 0 },
+			// A large body: print the summary line only.
+			consoleLogger: { detail: "summary" },
 		},
 	});
 });
@@ -70,7 +88,9 @@ export const exportTodos = Effect.gen(function* () {
 export const isHealthy = Effect.gen(function* () {
 	const api = yield* Api;
 	return yield* api
-		.head("/health", { plugins: { logger: false, retry: false } })
+		.head("/health", {
+			plugins: { logger: false, consoleLogger: false, retry: false },
+		})
 		.pipe(
 			Effect.as(true),
 			Effect.catchTag("HttpError", () => Effect.succeed(false)),

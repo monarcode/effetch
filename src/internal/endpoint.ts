@@ -2,18 +2,26 @@ import * as Headers from "effect/http/Headers";
 import * as HttpMethod from "effect/http/HttpMethod";
 import * as Schema from "effect/Schema";
 
-import type { AnySchema } from "../Options.js";
+import type { AnySchema, StatusErrorMap } from "../Options.js";
 import { mergeOverrides, type OverrideMap } from "./plugins.js";
 import type { Call, RuntimeOptions } from "./request.js";
+import { freezeStatusErrors, joinStatusErrors } from "./statusErrors.js";
 import { isAbsoluteUrl } from "./url.js";
 
 /** An endpoint's definition, as seen at runtime. */
 export interface RuntimeDefinition {
 	readonly output?: AnySchema | undefined;
 	readonly error?: AnySchema | undefined;
+	readonly statusErrors?: StatusErrorMap | undefined;
 	readonly input?: AnySchema | undefined;
 	readonly headers?: Headers.Input | undefined;
 	readonly plugins?: OverrideMap | undefined;
+}
+
+/** What an endpoint takes from its client's config: the error defaults. */
+export interface ClientDefaults {
+	readonly defaultError?: AnySchema | undefined;
+	readonly statusErrors?: StatusErrorMap | undefined;
 }
 
 /** An endpoint, as seen at runtime. */
@@ -26,6 +34,10 @@ export interface RuntimeEndpoint {
 	readonly output: AnySchema | undefined;
 	/** The `error` schema, else the client's `defaultError`, else `Schema.Unknown`. */
 	readonly error: AnySchema;
+	/** The endpoint's `statusErrors` joined with the client's, every entry a list. */
+	readonly statusErrors: {
+		readonly [status: number]: ReadonlyArray<AnySchema>;
+	};
 	/** The `input` schema, or `undefined` without one. */
 	readonly input: AnySchema | undefined;
 }
@@ -40,6 +52,7 @@ export interface RuntimeUnboundEndpoint {
 	readonly path: string;
 	readonly output: AnySchema | undefined;
 	readonly error: AnySchema | undefined;
+	readonly statusErrors: StatusErrorMap | undefined;
 	readonly input: AnySchema | undefined;
 	readonly headers: Headers.Headers | undefined;
 }
@@ -89,12 +102,14 @@ export const parseRoute = (
  * one call's options on top. The definition's schemas are fixed; its
  * headers and plugin overrides are defaults the call can override.
  *
- * `defaultError` is the client's, used for the endpoint's `error` property
- * when the definition has none. Calls fall back to it on their own.
+ * `client` holds the client's `defaultError`, used for the endpoint's
+ * `error` property when the definition has none, and its `statusErrors`,
+ * joined after the definition's in the `statusErrors` property. Calls fall
+ * back to both on their own.
  */
 export const makeEndpoint = (
 	call: (method: HttpMethod.HttpMethod) => Call,
-	defaultError: AnySchema | undefined,
+	client: ClientDefaults,
 	route: string,
 	definition: RuntimeDefinition = {},
 ): RuntimeEndpoint => {
@@ -104,11 +119,13 @@ export const makeEndpoint = (
 		definition.headers === undefined
 			? undefined
 			: Headers.fromInput(definition.headers);
+	const statusErrors = freezeStatusErrors(definition.statusErrors);
 	const endpoint = (options: RuntimeOptions = {}) =>
 		send(path, {
 			...options,
 			output: definition.output,
 			error: definition.error,
+			statusErrors,
 			input: definition.input,
 			headers: mergeHeaders(headers, options.headers),
 			plugins: mergeOverrides(definition.plugins, options.plugins),
@@ -118,7 +135,8 @@ export const makeEndpoint = (
 		method,
 		path,
 		output: definition.output,
-		error: definition.error ?? defaultError ?? Schema.Unknown,
+		error: definition.error ?? client.defaultError ?? Schema.Unknown,
+		statusErrors: joinStatusErrors([statusErrors, client.statusErrors]),
 		input: definition.input,
 	});
 };
@@ -138,6 +156,7 @@ export const makeUnboundEndpoint = (
 		path,
 		output: definition.output,
 		error: definition.error,
+		statusErrors: freezeStatusErrors(definition.statusErrors),
 		input: definition.input,
 		headers:
 			definition.headers === undefined
@@ -153,13 +172,14 @@ export const makeUnboundEndpoint = (
  */
 export const bindEndpoint = (
 	call: (method: HttpMethod.HttpMethod) => Call,
-	defaultError: AnySchema | undefined,
+	client: ClientDefaults,
 	unbound: RuntimeUnboundEndpoint,
 	options: RuntimeBindOptions = {},
 ): RuntimeEndpoint =>
-	makeEndpoint(call, defaultError, unbound.route, {
+	makeEndpoint(call, client, unbound.route, {
 		output: unbound.output,
 		error: unbound.error,
+		statusErrors: unbound.statusErrors,
 		input: unbound.input,
 		headers: mergeHeaders(unbound.headers, options.headers),
 		plugins: options.plugins,

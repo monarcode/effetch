@@ -2,6 +2,73 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## 0.1.0-rc.2
+
+### Added
+
+- `statusErrors` turns error responses into your own errors. It maps an
+  HTTP status to an error schema, usually a `Schema.TaggedError` class, or
+  to a list of schemas tried in order:
+  `statusErrors: { 404: TodoNotFound, 400: [InvalidRole, RoleTaken] }`.
+  The first schema that decodes the JSON body is what the call fails with,
+  so callers write `Effect.catchTag("TodoNotFound", …)` rather than
+  checking `status` and `body`. It can be given to `Fetch.make` (every
+  call), `client.endpoint` and `Fetch.endpoint` (every call of the
+  endpoint) and a call's options. The call's schemas are tried first, then
+  the endpoint's, then the client's.
+  - Backends don't send a `_tag`, so effetch adds the schema's literal
+    `_tag` to the body before decoding. `Schema.encodeKeys` renames fields.
+  - A response that no schema decodes, or with an empty or non-JSON body,
+    fails with the `HttpError` it fails with today, which stays in the
+    error type. Calls without `statusErrors` keep exactly their types and
+    behaviour.
+  - Plugins see the raw response, as before, so `retry` still retries by
+    status. `onError` receives the decoded error.
+  - Maps are copied and frozen where they're given, so changing one later
+    changes nothing. The client has a `statusErrors` property, its copy or
+    `undefined`, and so do `Fetch.endpoint` definitions. Endpoints have a
+    `statusErrors` property too: their map joined with the client's, each
+    status listing its schemas in the order they're tried.
+  - A client's type includes its map, `Client<Ps, EB, SE>`, so a client
+    with a map isn't assignable to a plain `Fetch.Client`, which would hide
+    its errors.
+  - New types: `StatusErrorMap`, `StatusError`, `StatusErrorSchema` and
+    `StatusErrorServices`.
+    `Client`, `ClientConfig`, `Endpoint`, `EndpointDefinition`,
+    `UnboundEndpoint`, `UnboundDefinition`, the option types, the method
+    signatures, `CallEffect`, `CallError` and `CallServices` gain a type
+    parameter for the maps, last and defaulting to `undefined`, so existing
+    type references keep compiling.
+- Plugins can have an `onExit(exit, ctx)` hook. It runs once per call, when
+  it's over, whatever the outcome: success, failure, defect or interruption.
+  It gets the call's `Exit` (with the decoded `output`, or the response for
+  a call without one) and a `PluginExitContext`: the `PluginContext` fields,
+  the `response` (the one the plugins returned, else the last one the
+  network sent, or `undefined`), and `durationMs`,
+  from sending the request to decoding the body, retries included. Hooks
+  run in array order, after the `onError` hooks, and can't change the
+  outcome; one that dies is logged at Debug level. They don't run for
+  `client.httpClient`, or for a plugin the call skips.
+  - `Plugin.Definition` gains an `RExit` type parameter for the hook's
+    services, last and defaulting to `never`, so existing references keep
+    compiling.
+- `consoleLogger` (from `@monarcode/effetch/plugins`) prints each call to the
+  console while you develop: a line with the route, status, duration, size
+  and outcome, opening a group with the full URL, the request and response
+  headers and bodies, and the error. It redacts sensitive headers, query
+  parameters and body keys (in errors too), reads only text bodies of at
+  most 1 MB and never the body of a raw or interrupted call, colors with CSS
+  or ANSI codes, and can be limited to errors, filtered, or set per call.
+  Its `enabled` option turns it off in production while keeping the
+  client's type. Groups start collapsed, except in React Native, whose
+  Metro terminal drops collapsed groups.
+
+### Changed
+
+- Values typed as `Client`, `Endpoint` or `UnboundEndpoint` that you build
+  by hand, such as test doubles, need a `statusErrors` property:
+  `undefined`, or the map the real one would have.
+
 ## 0.1.0-rc.1
 
 ### Added

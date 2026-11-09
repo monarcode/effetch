@@ -41,8 +41,12 @@ export type {
 	QueryValue,
 	RequestMethod,
 	RequestOptions,
+	StatusError,
+	StatusErrorMap,
+	StatusErrorSchema,
+	StatusErrorServices,
 	Success,
 } from "./Options.js";
 export type { PathParamNames, PathParams, PathParamValue } from "./Path.js";
 export { plugin } from "./Plugin.js";
-export type { Plugin, PluginContext } from "./Plugin.js";
+export type { Plugin, PluginContext, PluginExitContext } from "./Plugin.js";

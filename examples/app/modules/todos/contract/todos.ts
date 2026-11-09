@@ -30,8 +30,19 @@ export type NewTodo = typeof NewTodo.Type;
 export const TodoPatch = Schema.Struct({ done: Schema.Boolean });
 export type TodoPatch = typeof TodoPatch.Type;
 
+/** A 404 from an endpoint that takes a todo's id. */
+export class TodoNotFound extends Schema.TaggedError<TodoNotFound>()(
+	"TodoNotFound",
+	{ message: Schema.String },
+) {}
+
+const byId = { 404: TodoNotFound };
+
 export const listTodos = Fetch.endpoint("GET /todos", { output: TodoPage });
-export const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
+export const getTodo = Fetch.endpoint("GET /todos/:id", {
+	output: Todo,
+	statusErrors: byId,
+});
 export const createTodo = Fetch.endpoint("POST /todos", {
 	input: NewTodo,
 	output: Todo,
@@ -40,5 +51,8 @@ export const updateTodo = Fetch.endpoint("PATCH /todos/:id", {
 	input: TodoPatch,
 	output: Todo,
 	headers: { "content-type": "application/merge-patch+json" },
+	statusErrors: byId,
 });
-export const removeTodo = Fetch.endpoint("DELETE /todos/:id");
+export const removeTodo = Fetch.endpoint("DELETE /todos/:id", {
+	statusErrors: byId,
+});
