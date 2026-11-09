@@ -7,7 +7,6 @@ import * as Headers from "effect/http/Headers";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 
@@ -25,6 +24,7 @@ import {
 import { base, setup } from "../utils/client.js";
 import { after } from "../utils/clock.js";
 import { delayed, failure, hang, type Script } from "../utils/mockClient.js";
+import { redacted } from "../utils/redacted.js";
 import { reply } from "../utils/reply.js";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
@@ -243,7 +243,7 @@ describe("consoleLogger", () => {
 						page: 1,
 						access_token: "q",
 						sig: "s",
-						secret: Redacted.make("hidden"),
+						secret: redacted("hidden"),
 					},
 					headers: { "x-csrf-token": "c", "x-trace": "t" },
 					body: {
