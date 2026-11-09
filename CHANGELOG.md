@@ -38,9 +38,7 @@ All notable changes to `@monarcode/effetch`, newest first.
     `UnboundEndpoint`, `UnboundDefinition`, the option types, the method
     signatures, `CallEffect`, `CallError` and `CallServices` gain a type
     parameter for the maps, last and defaulting to `undefined`, so existing
-    type references keep compiling. Values typed as `Client`, `Endpoint` or
-    `UnboundEndpoint` that you build by hand, such as test doubles, need a
-    `statusErrors` property.
+    type references keep compiling.
 - Plugins can have an `onExit(exit, ctx)` hook. It runs once per call, when
   it's over, whatever the outcome: success, failure, defect or interruption.
   It gets the call's `Exit` (with the decoded `output`, or the response for
@@ -60,9 +58,16 @@ All notable changes to `@monarcode/effetch`, newest first.
   headers and bodies, and the error. It redacts sensitive headers, query
   parameters and body keys (in errors too), reads only text bodies of at
   most 1 MB and never the body of a raw or interrupted call, colors with CSS
-  or ANSI codes, and can be limited to errors, filtered, or set per call. Its `enabled` option turns it off in
-  production while keeping the client's type. Groups start collapsed,
-  except in React Native, whose Metro terminal drops collapsed groups.
+  or ANSI codes, and can be limited to errors, filtered, or set per call.
+  Its `enabled` option turns it off in production while keeping the
+  client's type. Groups start collapsed, except in React Native, whose
+  Metro terminal drops collapsed groups.
+
+### Changed
+
+- Values typed as `Client`, `Endpoint` or `UnboundEndpoint` that you build
+  by hand, such as test doubles, need a `statusErrors` property:
+  `undefined`, or the map the real one would have.
 
 ## 0.1.0-rc.1
 

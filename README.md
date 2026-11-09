@@ -29,8 +29,9 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 ```
 
 > **Release candidate.** effetch is close to its first stable release
-> (`0.1.0-rc.N`). The API is frozen; only fixes and documentation changes
-> until 0.1.0.
+> (`0.1.0-rc.N`). The API is settled: release candidates add small,
+> opt-in features and fixes, and the [changelog](./CHANGELOG.md) lists
+> anything that needs a change in your code.
 
 ## Contents
 
