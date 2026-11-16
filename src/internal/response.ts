@@ -7,12 +7,10 @@ import * as Schema from "effect/Schema";
 import { DecodeError, HttpError } from "../Errors.js";
 import type { AnySchema, StatusErrorMap } from "../Options.js";
 import { decodeJson } from "./json.js";
+import { messageOf } from "./message.js";
 import { bodyFormat } from "./output.js";
 import { decodeStatusError, statusErrorsFor } from "./statusErrors.js";
 import { errorUrl } from "./url.js";
-
-const messageOf = (error: unknown): string =>
-	error instanceof Error ? error.message : String(error);
 
 /**
  * `undefined` for an empty or whitespace-only body, else the parsed JSON.
@@ -120,6 +118,39 @@ export function checkStatus(
 	});
 }
 
+/** Makes the `DecodeError`s of a 2xx response whose body is decoded. */
+export interface BodyFailures {
+	/** A `DecodeError` with this `issue` and `message`. */
+	readonly failure: (issue: unknown, message: string) => DecodeError;
+	/** The `DecodeError` of a body that can't be read. */
+	readonly unreadable: (error: HttpClientError.HttpClientError) => DecodeError;
+}
+
+/**
+ * Makes the `DecodeError`s of `response`, which carry its method, URL and
+ * status. Used by `decodeOutput` and by streams.
+ */
+export const bodyFailures = (
+	response: HttpClientResponse.HttpClientResponse,
+): BodyFailures => {
+	const failure = (issue: unknown, message: string) =>
+		new DecodeError({
+			method: response.request.method,
+			url: errorUrl(response.request.url),
+			status: response.status,
+			issue,
+			message,
+		});
+	return {
+		failure,
+		unreadable: (error) =>
+			failure(
+				error,
+				`Failed to read the response body: ${messageOf(error.cause ?? error)}`,
+			),
+	};
+};
+
 /**
  * Decodes a 2xx response body with `output`, reading it as `output`'s
  * format (see `bodyFormat`): JSON by default, or text or bytes for schemas
@@ -143,19 +174,7 @@ export const decodeOutput = <O extends AnySchema>(
 	response: HttpClientResponse.HttpClientResponse,
 	output: O,
 ): Effect.Effect<O["Type"], DecodeError, O["DecodingServices"]> => {
-	const failure = (issue: unknown, message: string) =>
-		new DecodeError({
-			method: response.request.method,
-			url: errorUrl(response.request.url),
-			status: response.status,
-			issue,
-			message,
-		});
-	const unreadable = (error: HttpClientError.HttpClientError) =>
-		failure(
-			error,
-			`Failed to read the response body: ${messageOf(error.cause ?? error)}`,
-		);
+	const { failure, unreadable } = bodyFailures(response);
 	const decodeWith = (value: unknown) =>
 		Effect.mapError(Schema.decodeUnknownEffect(output)(value), (error) =>
 			failure(error.issue, error.message),

@@ -22,8 +22,13 @@ import {
 	provideResponseBox,
 	provideRoute,
 } from "./internal/plugins.js";
-import { makeCall, type RuntimeOptions } from "./internal/request.js";
+import {
+	type Call,
+	makeCall,
+	type RuntimeOptions,
+} from "./internal/request.js";
 import { freezeStatusErrors } from "./internal/statusErrors.js";
+import { openStream } from "./internal/stream.js";
 import { hasQueryOrFragment } from "./internal/url.js";
 import type {
 	AnySchema,
@@ -33,6 +38,28 @@ import type {
 	StatusErrorMap,
 } from "./Options.js";
 import type { Plugin } from "./Plugin.js";
+import type { StreamFormat, StreamMethod } from "./Streams.js";
+
+/** What `api.sse` and `api.ndjson` take, as seen at runtime. */
+type StreamCallOptions = RuntimeOptions & {
+	readonly method?: HttpMethod.HttpMethod | undefined;
+};
+
+/** `api.sse` or `api.ndjson`: sends `path` with `options`, as a stream. */
+const streamCall = (
+	call: (method: HttpMethod.HttpMethod) => Call,
+	format: StreamFormat,
+	path: string,
+	options: StreamCallOptions = {},
+) => {
+	const { method = "GET", ...rest } = options;
+	return openStream(
+		format,
+		`api.${format}`,
+		(streamOptions) => call(method)(path, streamOptions),
+		rest,
+	);
+};
 
 /**
  * Configuration for {@link make}.
@@ -354,6 +381,85 @@ export interface Client<
 	readonly del: BodyMethod<Ps, EB, SE>;
 
 	/**
+	 * Sends a request and gives its Server-Sent Events
+	 * (`text/event-stream`) as a `Stream`, one `SseEvent` per event,
+	 * as they arrive. Use it for progress feeds, notifications and the
+	 * streamed answers of language models.
+	 *
+	 * - `output` decodes each event's `data` as JSON. `Fetch.text()` gives
+	 *   the data as text, which is also the default without `output`.
+	 * - `method` defaults to `"GET"`. Pass `"POST"`, with a `body`, for
+	 *   APIs that stream the answer to a request.
+	 * - The request sends `Accept: text/event-stream`, unless an `accept`
+	 *   header is set on the call or the client.
+	 *
+	 * The request runs as any call does, up to the response's headers:
+	 * plugins run once, `retry` and `timeout` apply to getting the
+	 * response, and an error status fails the stream with an `HttpError`
+	 * or a `statusErrors` error, before it gives anything, and a `204` or
+	 * `205` gives an empty stream. Then the body is read as it arrives. An
+	 * event whose data doesn't match `output`, a body that can't be read to
+	 * the end, or a `Content-Type` other than `text/event-stream` fails the
+	 * stream with a `DecodeError`, after the events before it. For plugins,
+	 * the call ends when the headers arrive: their `onExit` hooks don't see
+	 * the body being read.
+	 *
+	 * Interrupting the stream, or taking only part of it, aborts the
+	 * request. The stream doesn't reconnect, and ignores `retry:` lines.
+	 *
+	 * @stability unstable: events are parsed with Effect's `encoding/Sse`,
+	 * which Effect marks unstable.
+	 *
+	 * @example
+	 * ```ts
+	 * import * as Effect from "effect/Effect";
+	 * import * as Schema from "effect/Schema";
+	 * import * as Stream from "effect/Stream";
+	 * import * as Fetch from "@monarcode/effetch";
+	 *
+	 * const JobEvent = Schema.Struct({ percent: Schema.Finite });
+	 *
+	 * const follow = (api: Fetch.Client, id: number) =>
+	 *   api.sse("/jobs/:id/events", { params: { id }, output: JobEvent }).pipe(
+	 *     Stream.runForEach((event) => Effect.log(`${event.data.percent}%`)),
+	 *   );
+	 * ```
+	 */
+	readonly sse: StreamMethod<"sse", Ps, EB, SE>;
+
+	/**
+	 * Sends a request and gives its newline-delimited JSON body
+	 * (`application/x-ndjson`, JSON Lines) as a `Stream`, one value per
+	 * line, as they arrive. Use it for exports and other long lists that a
+	 * server streams.
+	 *
+	 * - `output` decodes each line's JSON. Without it, each value is the
+	 *   parsed JSON, as `unknown`. `Fetch.text()` gives each line's text.
+	 * - Blank lines are skipped, and the last line needs no line end.
+	 * - `method` defaults to `"GET"`.
+	 * - The request sends `Accept: application/x-ndjson`, unless an
+	 *   `accept` header is set on the call or the client.
+	 *
+	 * Errors, plugins, retries, timeouts and interruption work as for
+	 * {@link Client.sse}. A line that isn't valid JSON or doesn't match
+	 * `output` fails the stream with a `DecodeError` that gives its line
+	 * number.
+	 *
+	 * @example
+	 * ```ts
+	 * import * as Schema from "effect/Schema";
+	 * import * as Stream from "effect/Stream";
+	 * import * as Fetch from "@monarcode/effetch";
+	 *
+	 * const Row = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+	 *
+	 * const exportRows = (api: Fetch.Client) =>
+	 *   api.ndjson("/export", { output: Row }).pipe(Stream.runCollect);
+	 * ```
+	 */
+	readonly ndjson: StreamMethod<"ndjson", Ps, EB, SE>;
+
+	/**
 	 * Defines an endpoint: a route like `"GET /users/:id"` and the schemas,
 	 * headers and plugin overrides to call it with. You get back a function
 	 * that takes one call's `params`, `query`, `body`, `headers` and
@@ -666,6 +772,10 @@ export const make = <
 			put: call("PUT"),
 			patch: call("PATCH"),
 			del: call("DELETE"),
+			sse: (path: string, options?: StreamCallOptions) =>
+				streamCall(call, "sse", path, options),
+			ndjson: (path: string, options?: StreamCallOptions) =>
+				streamCall(call, "ndjson", path, options),
 			endpoint: (route: string, definition?: RuntimeDefinition) =>
 				makeEndpoint(call, defaults, route, definition),
 			bind: (

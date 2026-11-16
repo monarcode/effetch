@@ -66,7 +66,9 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as Fetch from "@monarcode/effetch";
 import {
 	bearer,
@@ -436,6 +438,54 @@ if (
 	viaFake.urls.join() !== "https://api.test/dated/4,https://api.test/todos/9"
 ) {
 	throw new Error(`Unexpected FetchTest result: ${JSON.stringify(viaFake)}`);
+}
+
+// Streams and pages, answered by FetchTest.
+const Step = Schema.Struct({ percent: Schema.Finite });
+const steps = Fetch.endpoint("GET /jobs/:id/events", { output: Step, stream: "sse" });
+const rows = Fetch.endpoint("GET /rows", { output: Step, stream: "ndjson" });
+const pageOf = Fetch.endpoint("GET /pages", {
+	query: Schema.Struct({ page: Schema.Finite }),
+	output: Schema.Array(Step),
+});
+const streamed = await Effect.runPromise(
+	Effect.gen(function* () {
+		const api = yield* Fetch.make({ baseUrl: "https://api.test" });
+		const events = yield* Stream.runCollect(api.bind(steps)({ params: { id: 1 } }));
+		const lines = yield* Stream.runCollect(api.ndjson("/rows", { output: Step }));
+		const pages = yield* Stream.runCollect(
+			Fetch.paginate(api.bind(pageOf), {
+				start: 1,
+				request: (page) => ({ query: { page } }),
+				next: (items, page) => (items.length === 0 ? Option.none() : Option.some(page + 1)),
+			}),
+		);
+		return { events: [...events], lines: [...lines], pages: [...pages] };
+	}).pipe(
+		Effect.provide(
+			FetchTest.layer([
+				FetchTest.respond(steps, ({ params }) =>
+					Effect.succeed([{ id: params.id, data: { percent: 100 } }]),
+				),
+				FetchTest.respond(rows, () => Effect.succeed([{ percent: 1 }, { percent: 2 }])),
+				FetchTest.respond(pageOf, ({ query }) =>
+					Effect.succeed(query.page === 1 ? [{ percent: 1 }] : []),
+				),
+			]),
+		),
+	),
+);
+const firstEvent: Fetch.SseEvent<{ readonly percent: number }> | undefined = streamed.events[0];
+if (
+	JSON.stringify(streamed) !==
+	JSON.stringify({
+		events: [{ event: "message", id: "1", data: { percent: 100 } }],
+		lines: [{ percent: 1 }, { percent: 2 }],
+		pages: [[{ percent: 1 }], []],
+	}) ||
+	firstEvent?.id !== "1"
+) {
+	throw new Error(`Unexpected stream result: ${JSON.stringify(streamed)}`);
 }
 
 console.log("smoke: ok");

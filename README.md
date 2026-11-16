@@ -82,6 +82,14 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
   - [Defaults and overrides](#defaults-and-overrides)
   - [Why use endpoints](#why-use-endpoints)
   - [Endpoints or methods?](#endpoints-or-methods)
+- [Streaming responses](#streaming-responses)
+  - [Server-Sent Events](#server-sent-events)
+  - [Newline-delimited JSON](#newline-delimited-json)
+  - [Stream endpoints](#stream-endpoints)
+  - [How a stream fails](#how-a-stream-fails)
+  - [Stopping a stream](#stopping-a-stream)
+- [Pagination](#pagination)
+  - [Cursors in headers](#cursors-in-headers)
 - [Structuring an app](#structuring-an-app)
   - [A small app](#a-small-app)
   - [A feature-sliced app](#a-feature-sliced-app)
@@ -89,6 +97,7 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 - [Testing](#testing)
   - [A fake backend from your endpoints](#a-fake-backend-from-your-endpoints)
   - [Errors and other statuses](#errors-and-other-statuses)
+  - [Stream endpoints in tests](#stream-endpoints-in-tests)
   - [Checking what was sent](#checking-what-was-sent)
   - [How requests are matched](#how-requests-are-matched)
   - [A hand-written HttpClient](#a-hand-written-httpclient)
@@ -183,7 +192,8 @@ also:
 - Use Effect's **`HttpApi`** when you own both the server and the client, and
   want them to share one contract.
 - Use **`HttpClient`** directly for what effetch doesn't cover, such as
-  streaming. Every effetch client gives you its own when you need it.
+  WebSockets or uploads with progress. Every effetch client gives you its
+  own when you need it.
 
 ## Getting started
 
@@ -625,7 +635,10 @@ export const page = Effect.gen(function* () {
     api.request(method, path);
   ```
 
-- **You need something the methods don't do, such as streaming a response.**
+- **The response is a stream of events or lines.** Use `api.sse` or
+  `api.ndjson` (see [Streaming responses](#streaming-responses)).
+
+- **You need something the methods don't do.**
   `api.httpClient` is the configured `HttpClient` underneath, with the base
   URL, the default headers and the plugins, but no status check and no
   decoding.
@@ -1780,6 +1793,246 @@ Avoid:
   same name, the later one silently wins. Nest them instead:
   `{ users, todos }`.
 
+## Streaming responses
+
+Some APIs send their answer a piece at a time: progress feeds,
+notifications, exports, the answers of language models. `api.sse` and
+`api.ndjson` give such a body as an Effect `Stream`, one value at a time,
+as it arrives.
+
+### Server-Sent Events
+
+`api.sse` reads a `text/event-stream` body. Each value is an event, with
+its `event` name (`"message"` when the server sends none), its `id`, and its
+`data`, decoded with `output`:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import * as Fetch from "@monarcode/effetch";
+
+const JobEvent = Schema.Struct({ percent: Schema.Finite });
+
+export const followJob = (api: Fetch.Client, id: number) =>
+  api.sse("/jobs/:id/events", { params: { id }, output: JobEvent }).pipe(
+    Stream.takeUntil((event) => event.data.percent === 100),
+    Stream.runForEach((event) => Effect.log(`${event.data.percent}%`)),
+  );
+```
+
+- `output` decodes each event's `data` as JSON. Without it, or with
+  `Fetch.text()`, `data` is the text as it was sent.
+- `method` defaults to `"GET"`. APIs that stream the answer to a request
+  take `"POST"` and a `body`:
+
+  ```ts
+  import * as Schema from "effect/Schema";
+
+  import type * as Fetch from "@monarcode/effetch";
+
+  const Prompt = Schema.Struct({ prompt: Schema.String });
+  const Delta = Schema.Struct({ text: Schema.String });
+
+  export const complete = (api: Fetch.Client, prompt: string) =>
+    api.sse("/completions", {
+      method: "POST",
+      input: Prompt,
+      body: { prompt },
+      output: Delta,
+    });
+  ```
+
+- The request sends `Accept: text/event-stream`, unless the call or the
+  client sets an `accept` header.
+- Events are parsed by the [WHATWG rules][sse-spec]: comment lines are
+  ignored, a multi-line `data` is joined with `\n`, and an `id` carries over
+  to the events after it. The stream doesn't reconnect, and ignores
+  `retry:` lines.
+- A response whose `Content-Type` is set to another type than
+  `text/event-stream`, such as a login page from a proxy, fails the stream
+  with a `DecodeError`.
+
+`output` decodes every event, so an event whose data doesn't match it
+fails the stream, after the events before it. When the server ends with a
+sentinel that isn't JSON, such as `data: [DONE]`, leave `output` out, stop
+at the sentinel, then decode the rest:
+
+```ts
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import type * as Fetch from "@monarcode/effetch";
+
+const Delta = Schema.fromJsonString(Schema.Struct({ text: Schema.String }));
+
+export const deltas = (api: Fetch.Client, prompt: string) =>
+  api.sse("/completions", { method: "POST", body: { prompt } }).pipe(
+    Stream.takeWhile((event) => event.data !== "[DONE]"),
+    Stream.mapEffect((event) => Schema.decodeUnknownEffect(Delta)(event.data)),
+  );
+```
+
+`api.sse` parses events with Effect's `encoding/Sse` module, which Effect
+marks unstable.
+
+[sse-spec]: https://html.spec.whatwg.org/multipage/server-sent-events.html
+
+### Newline-delimited JSON
+
+`api.ndjson` reads an `application/x-ndjson` body (also called JSON Lines):
+one JSON value per line, decoded with `output`:
+
+```ts
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import type * as Fetch from "@monarcode/effetch";
+
+const Row = Schema.Struct({ id: Schema.Finite, email: Schema.String });
+
+export const countRows = (api: Fetch.Client) =>
+  api.ndjson("/export/users", { output: Row }).pipe(Stream.runCount);
+```
+
+- Without `output`, each value is the parsed JSON, typed `unknown`.
+  `Fetch.text()` gives each line's text instead.
+- Blank lines are skipped, and the last line needs no line end.
+- The request sends `Accept: application/x-ndjson`, unless an `accept`
+  header is set.
+
+### Stream endpoints
+
+An endpoint with `stream: "sse"` or `stream: "ndjson"` returns a `Stream`
+from its calls, with every way of making or binding one:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+const JobEvent = Schema.Struct({ percent: Schema.Finite });
+
+export const jobEvents = Fetch.endpoint("GET /jobs/:id/events", {
+  output: JobEvent,
+  stream: "sse",
+});
+
+export const follow = (api: Fetch.Client, id: number) =>
+  api.bind(jobEvents)({ params: { id } });
+```
+
+### How a stream fails
+
+A stream's request runs as any call does, up to the response's headers:
+
+- Plugins run once. `retry` and `timeout` apply to getting the response,
+  not to reading the body.
+- When no response arrives, the stream fails with a `NetworkError`.
+- An error status fails it with an `HttpError`, or a
+  [`statusErrors`](#errors-by-status) error, before it gives any value.
+- A `204 No Content` or `205 Reset Content` gives an empty stream.
+
+Then the body is read as it arrives. The values before a failure are given
+first. A value that doesn't match `output`, or a body that breaks off,
+fails the stream with a `DecodeError`, which names the event or the line:
+`Line 3 doesn't match the output schema`.
+
+For plugins, the call ends when the response's headers arrive. Their
+`onExit` hooks, and so `logger` and `consoleLogger`, report it then, with
+the time to the headers, and a `DecodeError` while reading the body doesn't
+reach them. Handle it on the stream, with `Stream.catchTag("DecodeError", …)`
+or `Stream.tapError`.
+
+### Stopping a stream
+
+Interrupting the stream, or taking only part of it, as with `Stream.take`,
+aborts the request. Nothing else is needed to close the connection.
+
+A stream can't take `responseMode`, or an `output` made with
+`Fetch.bytes()`. A call that passes one dies, and a definition with one
+throws when it's made.
+
+## Pagination
+
+`Fetch.paginate` pages through a list, as a `Stream` of pages. It calls a
+bound endpoint for the first page, then for the next one, until `next`
+says there's none:
+
+```ts
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import * as Fetch from "@monarcode/effetch";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+const listTodos = Fetch.endpoint("GET /todos", {
+  query: Schema.Struct({ page: Schema.Finite }),
+  output: Schema.Array(Todo),
+});
+
+export const allTodos = (api: Fetch.Client) =>
+  Fetch.paginate(api.bind(listTodos), {
+    start: 1,
+    request: (page) => ({ query: { page } }),
+    next: (todos, page) =>
+      todos.length === 0 ? Option.none() : Option.some(page + 1),
+  }).pipe(Stream.flattenIterable, Stream.runCollect);
+```
+
+- `start` is the state of the first page, such as a page number or a
+  cursor.
+- `request(state)` gives the page's call options: `params`, `query`, `body`
+  and `headers`, typed by the endpoint.
+- `next(page, state, response)` gives the next page's state, or
+  `Option.none()` after the last page.
+
+Each page is one value of the stream, so a page that's a list stays a list.
+`Stream.flattenIterable` gives its items one by one.
+
+The stream is lazy: it sends a page's call only when the page is needed, so
+`Stream.take(1)` sends one. A call that fails fails the stream with the
+call's error.
+
+### Cursors in headers
+
+When the next page's cursor is in a header, such as a `Link` header, define
+the endpoint with `responseMode: "decoded-and-response"`. `next` then gets
+each page's response:
+
+```ts
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+const Item = Schema.Struct({ id: Schema.Finite });
+
+const listItems = Fetch.endpoint("GET /items", {
+  output: Schema.Array(Item),
+  responseMode: "decoded-and-response",
+});
+
+const nextCursor = (link: string | undefined) =>
+  Option.fromNullishOr(
+    /[?&]cursor=([^&>]+)[^>]*>;\s*rel="next"/.exec(link ?? "")?.[1],
+  );
+
+export const allItems = (api: Fetch.Client) =>
+  Fetch.paginate(api.bind(listItems), {
+    start: undefined as string | undefined,
+    request: (cursor) => (cursor === undefined ? {} : { query: { cursor } }),
+    next: (_items, _cursor, response) => nextCursor(response.headers.link),
+  });
+```
+
+`Fetch.paginate` takes a bound endpoint, from `client.endpoint`,
+`client.bind`, `client.bindAll` or `Fetch.Endpoints`. A definition made by
+`Fetch.endpoint` needs binding first, and a stream endpoint can't be paged.
+
 ## Structuring an app
 
 An endpoint calls through a client, so it's made, or bound, wherever a client
@@ -2132,6 +2385,42 @@ export const Backend = FetchTest.layer([
 ]);
 ```
 
+### Stream endpoints in tests
+
+A handler for a [stream endpoint](#stream-endpoints) returns a list, and
+`FetchTest` sends it as the stream's body: events for `stream: "sse"`, each
+with its `data` and an optional `event` and `id`, and values for
+`stream: "ndjson"`. Each value is encoded with the endpoint's `output`:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+const JobEvent = Schema.Struct({ percent: Schema.Finite });
+
+const jobEvents = Fetch.endpoint("GET /jobs/:id/events", {
+  output: JobEvent,
+  stream: "sse",
+});
+
+export const Backend = FetchTest.layer([
+  FetchTest.respond(jobEvents, ({ params }) =>
+    Effect.succeed([
+      { data: { percent: 50 } },
+      { event: "done", id: params.id, data: { percent: 100 } },
+    ]),
+  ),
+]);
+```
+
+The whole body is sent at once. To test how your code handles values that
+arrive slowly, or a body that breaks off, use
+[a hand-written `HttpClient`](#a-hand-written-httpclient) whose `Response`
+has a `ReadableStream` body.
+
 ### Checking what was sent
 
 The layer also provides `FetchTest.Recorder`, which keeps every request it
@@ -2278,6 +2567,11 @@ page's URL.
   Native 0.79 (Expo SDK 53). On older versions, set
   `resolver.unstable_enablePackageExports = true` in `metro.config.js`.
 - `FetchHttpClient.layer` uses the global `fetch`.
+- React Native's `fetch` doesn't stream response bodies, so `api.sse`,
+  `api.ndjson` and stream endpoints fail with a `DecodeError` there. In
+  Expo, provide the `fetch` from `expo/fetch`, which streams, as
+  `FetchHttpClient.Fetch`:
+  `Layer.succeed(FetchHttpClient.Fetch)(expoFetch as typeof globalThis.fetch)`.
 - Metro's terminal drops `console.groupCollapsed` and everything inside it,
   so `consoleLogger` doesn't collapse its groups in React Native (see
   [Console logging](#console-logging)).
@@ -2293,6 +2587,12 @@ page's URL.
 - `timeout` and the logged duration cover the time until the response
   headers arrive, not downloading the body.
 - Two plugins with the same name are only caught when the client is made.
+- Streams don't reconnect: `api.sse` ignores `retry:` lines and the
+  `Last-Event-ID` header. Repeat the call, with the last `id` in a header,
+  to pick up where a stream stopped.
+- For a stream, plugins see the call end when the response's headers
+  arrive: they don't see the body being read, or a `DecodeError` while
+  reading it, and `timeout` doesn't bound it.
 
 ### API
 
@@ -2320,6 +2620,10 @@ page's URL.
   `FetchError`, `isFetchError`: [errors](#handling-errors).
 - `catchStatus`, `optional`, `CaughtStatus`:
   [catching a status](#catching-a-status).
+- `SseEvent`, `StreamElement`, `StreamFormat`, `StreamMethod`,
+  `StreamOptions`: [streaming responses](#streaming-responses).
+- `paginate`, `PaginateOptions`, `PageEndpoint`, `PageRequest`, `PageOf`,
+  `PageResponse`: [pagination](#pagination).
 - `plugin`, `Plugin` (and the `Plugin.*` helper types), `PluginContext`,
   `PluginExitContext`:
   [writing plugins](#writing-plugins).
@@ -2349,7 +2653,7 @@ page's URL.
 ([testing](#testing)):
 
 - `layer`, `LayerOptions`, `Handler`, `HandlerServices`.
-- `respond`, `RespondRequest`, `RespondResult`, `RespondOptions`,
+- `respond`, `RespondRequest`, `RespondResult`, `TestEvent`, `RespondOptions`,
   `RespondServices`, `RouteParams`, `RequestBody`, `RequestQuery`,
   `QueryParams`, `TestEndpoint`.
 - `reply`, `Reply`, `ReplyOptions`.

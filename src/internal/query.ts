@@ -4,6 +4,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
 import type { QueryInput, QuerySchema } from "../Options.js";
+import { messageOf } from "./message.js";
 import { isRecord } from "./object.js";
 
 /** One query value as `UrlParams` holds it. */
@@ -55,9 +56,6 @@ const codecs = new WeakMap<QuerySchema, QueryCodec>();
 
 const invalidQuery = (message: string, cause?: unknown): Error =>
 	new Error(`Invalid query: ${message}`, { cause });
-
-const messageOf = (error: unknown): string =>
-	error instanceof Error ? error.message : String(error);
 
 /**
  * The codec that encodes each field of `schema` to a string. Throws when

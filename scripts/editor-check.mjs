@@ -6,6 +6,7 @@ import ts from "typescript";
 const dir = process.cwd();
 const probe = path.join(dir, "editor.ts");
 const source = `import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import * as Fetch from "@monarcode/effetch";
@@ -112,6 +113,15 @@ export const /*serviceCall*/serviceCall = Effect.gen(function* () {
 	const client = yield* Api;
 	return yield* client.get("/todos/:id", { params: { id: 1 }, output: Todo });
 });
+export const /*sseCall*/sseCall = typed./*sse*/sse("/jobs/:id/events", { params: { id: 1 }, output: Todo });
+const jobEvents = Fetch.endpoint("GET /jobs/:id/events", { output: Todo, stream: "sse" });
+export const /*streamBound*/streamBound = typed.bind(jobEvents)({ params: { id: 1 } });
+const listTodos = Fetch.endpoint("GET /todos", { output: Schema.Array(Todo) });
+export const /*pages*/pages = Fetch./*paginate*/paginate(typed.bind(listTodos), {
+	start: 1,
+	request: () => ({}),
+	next: (todos, page) => (todos.length === 0 ? Option.none() : Option.some(page + 1)),
+});
 export const namespace = /*fetchTestNamespace*/FetchTest;
 export const /*backend*/backend = FetchTest./*fetchTestLayer*/layer([
 	FetchTest./*respond*/respond(getTodoDefinition, ({ params }) =>
@@ -181,6 +191,8 @@ for (const [marker, file, docs] of [
 	["config", "Service.d.ts", "The config the class was declared with"],
 	["endpointsClass", "Endpoints.d.ts", "Declares a module's endpoints"],
 	["bindAll", "Client.d.ts", "Binds a record of endpoint definitions"],
+	["sse", "Client.d.ts", "Sends a request and gives its Server-Sent Events"],
+	["paginate", "Paginate.d.ts", "Pages through a list"],
 	[
 		"fetchTestLayer",
 		path.join("test", "FetchTest.d.ts"),
@@ -218,6 +230,7 @@ for (const [marker, file, docs] of [
 			marker === "bind" ||
 			marker === "layer" ||
 			marker === "bindAll" ||
+			marker === "sse" ||
 			marker === "config" ||
 			(tags.includes("example") && tags.includes("since")),
 		`Hover on ${marker} lacks @example or @since: ${tags.join(", ")}`,
@@ -360,15 +373,16 @@ const members = (union) =>
 		.map((member) => member.replace(/^Fetch\./, "").replace(/<.*$/, ""))
 		.sort();
 
-// The error and services of a hover such as `const x: Effect.Effect<A, E, R>`.
+// The error and services of a hover such as `const x: Effect.Effect<A, E, R>`,
+// or `const x: Stream.Stream<A, E, R>`.
 const errorsAndServices = (hover) => {
 	const flat = hover.replace(/\s+/g, " ");
-	const start = flat.indexOf(": Effect.Effect<");
-	if (start === -1 || !flat.endsWith(">")) {
+	const start = /: (Effect\.Effect|Stream\.Stream|Stream)</.exec(flat);
+	if (start === null || !flat.endsWith(">")) {
 		return undefined;
 	}
 	const args = splitTopLevel(
-		flat.slice(start + ": Effect.Effect<".length, -1),
+		flat.slice(start.index + start[0].length, -1),
 		",",
 	);
 	return args.length === 3
@@ -398,6 +412,9 @@ for (const [marker, errors, services] of [
 		["never"],
 	],
 	["serviceCall", [...callErrors, "TodoNotFound"].sort(), ["Api"]],
+	["sseCall", callErrors, ["never"]],
+	["streamBound", callErrors, ["never"]],
+	["pages", callErrors, ["never"]],
 ]) {
 	const hover = ts.displayPartsToString(
 		service.getQuickInfoAtPosition(probe, at(marker))?.displayParts,
@@ -407,7 +424,7 @@ for (const [marker, errors, services] of [
 		shown !== undefined &&
 			shown.errors.join(" | ") === errors.join(" | ") &&
 			shown.services.join(" | ") === services.join(" | "),
-		`Hover on ${marker} doesn't show Effect.Effect<…, ${errors.join(" | ")}, ${services.join(" | ")}>: ${hover}`,
+		`Hover on ${marker} doesn't show Effect.Effect or Stream<…, ${errors.join(" | ")}, ${services.join(" | ")}>: ${hover}`,
 	);
 }
 

@@ -25,6 +25,7 @@ import type {
 	StatusErrorSchema,
 } from "../Options.js";
 import type { PathParamNames } from "../Path.js";
+import type { StreamFormat } from "../Streams.js";
 
 /**
  * An endpoint the fake backend can answer for: one made by
@@ -58,6 +59,8 @@ export interface TestEndpoint {
 	readonly input: AnySchema | undefined;
 	/** The schema the request's query is decoded with, or `undefined`. */
 	readonly query: QuerySchema | undefined;
+	/** The format a stream endpoint's body is sent in, or `undefined`. */
+	readonly stream?: StreamFormat | undefined;
 }
 
 /**
@@ -219,10 +222,44 @@ export interface Reply {
 }
 
 /**
- * What a {@link respond} handler succeeds with: a value of `output`'s
- * `Type`, encoded with `output` before it's sent, or a {@link Reply}.
- * Without an `output` schema, the value is sent by its runtime type (see
- * {@link reply}).
+ * One event a {@link respond} handler sends to an SSE endpoint (one with
+ * `stream: "sse"`): its `data`, of `output`'s `Type` (a `string` without
+ * `output`), and optionally its `event` name and `id`.
+ *
+ * @example
+ * ```ts
+ * import type { FetchTest } from "@monarcode/effetch/test";
+ *
+ * const event: FetchTest.TestEvent<{ readonly percent: number }> = {
+ *   event: "progress",
+ *   data: { percent: 50 },
+ * };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export interface TestEvent<A> {
+	/** The event's name, on one line. Without it, the client sees `"message"`. */
+	readonly event?: string | undefined;
+	/** The event's ID, on one line. */
+	readonly id?: string | undefined;
+	/** The event's data, encoded with `output`. */
+	readonly data: A;
+}
+
+/**
+ * What a {@link respond} handler succeeds with, for an endpoint with the
+ * `output` schema `O` and the stream format `St`, or a {@link Reply}:
+ *
+ * - without `St`: a value of `output`'s `Type`, encoded with `output`
+ *   before it's sent. Without `output`, the value is sent by its runtime
+ *   type (see {@link reply}).
+ * - `"sse"`: a list of {@link TestEvent}s, sent as Server-Sent Events.
+ *   An `event` or `id` with a line break can't be sent, and the call dies.
+ * - `"ndjson"`: a list of values of `output`'s `Type` (anything that has a
+ *   JSON form without `output`), sent one per line. With `Fetch.text()`, a
+ *   value with a line break, or a blank one, can't be sent as one line,
+ *   and the call dies.
  *
  * @example
  * ```ts
@@ -232,12 +269,24 @@ export interface Reply {
  * const Todo = Schema.Struct({ id: Schema.Finite });
  *
  * const result: FetchTest.RespondResult<typeof Todo> = { id: 1 };
+ * const lines: FetchTest.RespondResult<typeof Todo, "ndjson"> = [{ id: 1 }, { id: 2 }];
  * ```
  *
  * @since 0.1.0
  */
-export type RespondResult<O extends AnySchema | undefined> =
-	| ([O] extends [AnySchema] ? O["Type"] : unknown)
+export type RespondResult<
+	O extends AnySchema | undefined,
+	St extends StreamFormat | undefined = undefined,
+> =
+	| ([St] extends ["sse"]
+			? ReadonlyArray<
+					TestEvent<[O] extends [AnySchema] ? O["Type"] : string>
+				>
+			: [St] extends ["ndjson"]
+				? ReadonlyArray<[O] extends [AnySchema] ? O["Type"] : unknown>
+				: [O] extends [AnySchema]
+					? O["Type"]
+					: unknown)
 	| Reply;
 
 /**
@@ -683,7 +732,7 @@ export const respond = <const EP extends TestEndpoint, R = never>(
 	endpoint: EP,
 	handler: (
 		request: RespondRequest<EP["route"], EP["input"], EP["query"]>,
-	) => Effect.Effect<RespondResult<EP["output"]>, never, R>,
+	) => Effect.Effect<RespondResult<EP["output"], EP["stream"]>, never, R>,
 	options?: RespondOptions,
 ): Handler<R | RespondServices<EP>> =>
 	makeRespond(

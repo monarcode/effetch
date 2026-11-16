@@ -69,3 +69,18 @@ export { isService, Service } from "./Service.js";
 export type { ServiceClass } from "./Service.js";
 export { plugin } from "./Plugin.js";
 export type { Plugin, PluginContext, PluginExitContext } from "./Plugin.js";
+export type {
+	SseEvent,
+	StreamElement,
+	StreamFormat,
+	StreamMethod,
+	StreamOptions,
+} from "./Streams.js";
+export { paginate } from "./Paginate.js";
+export type {
+	PageEndpoint,
+	PageOf,
+	PageRequest,
+	PageResponse,
+	PaginateOptions,
+} from "./Paginate.js";

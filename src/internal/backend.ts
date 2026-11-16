@@ -10,8 +10,10 @@ import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 
 import type { AnySchema, QuerySchema, StatusErrorMap } from "../Options.js";
+import type { StreamFormat } from "../Streams.js";
 import { isBlob, isGlobalInstance, toBytes } from "./body.js";
 import { decodeJson } from "./json.js";
+import { messageOf } from "./message.js";
 import { hasOwn } from "./object.js";
 import { bodyFormat } from "./output.js";
 import { codecOf, toUrlParams } from "./query.js";
@@ -93,9 +95,6 @@ const empty: Payload = { body: null, contentType: undefined };
 
 const defect = (message: string, cause?: unknown): Effect.Effect<never> =>
 	Effect.die(new Error(`FetchTest: ${message}`, { cause }));
-
-const messageOf = (error: unknown): string =>
-	error instanceof Error ? error.message : String(error);
 
 /**
  * `value` as a JSON body. Dies, naming `what`, when it has no JSON form,
@@ -200,6 +199,146 @@ const outputPayload = (
 				: { body: encoded as string, contentType: "text/plain" },
 		),
 		Effect.catch(mismatch),
+	);
+};
+
+/**
+ * One value of a stream, as text: encoded with `output` as JSON, or as
+ * text with `Fetch.text()`. Without `output`, `raw` gives it. Dies when it
+ * doesn't match.
+ */
+const streamValueText = (
+	output: AnySchema | undefined,
+	value: unknown,
+	raw: (value: unknown) => Effect.Effect<string>,
+	what: string,
+): Effect.Effect<string, never, unknown> => {
+	if (output === undefined) {
+		return raw(value);
+	}
+	const mismatch = (error: Schema.SchemaError) =>
+		defect(
+			`${what} doesn't match the output schema: ${error.message}`,
+			error,
+		);
+	return bodyFormat(output) === "json"
+		? Schema.encodeUnknownEffect(Schema.toCodecJson(output))(value).pipe(
+				Effect.catch(mismatch),
+				Effect.flatMap((encoded) =>
+					Effect.map(jsonPayload(encoded, what), (payload) =>
+						String(payload.body),
+					),
+				),
+			)
+		: Schema.encodeUnknownEffect(output)(value).pipe(
+				Effect.map(String),
+				Effect.catch(mismatch),
+			);
+};
+
+/** An event a handler sends to an SSE endpoint, as seen at runtime. */
+interface RuntimeTestEvent {
+	readonly event?: string | undefined;
+	readonly id?: string | undefined;
+	readonly data: unknown;
+}
+
+const isTestEvent = (u: unknown): u is RuntimeTestEvent =>
+	typeof u === "object" && u !== null && hasOwn(u, "data");
+
+/**
+ * The body of a stream endpoint's response, from the list of values the
+ * handler returned: Server-Sent Events, or one JSON value per line. Dies
+ * when the result isn't a list, or a value doesn't match `output`.
+ */
+const streamPayload = (
+	format: StreamFormat,
+	output: AnySchema | undefined,
+	result: unknown,
+	route: string,
+): Effect.Effect<Payload, never, unknown> => {
+	if (!Array.isArray(result)) {
+		return defect(
+			`the handler for ${route}, a stream endpoint, must return a list of ${format === "sse" ? "events" : "values"} or a reply`,
+		);
+	}
+	if (format === "ndjson") {
+		return Effect.map(
+			Effect.forEach(result, (value, index) => {
+				const what = `value ${index + 1} the handler for ${route} returned`;
+				return Effect.flatMap(
+					streamValueText(
+						output,
+						value,
+						(raw) =>
+							Effect.map(
+								jsonPayload(raw, `value ${index + 1}`),
+								(payload) => String(payload.body),
+							),
+						what,
+					),
+					// A line break would split the value, and a blank line is
+					// skipped: neither arrives as the value.
+					(line) =>
+						/[\r\n]/.test(line)
+							? defect(
+									`${what} has a line break, which would split it in two lines`,
+								)
+							: line.trim() === ""
+								? defect(
+										`${what} is blank, and the client skips blank lines`,
+									)
+								: Effect.succeed(line),
+				);
+			}),
+			(lines): Payload => ({
+				body: lines.map((line) => `${line}\n`).join(""),
+				contentType: "application/x-ndjson",
+			}),
+		);
+	}
+	return Effect.map(
+		Effect.forEach(result, (event: unknown, index) => {
+			const what = `event ${index + 1} the handler for ${route} returned`;
+			if (!isTestEvent(event)) {
+				return defect(`${what} isn't an event: return objects with data`);
+			}
+			return Effect.map(
+				streamValueText(
+					output,
+					event.data,
+					(raw) =>
+						typeof raw === "string"
+							? Effect.succeed(raw)
+							: defect(
+									`${what} has data that isn't a string, and the endpoint has no output schema`,
+								),
+					what,
+				),
+				(data) =>
+					// As Effect 4.1's Sse.encoder writes it. Effect 4.0's splits
+					// data on \n alone, and loses what follows a lone \r.
+					[
+						event.id === undefined ? "" : `id: ${event.id}\n`,
+						event.event === undefined ? "" : `event: ${event.event}\n`,
+						`data: ${data.replace(/\r\n|\r|\n/g, "\ndata: ")}\n\n`,
+					].join(""),
+			).pipe(
+				Effect.tap(() =>
+					[event.id, event.event].some(
+						(field) => field !== undefined && /[\r\n]/.test(field),
+					)
+						? defect(
+								`${what} has a line break in its id or event, which can't be sent`,
+							)
+						: Effect.void,
+				),
+			);
+		}),
+		(events): Payload => ({
+			body: events.join(""),
+			contentType: "text/event-stream",
+		}),
 	);
 };
 
@@ -518,6 +657,7 @@ export interface RuntimeTestEndpoint {
 	readonly statusErrors: unknown;
 	readonly input: AnySchema | undefined;
 	readonly query: QuerySchema | undefined;
+	readonly stream?: StreamFormat | undefined;
 }
 
 /** What a handler is given for one request. */
@@ -594,7 +734,7 @@ export const makeRespond = (
 	if (options?.status !== undefined) {
 		checkStatus(options.status, "FetchTest.respond");
 	}
-	const { route, output, input, query } = endpoint;
+	const { route, output, input, query, stream } = endpoint;
 	const headers = Headers.fromInput(options?.headers ?? {});
 	return Object.freeze({
 		[HandlerTypeId]: handlerVariance,
@@ -630,12 +770,14 @@ export const makeRespond = (
 					return yield* replyResponse(incoming.request, result, route);
 				}
 				const payload =
-					output === undefined
-						? yield* plainPayload(
-								result,
-								`the value the handler for ${route} returned`,
-							)
-						: yield* outputPayload(output, result, route);
+					stream !== undefined
+						? yield* streamPayload(stream, output, result, route)
+						: output === undefined
+							? yield* plainPayload(
+									result,
+									`the value the handler for ${route} returned`,
+								)
+							: yield* outputPayload(output, result, route);
 				const status =
 					options?.status ?? (payload.body === null ? 204 : 200);
 				return yield* respondWith(

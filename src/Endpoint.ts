@@ -1,6 +1,7 @@
 import type * as Effect from "effect/Effect";
 import type * as Headers from "effect/http/Headers";
 import type * as HttpMethod from "effect/http/HttpMethod";
+import type * as Stream from "effect/Stream";
 
 import type { DecodeError, HttpError, NetworkError } from "./Errors.js";
 import {
@@ -21,6 +22,7 @@ import type {
 	Success,
 } from "./Options.js";
 import type { Plugin } from "./Plugin.js";
+import type { StreamElement, StreamFormat } from "./Streams.js";
 
 /**
  * The routes `endpoint` accepts: an uppercase HTTP method, one space, then
@@ -170,6 +172,7 @@ export interface EndpointDefinition<
 	SE extends StatusErrorMap | undefined = undefined,
 	M extends ResponseMode | undefined = undefined,
 	QS extends QuerySchema | undefined = undefined,
+	St extends StreamFormat | undefined = undefined,
 > {
 	/** Decodes the 2xx body. Without it, calls return the raw response. */
 	readonly output?: O;
@@ -193,6 +196,15 @@ export interface EndpointDefinition<
 	 * schema has required fields. See {@link QuerySchema}.
 	 */
 	readonly query?: QS;
+	/**
+	 * Makes every call a `Stream` of the response body's values, as
+	 * `api.sse` or `api.ndjson` gives (see {@link StreamFormat}), and
+	 * `output` decode each value. Can't be used with `responseMode`.
+	 *
+	 * @stability unstable: SSE is parsed with Effect's `encoding/Sse`,
+	 * which Effect marks unstable.
+	 */
+	readonly stream?: St;
 }
 
 /**
@@ -424,27 +436,47 @@ export interface Endpoint<
 	SE extends StatusErrorMap | undefined = undefined,
 	M extends ResponseMode | undefined = undefined,
 	QS extends QuerySchema | undefined = undefined,
+	St extends StreamFormat | undefined = undefined,
 > {
 	<
 		Q extends QueryOf<Q> = QueryInput,
-		CM extends ResponseMode | undefined = undefined,
+		// A stream endpoint's calls can't take a responseMode.
+		CM extends ([St] extends [StreamFormat]
+			? undefined
+			: ResponseMode | undefined) = undefined,
 	>(
 		...args: EndpointArgs<R, I, EndpointOptions<R, I, Ps, Q, CM, QS>, QS>
-	): Effect.Effect<
-		// The call's mode, else the endpoint's.
-		Success<O, NoInfer<CM extends undefined ? M : CM>>,
-		// CallError and CallServices, written out (see CallEffect)
-		| NetworkError
-		| HttpError.With<EB["Type"]>
-		| (O extends AnySchema ? DecodeError : never)
-		| Plugin.Errors<Ps>
-		| StatusError<SE>,
-		| (O extends AnySchema ? O["DecodingServices"] : never)
-		| EB["DecodingServices"]
-		| (I extends AnySchema ? I["EncodingServices"] : never)
-		| StatusErrorServices<SE>
-		| (QS extends AnySchema ? QS["EncodingServices"] : never)
-	>;
+	): [St] extends [StreamFormat]
+		? Stream.Stream<
+				StreamElement<St, O>,
+				// CallError and CallServices, written out (see CallEffect), with
+				// DecodeError always: reading the stream can fail.
+				| NetworkError
+				| HttpError.With<EB["Type"]>
+				| DecodeError
+				| Plugin.Errors<Ps>
+				| StatusError<SE>,
+				| (O extends AnySchema ? O["DecodingServices"] : never)
+				| EB["DecodingServices"]
+				| (I extends AnySchema ? I["EncodingServices"] : never)
+				| StatusErrorServices<SE>
+				| (QS extends AnySchema ? QS["EncodingServices"] : never)
+			>
+		: Effect.Effect<
+				// The call's mode, else the endpoint's.
+				Success<O, NoInfer<CM extends undefined ? M : CM>>,
+				// CallError and CallServices, written out (see CallEffect)
+				| NetworkError
+				| HttpError.With<EB["Type"]>
+				| (O extends AnySchema ? DecodeError : never)
+				| Plugin.Errors<Ps>
+				| StatusError<SE>,
+				| (O extends AnySchema ? O["DecodingServices"] : never)
+				| EB["DecodingServices"]
+				| (I extends AnySchema ? I["EncodingServices"] : never)
+				| StatusErrorServices<SE>
+				| (QS extends AnySchema ? QS["EncodingServices"] : never)
+			>;
 	/** The route the endpoint was defined with, such as `"GET /users/:id"`. */
 	readonly route: R;
 	/** The route's HTTP method, such as `"GET"`. */
@@ -472,6 +504,11 @@ export interface Endpoint<
 	readonly responseMode: M;
 	/** The schema `query` is typed and encoded with, or `undefined` without one. */
 	readonly query: QS;
+	/**
+	 * The {@link StreamFormat} calls stream the body in, or `undefined` for
+	 * calls that return an `Effect`.
+	 */
+	readonly stream: St;
 	/**
 	 * Builds the URL a call with these `params` and `query` sends to,
 	 * without sending anything: the client's `baseUrl`, the path with its
@@ -524,10 +561,11 @@ export interface EndpointMethod<
 		SE extends StatusErrorMap | undefined = undefined,
 		M extends ResponseMode | undefined = undefined,
 		QS extends QuerySchema | undefined = undefined,
+		St extends StreamFormat | undefined = undefined,
 	>(
 		route: ValidRoute<R>,
-		definition?: EndpointDefinition<R, O, EB, I, Ps, SE, M, QS>,
-	): Endpoint<R, O, EB, I, Ps, SE | ClientSE, M, QS>;
+		definition?: EndpointDefinition<R, O, EB, I, Ps, SE, M, QS, St>,
+	): Endpoint<R, O, EB, I, Ps, SE | ClientSE, M, QS, St>;
 }
 
 /**
@@ -593,6 +631,7 @@ export interface UnboundDefinition<
 	SE extends StatusErrorMap | undefined = undefined,
 	M extends ResponseMode | undefined = undefined,
 	QS extends QuerySchema | undefined = undefined,
+	St extends StreamFormat | undefined = undefined,
 > {
 	/** Decodes the 2xx body. Without it, calls return the raw response. */
 	readonly output?: O;
@@ -614,6 +653,15 @@ export interface UnboundDefinition<
 	 * schema has required fields. See {@link QuerySchema}.
 	 */
 	readonly query?: QS;
+	/**
+	 * Makes every call a `Stream` of the response body's values, as
+	 * `api.sse` or `api.ndjson` gives (see {@link StreamFormat}), and
+	 * `output` decode each value. Can't be used with `responseMode`.
+	 *
+	 * @stability unstable: SSE is parsed with Effect's `encoding/Sse`,
+	 * which Effect marks unstable.
+	 */
+	readonly stream?: St;
 }
 
 /**
@@ -659,6 +707,7 @@ export interface UnboundEndpoint<
 	SE extends StatusErrorMap | undefined = undefined,
 	M extends ResponseMode | undefined = undefined,
 	QS extends QuerySchema | undefined = undefined,
+	St extends StreamFormat | undefined = undefined,
 > {
 	/** The route the endpoint was defined with, such as `"GET /users/:id"`. */
 	readonly route: R;
@@ -686,6 +735,11 @@ export interface UnboundEndpoint<
 	readonly responseMode: M;
 	/** The schema `query` is typed and encoded with, or `undefined` without one. */
 	readonly query: QS;
+	/**
+	 * The {@link StreamFormat} calls stream the body in, or `undefined` for
+	 * calls that return an `Effect`.
+	 */
+	readonly stream: St;
 	/**
 	 * Builds the path a call with these `params` and `query` sends to,
 	 * relative, without a client's `baseUrl`: the path with its params
@@ -771,8 +825,11 @@ export interface BindMethod<
 		// loses its literal types. QS has none to match.
 		M extends ResponseMode | undefined,
 		QS extends QuerySchema | undefined,
+		// A default, unlike M and QS, so explicit type arguments written
+		// before streams still work. The definition infers it.
+		St extends StreamFormat | undefined = undefined,
 	>(
-		definition: UnboundEndpoint<R, O, EB, I, SE, M, QS>,
+		definition: UnboundEndpoint<R, O, EB, I, SE, M, QS, St>,
 		options?: BindOptions<Ps>,
 	): Endpoint<
 		R,
@@ -782,7 +839,8 @@ export interface BindMethod<
 		Ps,
 		SE | ClientSE,
 		M,
-		QS
+		QS,
+		St
 	>;
 }
 
@@ -806,7 +864,7 @@ export interface BindMethod<
 // whatever a definition's `url` takes.
 export interface AnyUnboundEndpoint extends Omit<
 	// oxlint-disable-next-line no-explicit-any
-	UnboundEndpoint<any, any, any, any, any, any, any>,
+	UnboundEndpoint<any, any, any, any, any, any, any, any>,
 	"route" | "method" | "path" | "url"
 > {
 	/** The route the endpoint was defined with, such as `"GET /users/:id"`. */
@@ -917,7 +975,8 @@ export type BoundEndpoint<
 				infer I,
 				infer SE,
 				infer M,
-				infer QS
+				infer QS,
+				infer St
 		  >
 		? Endpoint<
 				R,
@@ -927,7 +986,8 @@ export type BoundEndpoint<
 				Ps,
 				SE | ClientSE,
 				M,
-				QS
+				QS,
+				St
 			>
 		: never;
 
@@ -1073,10 +1133,11 @@ export function endpoint<
 	SE extends StatusErrorMap | undefined = undefined,
 	M extends ResponseMode | undefined = undefined,
 	QS extends QuerySchema | undefined = undefined,
+	St extends StreamFormat | undefined = undefined,
 >(
 	route: ValidRoute<R>,
-	definition?: UnboundDefinition<R, O, EB, I, SE, M, QS>,
-): UnboundEndpoint<R, O, EB, I, SE, M, QS>;
+	definition?: UnboundDefinition<R, O, EB, I, SE, M, QS, St>,
+): UnboundEndpoint<R, O, EB, I, SE, M, QS, St>;
 // `unknown`: the typed `url` takes no arguments when the query schema needs
 // services, which the runtime `url` can't be checked against.
 export function endpoint(

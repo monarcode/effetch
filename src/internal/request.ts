@@ -49,6 +49,11 @@ export type RuntimeOptions = Omit<
 	readonly plugins?: OverrideMap | undefined;
 	/** An endpoint's query schema, to encode `query` with. */
 	readonly querySchema?: QuerySchema | undefined;
+	/**
+	 * The `Accept` header to send when none is set, for a stream, instead
+	 * of the one `output` gives.
+	 */
+	readonly accept?: string | undefined;
 };
 
 export interface RequesterState {
@@ -92,14 +97,13 @@ const buildRequest = (
 			request = HttpClientRequest.setHeaders(request, options.headers);
 		}
 		request = state.applyDefaults(request);
-		if (
-			options.output !== undefined &&
-			!Headers.has(request.headers, "accept")
-		) {
-			request = HttpClientRequest.accept(
-				request,
-				acceptFor(bodyFormat(options.output)),
-			);
+		const accept =
+			options.accept ??
+			(options.output === undefined
+				? undefined
+				: acceptFor(bodyFormat(options.output)));
+		if (accept !== undefined && !Headers.has(request.headers, "accept")) {
+			request = HttpClientRequest.accept(request, accept);
 		}
 		return request;
 	});

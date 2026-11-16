@@ -298,6 +298,61 @@ All notable changes to `@monarcode/effetch`, newest first.
     sees it.
   - New type: `CaughtStatus`.
 
+- `api.sse(path, options)` and `api.ndjson(path, options)` read a streamed
+  body as an Effect `Stream`, one value at a time, as it arrives: the events
+  of a Server-Sent Events body, or the lines of a newline-delimited JSON
+  body. Before, streaming needed `api.httpClient` and your own parsing.
+
+  ```ts
+  api
+    .sse("/jobs/:id/events", { params: { id }, output: JobEvent })
+    .pipe(Stream.runForEach((event) => Effect.log(event.data.percent)));
+  ```
+
+  - `output` decodes each event's `data`, or each line. An SSE value is an
+    `SseEvent`, with the event's `event`, `id` and `data`.
+  - `method` defaults to `"GET"`. Pass `"POST"` with a `body` for APIs that
+    stream the answer to a request.
+  - The request runs as any call does, up to the response's headers:
+    plugins, `retry`, `timeout`, and an error status that fails with an
+    `HttpError` or a `statusErrors` error. A value that doesn't match
+    `output`, or a body that breaks off, fails the stream with a
+    `DecodeError`.
+  - The values before a failure are given first. A `204` or `205` gives an
+    empty stream, and `api.sse` fails when the `Content-Type` isn't
+    `text/event-stream`.
+  - For plugins, the call ends when the response's headers arrive: their
+    `onExit` hooks, and `logger` and `consoleLogger`, don't see the body
+    being read.
+  - Interrupting the stream, or taking part of it, aborts the request.
+  - `api.sse` uses Effect's `encoding/Sse` module, which Effect marks
+    unstable.
+  - New types: `SseEvent`, `StreamElement`, `StreamFormat`, `StreamMethod`,
+    `StreamOptions`.
+
+- `stream: "sse"` or `stream: "ndjson"` on an endpoint definition makes its
+  calls return a `Stream`, from `client.endpoint`, `client.bind`,
+  `client.bindAll` and `Fetch.Endpoints`. Endpoints have a `stream`
+  property. `FetchTest.respond` answers a stream endpoint with a list of
+  events or values (new type: `FetchTest.TestEvent`).
+
+- `Fetch.paginate(endpoint, { start, request, next })` pages through a list
+  as a lazy `Stream` of pages, calling a bound endpoint once per page:
+
+  ```ts
+  Fetch.paginate(api.bind(listTodos), {
+    start: 1,
+    request: (page) => ({ query: { page } }),
+    next: (todos, page) =>
+      todos.length === 0 ? Option.none() : Option.some(page + 1),
+  });
+  ```
+
+  - With `responseMode: "decoded-and-response"` on the endpoint, `next`
+    gets each page's response, for cursors in headers such as `Link`.
+  - New types: `PaginateOptions`, `PageEndpoint`, `PageRequest`, `PageOf`,
+    `PageResponse`.
+
 ## 0.1.0-rc.2
 
 ### Added

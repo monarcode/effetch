@@ -19,6 +19,7 @@ describe("public entry points", () => {
 			"isService",
 			"make",
 			"optional",
+			"paginate",
 			"plugin",
 			"text",
 		]);
