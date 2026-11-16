@@ -8,30 +8,52 @@
 
 [![npm](https://img.shields.io/npm/v/@monarcode/effetch)](https://www.npmjs.com/package/@monarcode/effetch)
 [![CI](https://github.com/monarcode/effetch/actions/workflows/ci.yml/badge.svg)](https://github.com/monarcode/effetch/actions/workflows/ci.yml)
+[![bundle size, without effect](https://deno.bundlejs.com/badge?q=@monarcode/effetch&treeshake=%5B*%5D&config=%7B%22esbuild%22%3A%7B%22external%22%3A%5B%22effect%22%2C%22effect%2F*%22%5D%7D%7D)](https://bundlejs.com/?q=@monarcode/effetch&treeshake=%5B*%5D&config=%7B%22esbuild%22%3A%7B%22external%22%3A%5B%22effect%22%2C%22effect%2F*%22%5D%7D%7D)
+[![types](https://img.shields.io/npm/types/@monarcode/effetch)](https://www.npmjs.com/package/@monarcode/effetch)
+[![provenance](https://img.shields.io/badge/provenance-verified-brightgreen?logo=npm)](https://www.npmjs.com/package/@monarcode/effetch#provenance)
+[![license](https://img.shields.io/npm/l/@monarcode/effetch)](./LICENSE)
+
+[![Effect](https://img.shields.io/badge/Effect%204-20232a?logo=effect&logoColor=white)](https://effect.website)
+[![Browsers](https://img.shields.io/badge/Browsers-20232a?logo=googlechrome&logoColor=white)](#browsers)
+[![React Native](https://img.shields.io/badge/React%20Native-20232a?logo=react&logoColor=61dafb)](#react-native)
+[![Expo](https://img.shields.io/badge/Expo-20232a?logo=expo&logoColor=white)](#react-native)
+[![Node.js](https://img.shields.io/badge/Node.js%2020+-20232a?logo=nodedotjs&logoColor=5fa04e)](#platform-notes)
+[![Bun](https://img.shields.io/badge/Bun-20232a?logo=bun&logoColor=fbf0df)](#platform-notes)
+[![Deno](https://img.shields.io/badge/Deno-20232a?logo=deno&logoColor=white)](#platform-notes)
 
 **Typed HTTP calls for [Effect](https://effect.website), without the
-boilerplate.** Give effetch a path and a schema. It fills in the path, builds
-the query, checks the status and decodes the response, and hands you back an
-Effect that's typed end to end, errors included.
+boilerplate.**
+
+You give effetch a path and a schema. It fills in the path, builds the
+query, sends the request, checks the status and decodes the response. What
+you get back is an Effect that's typed end to end, errors included, so
+TypeScript tells you what a call returns and every way it can fail.
 
 ```ts
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
-
-declare const api: Fetch.Client;
+import * as Fetch from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
-const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+export const getTodo = (id: number) =>
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return yield* api.get("/todos/:id", { params: { id }, output: Todo });
+  });
 // Effect<{ readonly id: number; readonly title: string },
-//        NetworkError | DecodeError | HttpError.With<unknown>, never>
+//        NetworkError | DecodeError | HttpError.With<unknown>, Api>
 ```
 
 > **Release candidate.** effetch is close to its first stable release
-> (`0.1.0-rc.N`). The API is settled: release candidates add small,
-> opt-in features and fixes, and the [changelog](./CHANGELOG.md) lists
-> anything that needs a change in your code.
+> (`0.1.0-rc.N`). The API is settled: release candidates add small, opt-in
+> features and fixes, and the [changelog](./CHANGELOG.md) lists anything
+> that needs a change in your code.
 
 ## Contents
 
@@ -39,13 +61,16 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
   - [At a glance](#at-a-glance)
   - [What you get](#what-you-get)
   - [Where it fits](#where-it-fits)
-  - [Coming from axios or ky](#coming-from-axios-or-ky)
 - [Getting started](#getting-started)
   - [Install](#install)
-  - [Your first call](#your-first-call)
-- [Creating a client](#creating-a-client)
-  - [Configuring a client](#configuring-a-client)
-  - [Sharing it across your app](#sharing-it-across-your-app)
+  - [Your first client](#your-first-client)
+  - [How the pieces fit](#how-the-pieces-fit)
+- [Setting up a client](#setting-up-a-client)
+  - [Declaring a client](#declaring-a-client)
+  - [Configuration](#configuration)
+  - [Providing the client](#providing-the-client)
+  - [A client from another](#a-client-from-another)
+  - [Fetch.Service or Fetch.make?](#fetchservice-or-fetchmake)
 - [Making calls](#making-calls)
   - [Methods](#methods)
   - [Path and query parameters](#path-and-query-parameters)
@@ -67,21 +92,15 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
   - [Console logging](#console-logging)
   - [Plugin order](#plugin-order)
   - [Changing plugins for one call](#changing-plugins-for-one-call)
-- [Writing plugins](#writing-plugins)
-  - [Your first plugin](#your-first-plugin)
-  - [Hooks](#hooks)
-  - [Knowing the route](#knowing-the-route)
-  - [Example: signing out on a 401](#example-signing-out-on-a-401)
-  - [Example: a deadline with its own error](#example-a-deadline-with-its-own-error)
-  - [Tips](#tips)
 - [Endpoints](#endpoints)
+  - [Why endpoints](#why-endpoints)
   - [Defining endpoints](#defining-endpoints)
-  - [Defining endpoints without a client](#defining-endpoints-without-a-client)
+  - [Sharing endpoints as a service](#sharing-endpoints-as-a-service)
   - [Calling an endpoint](#calling-an-endpoint)
+  - [Other ways to bind endpoints](#other-ways-to-bind-endpoints)
   - [Typed query parameters](#typed-query-parameters)
   - [Building an endpoint's URL](#building-an-endpoints-url)
   - [Defaults and overrides](#defaults-and-overrides)
-  - [Why use endpoints](#why-use-endpoints)
   - [Endpoints or methods?](#endpoints-or-methods)
 - [Streaming responses](#streaming-responses)
   - [Server-Sent Events](#server-sent-events)
@@ -91,6 +110,13 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
   - [Stopping a stream](#stopping-a-stream)
 - [Pagination](#pagination)
   - [Cursors in headers](#cursors-in-headers)
+- [Writing plugins](#writing-plugins)
+  - [Your first plugin](#your-first-plugin)
+  - [Hooks](#hooks)
+  - [Knowing the route](#knowing-the-route)
+  - [Example: signing out on a 401](#example-signing-out-on-a-401)
+  - [Example: a deadline with its own error](#example-a-deadline-with-its-own-error)
+  - [Tips](#tips)
 - [Structuring an app](#structuring-an-app)
   - [A small app](#a-small-app)
   - [A feature-sliced app](#a-feature-sliced-app)
@@ -105,6 +131,7 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 - [Platform notes](#platform-notes)
   - [Browsers](#browsers)
   - [React Native](#react-native)
+- [Coming from axios or ky](#coming-from-axios-or-ky)
 - [Reference](#reference)
   - [Limitations](#limitations)
   - [API](#api)
@@ -114,13 +141,16 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 
 ## Why effetch
 
-Effect gives you two ways to call an HTTP API. `HttpClient` is low level: for
-every request, you build the URL, check the status and decode the body
-yourself. `HttpApi` is contract first: you describe the whole API up front and
-share it with the server, which is ideal when you own both sides.
+Effect gives you two ways to call an HTTP API, and they sit at opposite
+ends:
 
-Most apps sit somewhere in between. They call a backend they don't control,
-such as their company's REST API or a third-party service, one call at a time.
+- **`HttpClient` is low level.** For every request you build the URL, check
+  the status and decode the body yourself.
+- **`HttpApi` is contract first.** You describe the whole API up front and
+  share it with the server, which is ideal when you own both sides.
+
+Most apps sit in between. They call a backend they don't control, such as
+their company's REST API or a third-party service, one call at a time.
 effetch is made for that. It's a thin layer over `HttpClient` that gives each
 call the types and error handling of a contract, without you having to write
 one.
@@ -180,9 +210,10 @@ also:
   `HttpError` and `DecodeError`, plus any your plugins add, all in the type.
   Turn statuses into your own errors, such as a `404` into `TodoNotFound`,
   with `statusErrors`.
-- **Plugins for the repetitive parts.** Auth, retries, timeouts and logging
-  are built in, and your own take a few lines. Any call can turn a plugin off
-  or adjust it, and TypeScript checks the names and options.
+- **Plugins for the repetitive parts.** Auth with token refresh, retries,
+  timeouts and logging are built in, and your own take a few lines. Any call
+  can turn a plugin off or adjust it, and TypeScript checks the names and
+  options.
 - **Endpoints.** Save a route like `"GET /users/:id"` with its schemas once,
   then call it like a function wherever you need it. Share a module's
   endpoints as a service with `Fetch.Endpoints`.
@@ -190,41 +221,21 @@ also:
   as an Effect `Stream`, and page through a list with `Fetch.paginate`.
 - **Tests without a network.** `FetchTest` makes a typed fake backend from
   your endpoints, so tests run the real client with its plugins.
-- **Runs anywhere.** There's no platform-specific code: it targets browsers,
+- **Runs anywhere.** There are no platform-specific imports or builds: it targets browsers,
   React Native, Node 20+, Bun and Deno.
 
 ### Where it fits
 
-- Use **effetch** to call REST and JSON APIs that you don't own, or don't share
-  code with.
-- Use Effect's **`HttpApi`** when you own both the server and the client, and
-  want them to share one contract.
+- Use **effetch** to call REST and JSON APIs that you don't own, or don't
+  share code with.
+- Use Effect's **`HttpApi`** when you own both the server and the client,
+  and want them to share one contract.
 - Use **`HttpClient`** directly for what effetch doesn't cover, such as
   WebSockets or uploads with progress. Every effetch client gives you its
   own when you need it.
 
-### Coming from axios or ky
-
-The following table maps what you know from axios and ky to effetch:
-
-| axios or ky                                                   | effetch                                                                                                                                   |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `axios.create`, `ky.create`                                   | `Fetch.make`, or [`Fetch.Service`](#sharing-it-across-your-app) to share the client as a service                                          |
-| `ky.extend`, a client per API version                         | A second `Fetch.Service` from `{ ...Api.config, baseUrl }` (see [A client from another](#a-client-from-another))                          |
-| `baseURL`, `prefixUrl`                                        | `baseUrl`, a string or an Effect such as a `Config`                                                                                       |
-| `params`, `searchParams`                                      | `query`, a plain object, or typed by an endpoint's [`query` schema](#typed-query-parameters)                                              |
-| Interceptors, `hooks.beforeRequest` and `hooks.afterResponse` | A [plugin](#writing-plugins)'s `onRequest` and `onResponse`                                                                               |
-| `hooks.beforeError`                                           | `Effect.mapError` on the call. A plugin's `onError` sees errors but can't change them                                                     |
-| `retry`, `timeout`                                            | The [`retry` and `timeout` plugins](#built-in-plugins), which a call can turn off or adjust                                               |
-| ky's `totalTimeout`                                           | `retry({ budget })`, or `Effect.timeout` around a call                                                                                    |
-| `AbortController`, `signal`                                   | Interruption: `Fiber.interrupt`, `Effect.race`, `Effect.timeout`. An interrupted call aborts its request                                  |
-| `validateStatus`, `throwHttpErrors: false`                    | `Effect.catchTag("HttpError", …)`, [`statusErrors`](#errors-by-status), or [`Fetch.catchStatus`](#catching-a-status) and `Fetch.optional` |
-| `error.response.data`, ky's `HTTPError` body                  | `HttpError.body`, decoded with `defaultError` or the call's `error` schema                                                                |
-| `ky.get(url).json<T>()`, `axios.get<T>(url)`                  | `api.get(path, { output: Schema })`: the body is checked, not cast                                                                        |
-| `responseType: "text"` or `"arraybuffer"`                     | `output: Fetch.text()` or `Fetch.bytes()` (see [Text and bytes](#text-and-bytes))                                                         |
-| Reading the status and headers with the data                  | `responseMode: "decoded-and-response"` (see [The body and the response](#the-body-and-the-response))                                      |
-| `responseType: "stream"`, `onDownloadProgress` for events     | [`api.sse` and `api.ndjson`](#streaming-responses)                                                                                        |
-| The `fetch` option or an `adapter` in tests                   | [`FetchTest`](#testing), or any `HttpClient` layer                                                                                        |
+Coming from axios or ky? [This table](#coming-from-axios-or-ky) maps what
+you know to effetch.
 
 ## Getting started
 
@@ -248,28 +259,34 @@ You'll need:
 - TypeScript 5.4 or newer. With `skipLibCheck: false`, Effect's own
   declarations need TypeScript 5.7 or newer.
 
-### Your first call
+### Your first client
 
 Let's fetch a todo from [JSONPlaceholder](https://jsonplaceholder.typicode.com),
-a free fake API:
+a free fake API. This is a complete program you can run:
 
 ```ts
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import * as Fetch from "@monarcode/effetch";
 
+// 1. What a todo looks like
 const Todo = Schema.Struct({
   id: Schema.Finite,
   title: Schema.String,
   completed: Schema.Boolean,
 });
 
+// 2. The client, declared once for the whole app
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://jsonplaceholder.typicode.com",
+}) {}
+
+// 3. A call
 const program = Effect.gen(function* () {
-  const api = yield* Fetch.make({
-    baseUrl: "https://jsonplaceholder.typicode.com",
-  });
+  const api = yield* Api;
   const todo = yield* api.get("/todos/:id", {
     params: { id: 1 },
     output: Todo,
@@ -277,78 +294,74 @@ const program = Effect.gen(function* () {
   console.log(todo.title);
 });
 
-await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)));
+// 4. Run it, with the client and the HttpClient that sends the requests
+const ApiLive = Api.layer.pipe(Layer.provide(FetchHttpClient.layer));
+
+await Effect.runPromise(program.pipe(Effect.provide(ApiLive)));
 ```
 
-Step by step:
+Here's what each part does:
 
 1. **`Todo` describes the response.** effetch decodes the body with it, so
-   `todo` is typed, and checked when it arrives.
-2. **`Fetch.make` creates a client** for one API. Everything its calls have in
-   common, such as the base URL, lives here.
-3. **`api.get` makes the call.** The `:id` in the path is filled in from
-   `params`.
-4. **`FetchHttpClient.layer` sends the requests.** effetch is built on
-   Effect's `HttpClient`, so you choose which one to use when you run your
-   program. This one uses the global `fetch`. Node's works too, and in tests
-   you'd use a fake one (see [Testing](#testing)).
+   `todo` is typed, and checked when it arrives. If the API sends something
+   else, the call fails with a `DecodeError` instead of handing you bad data.
+2. **`Api` is your client.** `Fetch.Service` declares it as an Effect
+   service, with everything its calls have in common: here the base URL,
+   later the headers, error schemas and plugins.
+3. **`api.get` makes the call.** `yield* Api` gives you the client, and the
+   `:id` in the path is filled in from `params`.
+4. **`Api.layer` builds the client.** It needs an `HttpClient` to send the
+   requests. `FetchHttpClient.layer` uses the global `fetch`. Node's works
+   too, and in tests you'd use a fake one (see [Testing](#testing)).
 
 Calling an API from a web page on another origin? Read
 [Browsers](#browsers) first.
 
-From here, the guide builds up one step at a time: clients, calls and errors
-first, then plugins and endpoints, then structuring a whole app.
+### How the pieces fit
 
-## Creating a client
+Everything in effetch builds on four ideas, from the bottom up:
 
-A client holds everything a backend's calls have in common: where the backend
-lives, the headers every request needs, the shape of its errors and the
-plugins every call goes through.
+- **An `HttpClient`** sends requests. It's Effect's, and you choose it when
+  you run your program: the global `fetch`, Node's, or a fake in tests.
+- **A client** is one backend: its base URL, default headers, error schemas
+  and plugins. You declare it once, with `Fetch.Service`.
+- **A call** is one request: a method such as `api.get`, or an
+  [endpoint](#endpoints) you saved. It returns an Effect, typed by your
+  schemas, that fails with typed errors.
+- **Plugins** wrap every call a client makes, for auth, retries, timeouts
+  and logging.
 
-### Configuring a client
+The rest of this guide follows the same order: [setting up a
+client](#setting-up-a-client), [making calls](#making-calls) and [handling
+errors](#handling-errors), then [plugins](#plugins) and
+[endpoints](#endpoints). After those come [streams](#streaming-responses),
+[pagination](#pagination), [your own plugins](#writing-plugins), [how to
+structure an app](#structuring-an-app) and [testing](#testing).
 
-```ts
-import * as Config from "effect/Config";
-import * as Schema from "effect/Schema";
+> **About the examples.** To stay short, many examples start from
+> `declare const api: Fetch.Client`: a client without plugins, like the one
+> `yield* Api` gives you when `Api` has none. In your app, get the client with
+> `yield* Api`. To type a client in a function signature, use
+> `Effect.Success<typeof Api>`, which includes your plugins and error
+> schemas. Some examples also bind an endpoint inline, with `api.bind`, to
+> stay short; in your app, bind endpoints once, with
+> [`Fetch.Endpoints`](#sharing-endpoints-as-a-service). Every TypeScript
+> example in this README is compiled with the package, so they all match the
+> API.
 
-import * as Fetch from "@monarcode/effetch";
-import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
+## Setting up a client
 
-const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
+A client holds everything a backend's calls have in common: where the
+backend lives, the headers every request needs, the shape of its errors and
+the plugins every call goes through. You declare it once and share it with
+the rest of your app.
 
-const session: { accessToken?: string } = {};
+### Declaring a client
 
-export const makeApi = Fetch.make({
-  baseUrl: Config.String("API_URL"),
-  headers: { "x-client": "web" },
-  defaultError: ApiError,
-  plugins: [
-    logger(),
-    retry(),
-    timeout({ duration: "10 seconds" }),
-    bearer({ token: () => session.accessToken }),
-  ],
-});
-```
-
-Every option is optional:
-
-| Option         | What it's for                                                                                                                                                                                                                    |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `baseUrl`      | Where the API lives. It's put in front of every path that isn't a full `http(s)://` URL. Pass a string, or an Effect that's run once when the client is made, such as a `Config`. It can't contain a query string or a fragment. |
-| `headers`      | Headers sent with every request. A call's header with the same name wins. `content-type` and `content-length` are ignored here, since they come from each body.                                                                  |
-| `defaultError` | A schema for the body of the API's error responses (see [Typed error bodies](#typed-error-bodies)).                                                                                                                              |
-| `plugins`      | Behaviour every call goes through (see [Plugins](#plugins)).                                                                                                                                                                     |
-
-### Sharing it across your app
-
-Build the client once, and share it as a service. `Fetch.Service` takes the
-same config as `Fetch.make` and declares the service in one class:
+`Fetch.Service` declares a client as an Effect service, in one class:
 
 ```ts
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import * as Fetch from "@monarcode/effetch";
@@ -359,16 +372,11 @@ export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
 }) {}
 
-export const ApiLive = Api.layer.pipe(Layer.provide(FetchHttpClient.layer));
-
 // Anywhere in your app
 export const program = Effect.gen(function* () {
   const api = yield* Api;
   return yield* api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 });
-
-// Where you run it
-export const runnable = program.pipe(Effect.provide(ApiLive));
 ```
 
 The class gives you three things:
@@ -382,21 +390,120 @@ The class gives you three things:
   the module loads, before any layer is built, for example to get the
   `defaultError` and `statusErrors` schemas.
 
-Two more things worth knowing:
+A few things worth knowing:
 
 - **Your client's type is `Effect.Success<typeof Api>`.** It includes your
   plugins and your `defaultError`. Use it wherever you need to type a
   client, such as a function parameter. `Fetch.Client` is the type of a
   client without plugins, and yours won't fit it.
 - **Calls need nothing from the environment.** The client holds on to the
-  `HttpClient`, the base URL and any services its plugins need. Its calls only
-  need the services of their own schemas, if any, so they run anywhere: in a
-  service, in a query function, or with `Effect.runPromise`.
+  `HttpClient`, the base URL and any services its plugins need. Its calls
+  only need the services of their own schemas, if any, so they run anywhere:
+  in a service, in a query function, or with `Effect.runPromise`.
+- **Give each client its own id.** Two classes with the same id are the same
+  service. `Fetch.isService(value)` tells a class made by `Fetch.Service`
+  apart from any other value.
 
-Give each client its own id: two classes with the same id are the same
-service.
+### Configuration
 
-#### A client from another
+The config takes the same options as `Fetch.make`. Here's a client with all
+of them:
+
+```ts
+import * as Config from "effect/Config";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
+
+const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
+
+class SessionExpired extends Schema.TaggedError<SessionExpired>()(
+  "SessionExpired",
+  { message: Schema.String },
+) {}
+
+const session: { accessToken?: string } = {};
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: Config.String("API_URL"),
+  headers: { "x-client": "web" },
+  defaultError: ApiError,
+  statusErrors: { 401: SessionExpired },
+  plugins: [
+    logger(),
+    retry(),
+    timeout({ duration: "10 seconds" }),
+    bearer({ token: () => session.accessToken }),
+  ],
+}) {}
+```
+
+Every option is optional:
+
+| Option         | What it's for                                                                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`      | Where the API lives. It's put in front of every path that isn't a full `http(s)://` URL. Pass a string, or an Effect that's run once when the client is built, such as a `Config`. It can't contain a query string or a fragment. |
+| `headers`      | Headers sent with every request. A call's header with the same name wins. `content-type` and `content-length` are ignored here, since they come from each body.                                                                   |
+| `defaultError` | A schema for the body of the API's error responses (see [Typed error bodies](#typed-error-bodies)).                                                                                                                               |
+| `statusErrors` | Your own errors for error responses, by status, for every call (see [Errors by status](#errors-by-status)).                                                                                                                       |
+| `plugins`      | Behaviour every call goes through, outermost first (see [Plugins](#plugins)).                                                                                                                                                     |
+
+### Providing the client
+
+`Api.layer` needs an `HttpClient`. Provide one where you run your program,
+usually next to the other layers of your app:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+
+import * as Fetch from "@monarcode/effetch";
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+export const ApiLive = Api.layer.pipe(Layer.provide(FetchHttpClient.layer));
+
+export const program = Effect.gen(function* () {
+  const api = yield* Api;
+  return yield* api.get("/health");
+});
+
+export const runnable = program.pipe(Effect.provide(ApiLive));
+```
+
+Keeping the `HttpClient` out of `Api.layer` is what lets tests swap in a
+fake one. If you'd rather have `Api.layer` provide it too, override it in
+the class:
+
+```ts
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+
+import * as Fetch from "@monarcode/effetch";
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {
+  static override readonly layer = super.layer.pipe(
+    Layer.provide(FetchHttpClient.layer),
+  );
+}
+```
+
+An override can need less than the original layer, but not more, and can't
+add an error.
+
+> **Caution:** the override builds the real `HttpClient` into `Api.layer`,
+> so a test can no longer swap in a fake one: `FetchTest.layer` provided
+> under it is ignored, and requests go to the network. If you test with
+> `Api.layer`, keep it as it is and export a separate `ApiLive`, as in the
+> first example.
+
+### A client from another
 
 For the same client with a different base URL, such as a second API
 version, or with one more header, spread the first class's `config` into a
@@ -424,13 +531,39 @@ export class ApiV2 extends Fetch.Service<ApiV2>()("ApiV2", {
 `Api.config.headers` is replaced, not merged, when you set `headers`: spread
 it too, as in `headers: { ...Api.config.headers, "x-client": "web" }`.
 
-#### When the config isn't known up front
+### Fetch.Service or Fetch.make?
 
-`Fetch.Service` needs its config when the module loads. A `baseUrl` that's
-an Effect, such as a `Config`, is fine: it runs when the layer is built.
-When the config itself comes from an Effect, for example headers read from
-a service, call `Fetch.make` inside that Effect and declare the service by
-hand:
+`Fetch.make` is the function underneath `Fetch.Service`: it takes the same
+config and returns an Effect that builds the client. Use the class by
+default, and reach for `Fetch.make` when the class doesn't fit:
+
+| Situation                                                                               | Use             |
+| --------------------------------------------------------------------------------------- | --------------- |
+| An app, with the client shared as a service                                             | `Fetch.Service` |
+| A config known when the module loads (a `baseUrl` Effect such as `Config` is fine)      | `Fetch.Service` |
+| Endpoints shared as a service with [`Fetch.Endpoints`](#sharing-endpoints-as-a-service) | `Fetch.Service` |
+| A script, a one-off program, or a quick test                                            | `Fetch.make`    |
+| A config that comes from an Effect, such as headers read from a service                 | `Fetch.make`    |
+| A client made inside your own service's layer, or one per tenant at runtime             | `Fetch.make`    |
+
+In a script, use `Fetch.make` inline:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+
+import * as Fetch from "@monarcode/effetch";
+
+const program = Effect.gen(function* () {
+  const api = yield* Fetch.make({ baseUrl: "https://api.example.com" });
+  return yield* api.get("/health");
+});
+
+await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)));
+```
+
+When the config itself comes from an Effect, call `Fetch.make` inside that
+Effect and declare the service by hand:
 
 ```ts
 import * as Context from "effect/Context";
@@ -458,14 +591,16 @@ export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
 export const ApiLive = Layer.effect(Api)(makeApi);
 ```
 
-Use `Fetch.make` alone, without a service, in scripts and tests.
+Both give you the same client, with the same calls and the same types.
 
 ## Making calls
 
+With a client in hand, every call is one method: the path, an object of
+options, and an Effect back.
+
 ### Methods
 
-A client has a method for each HTTP method. Each takes a path and an object of
-options, and returns an Effect.
+A client has a method for each HTTP method:
 
 - `get`, `head` and `options` send no body.
 - `post`, `put`, `patch` and `del` can send one. It's `del` because `delete`
@@ -641,7 +776,7 @@ with a pair:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import type * as Fetch from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -657,8 +792,8 @@ export const page = Effect.gen(function* () {
 });
 ```
 
-- It's allowed on calls, on `client.endpoint` and `Fetch.endpoint`
-  definitions, and on each call of an endpoint, where the call's own mode wins.
+- It's allowed on calls, on endpoint definitions, and on each call of an
+  endpoint, where the call's own mode wins.
 - Without `output`, both items are the response.
 - The body has already been read: use the decoded value.
 - The default, `"decoded"`, gives the decoded body alone.
@@ -704,6 +839,11 @@ export const page = Effect.gen(function* () {
 
 ## Handling errors
 
+Every call's type lists the ways it can fail, so TypeScript knows which
+errors you've handled and which are left. This section covers what those
+errors are, how to catch them, and how to turn the API's error responses into
+errors of your own.
+
 ### What can go wrong
 
 A call can fail in three ways, each with its own tagged error. Plugins can add
@@ -720,8 +860,7 @@ own.
 
 ### Catching errors
 
-Errors are part of each call's type, so TypeScript knows exactly which ones
-are left to handle. Catch them by tag with `Effect.catchTags`:
+Catch errors by tag with `Effect.catchTags`:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -784,16 +923,17 @@ export const me = api
   );
 ```
 
-The handler gets the `HttpError`, with `status` narrowed to the statuses you
-gave, and what it returns joins the call's type. `HttpError` stays in the
-error type, since other statuses still fail with it. Both work on endpoint
-calls too, and `catchStatus` also takes the effect first:
-`Fetch.catchStatus(effect, 404, handler)`.
-
-A status that [`statusErrors`](#errors-by-status) maps fails with your error,
-not an `HttpError`, so `catchStatus` and `optional` never see it. Catch your
-error by its tag instead. The handler's `error.body` is `unknown`; for the
-typed body of an `error` schema, use `Effect.catchTag("HttpError", …)`.
+- The handler gets the `HttpError`, with `status` narrowed to the statuses you
+  gave, and what it returns joins the call's type.
+- `HttpError` stays in the error type, since other statuses still fail with
+  it.
+- Both work on endpoint calls too, and `catchStatus` also takes the effect
+  first: `Fetch.catchStatus(effect, 404, handler)`.
+- A status that [`statusErrors`](#errors-by-status) maps fails with your
+  error, not an `HttpError`, so `catchStatus` and `optional` never see it.
+  Catch your error by its tag instead.
+- The handler's `error.body` is `unknown`. For the typed body of an `error`
+  schema, use `Effect.catchTag("HttpError", …)`.
 
 ### Typed error bodies
 
@@ -817,7 +957,14 @@ Often a status, or a status with a given body, means a specific error in
 your app: a 404 from `GET /todos/:id` is "todo not found", a 400 with
 `"code": "INVALID_ROLE"` is "invalid role", a 401 from anywhere is "session
 expired". `statusErrors` maps statuses to your own error schemas, and the
-call fails with your error instead of an `HttpError`:
+call fails with your error instead of an `HttpError`.
+
+You can give a map in three places, and they add up:
+
+- on the client, for every call, such as a `401` from anywhere;
+- on an [endpoint](#endpoints), for every call to it, which is where most of
+  them live;
+- on a single call.
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -848,28 +995,34 @@ const ApiError = Schema.Struct({ code: Schema.String });
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 const User = Schema.Struct({ id: Schema.Finite, role: Schema.String });
 
+// For every call
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  defaultError: ApiError,
+  statusErrors: { 401: SessionExpired },
+}) {}
+
+// For every call to an endpoint (see Endpoints)
 export const getTodo = Fetch.endpoint("GET /todos/:id", {
   output: Todo,
   statusErrors: { 404: TodoNotFound },
 });
 
-export const assignRole = Fetch.endpoint("POST /users/:id/roles", {
-  input: Schema.Struct({ role: Schema.String }),
-  output: User,
-  statusErrors: { 400: [InvalidRole, RoleTaken] }, // tried in order
-});
-
 export const program = Effect.gen(function* () {
-  const api = yield* Fetch.make({
-    baseUrl: "https://api.example.com",
-    defaultError: ApiError,
-    statusErrors: { 401: SessionExpired }, // for every call
-  });
+  const api = yield* Api;
   const todo = yield* api
     .bind(getTodo)({ params: { id: 1 } })
     .pipe(Effect.catchTag("TodoNotFound", () => Effect.succeed(undefined)));
+
+  // For one call
   const user = yield* api
-    .bind(assignRole)({ params: { id: 1 }, body: { role: "owner" } })
+    .post("/users/:id/roles", {
+      params: { id: 1 },
+      input: Schema.Struct({ role: Schema.String }),
+      body: { role: "owner" },
+      output: User,
+      statusErrors: { 400: [InvalidRole, RoleTaken] }, // tried in order
+    })
     .pipe(
       Effect.catchTags({
         InvalidRole: (error) => Effect.fail(error.message),
@@ -880,7 +1033,7 @@ export const program = Effect.gen(function* () {
 });
 ```
 
-`assignRole`'s calls fail with
+Before the `catchTags`, the role call fails with
 `InvalidRole | RoleTaken | SessionExpired | HttpError.With<{ readonly code: string }> | NetworkError | DecodeError`.
 `HttpError` stays: a response can always fail to match.
 
@@ -902,7 +1055,8 @@ How a non-2xx response is resolved:
 | 401 from any endpoint                            | `SessionExpired`             |
 | 500                                              | `HttpError`                  |
 
-A few details:
+<details>
+<summary><strong>Details: tags, renamed fields, unions and types</strong></summary>
 
 - **The `_tag`.** Backends don't send one, so when a schema has a literal
   `_tag`, as `Schema.TaggedError` classes do, effetch adds it to the body
@@ -920,14 +1074,17 @@ A few details:
   `statusErrors` are those copies, frozen; an endpoint's `statusErrors`
   joins its own with the client's, each status listing its schemas in the
   order they're tried.
-- [`examples/status-errors.ts`](examples/status-errors.ts) puts all of this
-  in one program, and [`examples/app`](examples/app) uses it across modules.
 - `Fetch.StatusError<M>` is the union of the errors in a map `M`, and
   `Fetch.StatusErrorSchema<M>` the union of its schemas, for your own
   function signatures.
 - A client's type includes its map: `Fetch.Client<Ps, EB, SE>`. A client
   with a map can't be passed where a plain `Fetch.Client` is expected,
   since that would hide its errors.
+
+</details>
+
+[`examples/status-errors.ts`](examples/status-errors.ts) puts all of this in
+one program, and [`examples/app`](examples/app) uses it across modules.
 
 ### Safe to log
 
@@ -946,6 +1103,7 @@ error:
 
 - a missing path parameter;
 - a body that can't be encoded;
+- a query that doesn't match an endpoint's `query` schema;
 - a body on a `GET` or `HEAD` request;
 - a `baseUrl` with a query string;
 - two plugins with the same name;
@@ -953,11 +1111,14 @@ error:
 
 ## Plugins
 
-Plugins add behaviour to every call a client makes, such as sending a token,
-or trying again when the network drops. You pass them to `Fetch.make`, and any
-call can turn one off or adjust it.
+Most APIs need the same things on every call: a token, retries when the
+network drops, a time limit, a log line. Plugins add that behaviour to every
+call a client makes. You list them in the client's config, and any call can
+turn one off or adjust it.
 
 ### Built-in plugins
+
+The built-in plugins come from `@monarcode/effetch/plugins`:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -967,7 +1128,7 @@ import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
 
 declare const readToken: () => Promise<string | null>;
 
-export const makeApi = Fetch.make({
+export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
   plugins: [
     logger({ level: "Info" }),
@@ -975,7 +1136,7 @@ export const makeApi = Fetch.make({
     timeout({ duration: "10 seconds" }),
     bearer({ token: () => readToken() }),
   ],
-});
+}) {}
 
 export const withEffectToken = bearer({ token: Effect.succeed("token") });
 ```
@@ -990,7 +1151,8 @@ export const withEffectToken = bearer({ token: Effect.succeed("token") });
 
 A `bearer` token function that throws, or whose promise rejects, makes the
 call die. To fail with a typed error instead, pass an Effect: its error and
-services become the client's, and `make` asks for the services.
+services become the client's, and the client's layer (or `Fetch.make`) asks
+for the services.
 
 Time limits apply per attempt or to the whole call:
 
@@ -1018,13 +1180,20 @@ declare const tokens: {
   readonly renew: () => Promise<string | undefined>;
 };
 
-export const makeApi = Fetch.make({
+export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
   plugins: [
     bearer({ token: () => tokens.access(), refresh: () => tokens.renew() }),
   ],
-});
+}) {}
 ```
+
+The new token is used for that request only. Store it where `token` reads it,
+so later requests send it too. To sign out instead, see
+[Example: signing out on a 401](#example-signing-out-on-a-401).
+
+<details>
+<summary><strong>Details: how refreshing behaves</strong></summary>
 
 - `refresh` is a function of the refused request, as it was sent, sync or
   async, or an Effect. Like `token`, an Effect's error and services become
@@ -1048,10 +1217,7 @@ export const makeApi = Fetch.make({
 - Every method is sent again, a `POST` included: a `401` means the server
   didn't act on the request.
 
-The new token is used for that request only. Store it where `token` reads it,
-so later requests send it too.
-
-To sign out instead, see [Example: signing out on a 401](#example-signing-out-on-a-401).
+</details>
 
 ### Retry-After and a time limit
 
@@ -1062,8 +1228,8 @@ To sign out instead, see [Example: signing out on a 401](#example-signing-out-on
   schedule's delay. `true` waits up to 1 minute, and `{ max }` up to `max`.
   It's off by default, so a server can't make calls wait.
 - `budget`: how long the whole call may take, every attempt and wait
-  included. No retry is made when its wait would end at or after the budget: the
-  call ends with its last response or `NetworkError`. When the budget runs
+  included. No retry is made when its wait would end at or after the budget:
+  the call ends with its last response or `NetworkError`. When the budget runs
   out during an attempt, the attempt is aborted, and the call fails with
   `TimeoutError`. Calls can override it.
 
@@ -1074,13 +1240,13 @@ budget:
 import * as Fetch from "@monarcode/effetch";
 import { retry, timeout } from "@monarcode/effetch/plugins";
 
-export const makeApi = Fetch.make({
+export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
   plugins: [
     retry({ times: 5, retryAfter: true, budget: "30 seconds" }),
     timeout({ duration: "10 seconds" }),
   ],
-});
+}) {}
 
 // Per call: api.get("/report", { plugins: { retry: { budget: "2 minutes" } } })
 ```
@@ -1098,7 +1264,7 @@ import { consoleLogger } from "@monarcode/effetch/plugins";
 
 declare const isDevelopment: boolean;
 
-export const makeApi = Fetch.make({
+export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
   plugins: [
     consoleLogger({
@@ -1107,7 +1273,7 @@ export const makeApi = Fetch.make({
       redact: { body: ["otp"] },
     }),
   ],
-});
+}) {}
 ```
 
 Each call prints a line, which opens a group with the details:
@@ -1150,11 +1316,13 @@ import * as Effect from "effect/Effect";
 import * as Fetch from "@monarcode/effetch";
 import { consoleLogger } from "@monarcode/effetch/plugins";
 
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [consoleLogger()],
+}) {}
+
 export const program = Effect.gen(function* () {
-  const api = yield* Fetch.make({
-    baseUrl: "https://api.example.com",
-    plugins: [consoleLogger()],
-  });
+  const api = yield* Api;
   yield* api.get("/reports/export", {
     plugins: { consoleLogger: { detail: "summary" } },
   });
@@ -1162,7 +1330,11 @@ export const program = Effect.gen(function* () {
 });
 ```
 
-What it redacts, as `<redacted>`, matching names ignoring case, `-` and `_`:
+<details>
+<summary><strong>Details: what it redacts</strong></summary>
+
+It replaces these with `<redacted>`, matching names ignoring case, `-` and
+`_`:
 
 - headers in Effect's `Headers.CurrentRedactedNames` (`authorization`,
   `cookie`, `set-cookie`, `x-api-key`), `proxy-authorization`,
@@ -1183,7 +1355,10 @@ printed as a copy of its fields, redacted like a body, without an
 `HttpError`'s `text` or a `DecodeError`'s `issue`, which the response body
 line shows. Defects are printed as they are.
 
-Good to know:
+</details>
+
+<details>
+<summary><strong>Details: bodies, platforms and timing</strong></summary>
 
 - It only reads a response body that's text: JSON, `text/*` other than event
   streams, XML or a form, up to 1 MB. effetch has read it already to check
@@ -1196,7 +1371,6 @@ Good to know:
 - In React Native, groups start expanded: Metro's terminal silently drops
   `console.groupCollapsed` and everything logged inside it. React Native is
   detected by `navigator.product`, which it sets to `"ReactNative"`.
-
 - It runs when the call is over, so where it sits in the plugin list doesn't
   matter: a retried call is one entry, and its duration covers every
   attempt. The size comes from `content-length`, or from the body when it's
@@ -1208,10 +1382,13 @@ Good to know:
   changed it. When no response came back, it's the one the call built,
   before plugins ran.
 
+</details>
+
 ### Plugin order
 
 The first plugin is the outermost: it runs first on the way out, and last on
-the way back. The order above is the one to use:
+the way back. The order in [Built-in plugins](#built-in-plugins) is the one
+to use:
 
 - `logger` sees the whole call, retries included (`consoleLogger` sees the
   whole call wherever it is);
@@ -1233,15 +1410,17 @@ import * as Effect from "effect/Effect";
 import * as Fetch from "@monarcode/effetch";
 import { bearer, retry, timeout } from "@monarcode/effetch/plugins";
 
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [
+    retry(),
+    timeout({ duration: "10 seconds" }),
+    bearer({ token: "token" }),
+  ],
+}) {}
+
 export const program = Effect.gen(function* () {
-  const api = yield* Fetch.make({
-    baseUrl: "https://api.example.com",
-    plugins: [
-      retry(),
-      timeout({ duration: "10 seconds" }),
-      bearer({ token: "token" }),
-    ],
-  });
+  const api = yield* Api;
 
   // Logging in sends no token.
   yield* api.post("/auth/login", {
@@ -1253,6 +1432,703 @@ export const program = Effect.gen(function* () {
   yield* api.get("/reports/export", {
     plugins: { timeout: { duration: "2 minutes" }, retry: { times: 0 } },
   });
+});
+```
+
+To write your own plugins, see [Writing plugins](#writing-plugins).
+
+## Endpoints
+
+So far, most calls have spelled out their path and schemas where they're
+made. That's fine for a call made once. Once a call is made from several places, you
+start repeating its path, its schemas and its rules, and a mistake in one copy
+still compiles. An endpoint saves them once, and gives you a function to call.
+
+### Why endpoints
+
+An HTTP call mixes two kinds of information:
+
+| Fixed by the API                                     | Different on every call             |
+| ---------------------------------------------------- | ----------------------------------- |
+| the route; the response, error and body schemas      | path params, query values, the body |
+| rules for that route, such as "login sends no token" | a one-off header or plugin override |
+
+With the methods, you write both at every call site. Three calls to
+`GET /users/:id` repeat the path and the `User` schema three times, and a
+mistake in one of them, such as the wrong schema or a forgotten
+`bearer: false`, still compiles. An endpoint takes the first column once, when
+it's defined, and only the second column when it's called. That gives you:
+
+- **One place per route.** A path or a schema changes in one line, and the
+  service that holds your endpoints lists the API you use.
+- **Stricter types than a method can have.** A method only learns its HTTP
+  method and its `input` at the call, so it has to accept both ways. An
+  endpoint knows them up front: `body` is required when there's an `input`
+  (it's optional with `api.post`), a `GET` endpoint rejects a `body` at
+  compile time (`api.request("GET", …)` only dies at runtime), and the route
+  is checked as you type.
+- **Defaults that can't be forgotten.** An endpoint's headers and plugin
+  overrides apply to every call.
+- **A name instead of a URL.** Call sites read `users.get(…)`, and `route`,
+  `method` and `path` are there for query keys and log labels.
+
+Endpoints add no new behaviour: a call goes through the same plugins,
+decoding and errors as the method it stands for, so everything in the
+sections before this one applies to both. An endpoint is a saved call, not a
+contract shared with a server. For that, use Effect's `HttpApi`.
+
+### Defining endpoints
+
+`Fetch.endpoint` takes a route, the method and the path in one string, and
+what every call to it shares. It needs no client, so you can define endpoints
+next to their schemas:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const NewUser = Schema.Struct({ name: Schema.String });
+
+export const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+export const listUsers = Fetch.endpoint("GET /users", {
+  output: Schema.Array(User),
+});
+export const createUser = Fetch.endpoint("POST /users", {
+  input: NewUser,
+  output: User,
+});
+
+getUser.route; // "GET /users/:id"
+getUser.output; // User
+```
+
+The route is an uppercase method, one space, then a path that starts with `/`
+or a full `http(s)://` URL. TypeScript checks it as you type: `"GTE /users"`
+and `"get /users"` don't compile, and your editor suggests the methods.
+`Fetch.endpoint` also throws on a malformed route, so a bad one fails as soon
+as its module is imported.
+
+A definition is plain data: it holds the route, the schemas and the defaults,
+but it can't make a call until it's bound to a client.
+
+### Sharing endpoints as a service
+
+`Fetch.Endpoints` binds a record of definitions to a client and shares them as
+a service, the way `Fetch.Service` does for the client. It takes the
+service's id, the client's service and the record:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+declare const readToken: () => Promise<string | null>;
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const NewUser = Schema.Struct({ name: Schema.String });
+const Credentials = Schema.Struct({
+  user: Schema.String,
+  password: Schema.String,
+});
+const Session = Schema.Struct({ token: Schema.String });
+
+const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+const listUsers = Fetch.endpoint("GET /users", { output: Schema.Array(User) });
+const createUser = Fetch.endpoint("POST /users", {
+  input: NewUser,
+  output: User,
+});
+const login = Fetch.endpoint("POST /auth/login", {
+  input: Credentials,
+  output: Session,
+});
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [bearer({ token: () => readToken() })],
+}) {}
+
+export class UserApi extends Fetch.Endpoints<UserApi>()("UserApi", Api, {
+  get: getUser,
+  list: listUsers,
+  create: createUser,
+  // A [definition, options] pair: logging in sends no token.
+  login: [login, { plugins: { bearer: false } }],
+}) {}
+
+export const program = Effect.gen(function* () {
+  const users = yield* UserApi;
+  const ada = yield* users.create({ body: { name: "Ada" } });
+  const page = yield* users.list({ query: { page: 2 } });
+  const user = yield* users.get({ params: { id: ada.id } });
+  return { page, user };
+});
+
+export const AppLayer = UserApi.layer.pipe(
+  Layer.provideMerge(Api.layer),
+  Layer.provide(FetchHttpClient.layer),
+);
+```
+
+Like `Fetch.Service`, the class gives you three things:
+
+- **`UserApi` is the service.** `yield* UserApi` gives the endpoints, each
+  typed with the client's plugins, `defaultError` and `statusErrors`.
+- **`UserApi.layer` binds them** to the client once, when it's built. It
+  needs the client's service, here `Api`. The client can also be a service
+  you wrote by hand.
+- **`UserApi.definitions` is the record you passed**, frozen. You can read
+  it when the module loads.
+
+`Layer.provideMerge` keeps `Api` in the layer's output, so code can still
+`yield* Api` for one-off calls.
+
+Since a definition doesn't know its client:
+
+- **Plugin overrides are given when binding,** as in the `login` pair above,
+  where they're checked against the client's plugins. A definition takes no
+  `plugins`.
+- **A definition without an `error` schema** uses the `defaultError` of the
+  client it's bound to.
+- **Headers can be given in both.** The binding's win over the definition's.
+
+### Calling an endpoint
+
+What's fixed goes in the definition, and what changes goes in each call:
+
+| Defined once, on the endpoint                       | Passed with each call     |
+| --------------------------------------------------- | ------------------------- |
+| `output`, `error`, `input`, `query`, `statusErrors` | `params`, `query`, `body` |
+| `headers`, `responseMode`, `stream`                 | `headers`, `responseMode` |
+| `plugins` (when binding)                            | `plugins`                 |
+
+- `users.get({ params: { id } })` sends exactly what
+  `api.get("/users/:id", { output: User, params: { id } })` does, and
+  returns the same Effect.
+- `params` are required when the route's path has any, as with the methods.
+  An endpoint that needs nothing more is called with no arguments:
+  `users.list()`.
+- With an `input` schema, `body` is required and typed by it.
+- `GET`, `HEAD`, `OPTIONS` and `TRACE` endpoints take no `body` and no
+  `input`, and TypeScript rejects them.
+- With a `query` schema, `query` is typed by it, and required when the
+  schema has required fields. See
+  [Typed query parameters](#typed-query-parameters).
+
+### Other ways to bind endpoints
+
+`Fetch.Endpoints` is built on two client methods, which you can also use
+directly, such as inside your own service's layer:
+
+- **`api.bind(definition, options?)`** binds one definition. `options` are
+  the binding's `headers` and `plugins` overrides.
+- **`api.bindAll(record)`** binds a record of definitions, each under its own
+  name. An entry can also be a `[definition, options]` pair, with the options
+  `api.bind` takes. Each endpoint has the type `api.bind` gives it.
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const Session = Schema.Struct({ token: Schema.String });
+
+const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+const login = Fetch.endpoint("POST /auth/login", { output: Session });
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [bearer({ token: "token" })],
+}) {}
+
+export const endpoints = Effect.gen(function* () {
+  const api = yield* Api;
+  return {
+    getUser: api.bind(getUser),
+    login: api.bind(login, { plugins: { bearer: false } }),
+  };
+});
+
+export const sameEndpoints = Effect.gen(function* () {
+  const api = yield* Api;
+  return api.bindAll({
+    getUser,
+    login: [login, { plugins: { bearer: false } }],
+  });
+});
+```
+
+**`api.endpoint(route, definition)`** defines and binds in one step, where
+you already have the client. Its definition can take `plugins` directly,
+since it knows the client's plugins:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+const Session = Schema.Struct({ token: Schema.String });
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [bearer({ token: "token" })],
+}) {}
+
+export const endpoints = Effect.gen(function* () {
+  const api = yield* Api;
+  return {
+    login: api.endpoint("POST /auth/login", {
+      output: Session,
+      plugins: { bearer: false },
+    }),
+  };
+});
+```
+
+`api.bind(Fetch.endpoint(route, definition))` is the endpoint
+`api.endpoint(route, definition)` makes, with the same type and the same
+calls. Prefer `Fetch.endpoint` when:
+
+- endpoints should be listed next to their schemas, in a file with no client
+  (see [a feature-sliced app](#a-feature-sliced-app));
+- one definition serves several clients, such as staging and production;
+- a tool works from your endpoints, and needs their routes and schemas
+  without a client, as [`FetchTest`](#testing) does.
+
+### Typed query parameters
+
+Give an endpoint a `query` schema, usually a `Schema.Struct`, and each call's
+`query` is typed by it and encoded with it before it's sent. A `Schema.Class`
+works too, called with an instance:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+const TodoFilters = Schema.Struct({
+  done: Schema.optional(Schema.Boolean),
+  since: Schema.optional(Schema.Date),
+  pageSize: Schema.optional(Schema.Finite),
+}).pipe(Schema.encodeKeys({ pageSize: "page_size" }));
+
+export const listTodos = Fetch.endpoint("GET /todos", {
+  query: TodoFilters,
+  output: Schema.Array(Todo),
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+export const program = Effect.gen(function* () {
+  const api = yield* Api;
+  const list = api.bind(listTodos);
+  // GET /todos?done=false&since=2026-01-01T00%3A00%3A00.000Z&page_size=20
+  return yield* list({
+    query: { done: false, since: new Date("2026-01-01"), pageSize: 20 },
+  });
+});
+```
+
+- Each field is encoded to a string: a `Date` to its ISO string, a boolean to
+  `"true"` or `"false"`, a number to its digits. An array repeats the key.
+- Rename keys with `Schema.encodeKeys`, as above.
+- A field you leave out isn't sent, but a `null` is sent as the string
+  `"null"`, so prefer optional fields to nullable ones.
+- A `Schema.Redacted` field is sent as its value and, with Effect 4.1 or
+  later, stays redacted in Effect's logs and traces.
+- A query that doesn't match the schema, or a field that encodes to an
+  object, is a bug, not an error to handle: the call dies before anything is
+  sent. See [Bugs are defects](#bugs-are-defects).
+- A schema with a field that has no string encoding, such as
+  `Schema.instanceOf(Uint8Array)`, throws when the endpoint is defined.
+
+The schema is the endpoint's `query` property. `client.bind`,
+`client.bindAll` and `Fetch.Endpoints` keep it, and `api.endpoint` takes one
+too.
+
+### Building an endpoint's URL
+
+`endpoint.url(options)` returns the URL a call with the same `params` and
+`query` would go to, as a string, for a link, an `<img>` source, or a cache
+key:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+const getFile = Fetch.endpoint("GET /files/:name", {
+  query: Schema.Struct({ download: Schema.optional(Schema.Boolean) }),
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+// "/files/report.pdf?download=true"
+export const path = getFile.url({
+  params: { name: "report.pdf" },
+  query: { download: true },
+});
+
+export const link = Effect.gen(function* () {
+  const api = yield* Api;
+  // "https://api.example.com/files/report.pdf?download=true"
+  return api.bind(getFile).url({
+    params: { name: "report.pdf" },
+    query: { download: true },
+  });
+});
+```
+
+- On a bound endpoint, the URL starts with the client's `baseUrl`.
+- On a definition from `Fetch.endpoint`, which has no client, it's the path
+  alone, unless the route is a full URL. That makes it a stable cache key
+  for one backend, whichever client calls it.
+- The URL is built before plugins run, so anything a plugin adds, such as a
+  token in the query, isn't in it.
+- `url` throws when a path parameter is missing or the query doesn't match
+  the schema, as a call would die. It encodes the query synchronously, so on
+  an endpoint whose query schema needs services to encode, calling it doesn't
+  compile.
+
+### Defaults and overrides
+
+- **Headers.** A call's headers win over the endpoint's, which win over the
+  client's. A bound endpoint's headers are the binding's over the
+  definition's. Unlike the client's, an endpoint's headers can set
+  `content-type`.
+- **Plugins.** A call's plugin override wins over the endpoint's (given when
+  binding, or to `api.endpoint`), and when both give options, they're
+  merged. An endpoint bound with `retry: false` can still be retried in one
+  call with `plugins: { retry: { times: 2 } }`.
+- **Schemas** belong to the endpoint, and can't be changed per call.
+
+Each endpoint also has `route`, `method` and `path` properties, for log labels
+or cache keys. Plugins see the same route, as
+[`ctx.route`](#knowing-the-route). Its `output`, `error` and `input`
+properties are its schemas, for things like decoding cached data or building
+test fixtures: `output` and `input` are `undefined` when the endpoint has
+none, and `error` is the schema error bodies are decoded with, the
+endpoint's, else the client's `defaultError`, else `Schema.Unknown`.
+
+### Endpoints or methods?
+
+Use an endpoint when a call:
+
+- is made from more than one place;
+- has rules every call must follow, such as an auth exception or a content
+  type;
+- sends a body with an `input` schema;
+- belongs to a backend whose API you want listed in one place.
+
+Use a method for one-off calls, and for calls whose method or path is only
+known at runtime. Mixing them is normal: keep the client next to its
+endpoints, for the calls that aren't worth one.
+
+Avoid:
+
+- **`api.endpoint(…)(…)` at a call site.** That's a method call written
+  twice: use the method.
+- **Making or binding endpoints in code that runs on every request.** Do it
+  once, when the layer that holds them is built, as `Fetch.Endpoints` does.
+- **Passing a bound endpoint's plugin overrides at every call.** A definition
+  can't hold them, since it doesn't know the client's plugins: give them once,
+  when binding, as in `api.bind(login, { plugins: { bearer: false } })`.
+- **Spreading several groups of endpoints into one object.** When two use the
+  same name, the later one silently wins. Nest them instead:
+  `{ users, todos }`, or give each group its own `Fetch.Endpoints` class.
+
+## Streaming responses
+
+Some APIs send their answer a piece at a time: progress feeds,
+notifications, exports, the answers of language models. `api.sse` and
+`api.ndjson` give such a body as an Effect `Stream`, one value at a time,
+as it arrives.
+
+### Server-Sent Events
+
+`api.sse` reads a `text/event-stream` body. Each value is an event, with
+its `event` name (`"message"` when the server sends none), its `id`, and its
+`data`, decoded with `output`:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import type * as Fetch from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const JobEvent = Schema.Struct({ percent: Schema.Finite });
+
+export const followJob = (id: number) =>
+  api.sse("/jobs/:id/events", { params: { id }, output: JobEvent }).pipe(
+    Stream.takeUntil((event) => event.data.percent === 100),
+    Stream.runForEach((event) => Effect.log(`${event.data.percent}%`)),
+  );
+```
+
+- `output` decodes each event's `data` as JSON. Without it, or with
+  `Fetch.text()`, `data` is the text as it was sent.
+- `method` defaults to `"GET"`. APIs that stream the answer to a request
+  take `"POST"` and a `body`:
+
+  ```ts
+  import * as Schema from "effect/Schema";
+
+  import type * as Fetch from "@monarcode/effetch";
+
+  declare const api: Fetch.Client;
+
+  const Prompt = Schema.Struct({ prompt: Schema.String });
+  const Delta = Schema.Struct({ text: Schema.String });
+
+  export const complete = (prompt: string) =>
+    api.sse("/completions", {
+      method: "POST",
+      input: Prompt,
+      body: { prompt },
+      output: Delta,
+    });
+  ```
+
+- The request sends `Accept: text/event-stream`, unless the call or the
+  client sets an `accept` header.
+- Events are parsed by the [WHATWG rules][sse-spec]: comment lines are
+  ignored, a multi-line `data` is joined with `\n`, and an `id` carries over
+  to the events after it. The stream doesn't reconnect, and ignores
+  `retry:` lines.
+- A response whose `Content-Type` is set to another type than
+  `text/event-stream`, such as a login page from a proxy, fails the stream
+  with a `DecodeError`.
+
+`output` decodes every event, so an event whose data doesn't match it
+fails the stream, after the events before it. When the server ends with a
+sentinel that isn't JSON, such as `data: [DONE]`, leave `output` out, stop
+at the sentinel, then decode the rest:
+
+```ts
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import type * as Fetch from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Delta = Schema.fromJsonString(Schema.Struct({ text: Schema.String }));
+
+export const deltas = (prompt: string) =>
+  api.sse("/completions", { method: "POST", body: { prompt } }).pipe(
+    Stream.takeWhile((event) => event.data !== "[DONE]"),
+    Stream.mapEffect((event) => Schema.decodeUnknownEffect(Delta)(event.data)),
+  );
+```
+
+`api.sse` parses events with Effect's `encoding/Sse` module, which Effect
+marks unstable.
+
+[sse-spec]: https://html.spec.whatwg.org/multipage/server-sent-events.html
+
+### Newline-delimited JSON
+
+`api.ndjson` reads an `application/x-ndjson` body (also called JSON Lines):
+one JSON value per line, decoded with `output`:
+
+```ts
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import type * as Fetch from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Row = Schema.Struct({ id: Schema.Finite, email: Schema.String });
+
+export const countRows = api
+  .ndjson("/export/users", { output: Row })
+  .pipe(Stream.runCount);
+```
+
+- Without `output`, each value is the parsed JSON, typed `unknown`.
+  `Fetch.text()` gives each line's text instead.
+- Blank lines are skipped, and the last line needs no line end.
+- The request sends `Accept: application/x-ndjson`, unless an `accept`
+  header is set.
+
+### Stream endpoints
+
+An endpoint defined with `stream: "sse"` or `stream: "ndjson"` returns a
+`Stream` from its calls, however it's bound:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import * as Fetch from "@monarcode/effetch";
+
+const JobEvent = Schema.Struct({ percent: Schema.Finite });
+
+const jobEvents = Fetch.endpoint("GET /jobs/:id/events", {
+  output: JobEvent,
+  stream: "sse",
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+export class JobApi extends Fetch.Endpoints<JobApi>()("JobApi", Api, {
+  events: jobEvents,
+}) {}
+
+export const lastEvent = (id: number) =>
+  Effect.gen(function* () {
+    const jobs = yield* JobApi;
+    return yield* jobs.events({ params: { id } }).pipe(Stream.runLast);
+  });
+```
+
+### How a stream fails
+
+A stream's request runs as any call does, up to the response's headers:
+
+- Plugins run once. `retry` and `timeout` apply to getting the response,
+  not to reading the body.
+- When no response arrives, the stream fails with a `NetworkError`.
+- An error status fails it with an `HttpError`, or a
+  [`statusErrors`](#errors-by-status) error, before it gives any value.
+- A `204 No Content` or `205 Reset Content` gives an empty stream.
+
+Then the body is read as it arrives. The values before a failure are given
+first. A value that doesn't match `output`, or a body that breaks off,
+fails the stream with a `DecodeError`, which names the event or the line:
+`Line 3 doesn't match the output schema`.
+
+For plugins, the call ends when the response's headers arrive. Their
+`onExit` hooks, and so `logger` and `consoleLogger`, report it then, with
+the time to the headers, and a `DecodeError` while reading the body doesn't
+reach them. Handle it on the stream, with `Stream.catchTag("DecodeError", …)`
+or `Stream.tapError`.
+
+### Stopping a stream
+
+Interrupting the stream, or taking only part of it, as with `Stream.take`,
+aborts the request. Nothing else is needed to close the connection.
+
+A stream can't take `responseMode`, or an `output` made with
+`Fetch.bytes()`. A call that passes one dies, and a definition with one
+throws when it's made.
+
+## Pagination
+
+Lists are often split into pages: you ask for the first, and the response
+says how to get the next. `Fetch.paginate` follows those pages for you, as a
+`Stream` of pages. It calls a bound endpoint for the first page, then for the
+next one, until `next` says there's none:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import * as Fetch from "@monarcode/effetch";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+const listTodos = Fetch.endpoint("GET /todos", {
+  query: Schema.Struct({ page: Schema.Finite }),
+  output: Schema.Array(Todo),
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+class TodoApi extends Fetch.Endpoints<TodoApi>()("TodoApi", Api, {
+  list: listTodos,
+}) {}
+
+export const allTodos = Effect.gen(function* () {
+  const todos = yield* TodoApi;
+  return yield* Fetch.paginate(todos.list, {
+    start: 1,
+    request: (page) => ({ query: { page } }),
+    next: (page, number) =>
+      page.length === 0 ? Option.none() : Option.some(number + 1),
+  }).pipe(Stream.flattenIterable, Stream.runCollect);
+});
+```
+
+- `start` is the state of the first page, such as a page number or a
+  cursor.
+- `request(state)` gives the page's call options: `params`, `query`, `body`
+  and `headers`, typed by the endpoint.
+- `next(page, state, response)` gives the next page's state, or
+  `Option.none()` after the last page.
+
+Each page is one value of the stream, so a page that's a list stays a list.
+`Stream.flattenIterable` gives its items one by one.
+
+The stream is lazy: it sends a page's call only when the page is needed, so
+`Stream.take(1)` sends one. A call that fails fails the stream with the
+call's error.
+
+`Fetch.paginate` takes a bound endpoint, from `Fetch.Endpoints`,
+`client.bind`, `client.bindAll` or `client.endpoint`. A definition made by
+`Fetch.endpoint` needs binding first, and a stream endpoint can't be paged.
+
+### Cursors in headers
+
+When the next page's cursor is in a header, such as a `Link` header, define
+the endpoint with `responseMode: "decoded-and-response"`. `next` then gets
+each page's response:
+
+```ts
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Item = Schema.Struct({ id: Schema.Finite });
+
+const listItems = Fetch.endpoint("GET /items", {
+  output: Schema.Array(Item),
+  responseMode: "decoded-and-response",
+});
+
+// The cursor is percent-encoded in the URL, and `query` encodes it again.
+const nextCursor = (link: string | undefined) =>
+  Option.fromNullishOr(
+    /[?&]cursor=([^&>]+)[^>]*>;\s*rel="next"/.exec(link ?? "")?.[1],
+  ).pipe(Option.flatMap(Option.liftThrowable(decodeURIComponent)));
+
+export const allItems = Fetch.paginate(api.bind(listItems), {
+  start: undefined as string | undefined,
+  request: (cursor) => (cursor === undefined ? {} : { query: { cursor } }),
+  next: (_items, _cursor, response) => nextCursor(response.headers.link),
 });
 ```
 
@@ -1281,11 +2157,13 @@ export const apiVersion = Fetch.plugin({
     ),
 });
 
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [apiVersion],
+}) {}
+
 export const program = Effect.gen(function* () {
-  const api = yield* Fetch.make({
-    baseUrl: "https://api.example.com",
-    plugins: [apiVersion],
-  });
+  const api = yield* Api;
   yield* api.get("/reports", {
     plugins: { apiVersion: { version: "2025-01-01" } },
   });
@@ -1312,11 +2190,15 @@ in `onError` and `onExit`, the one the call built.
 
 `onExit` gets the call's `Exit`: its result (the decoded `output`, or the
 response for a call without one), or the cause of its failure, defect or
-interruption. Its `ctx` also has the `response` (the one the plugins
-returned; when a plugin failed after a response arrived, the last one the
-network sent; `undefined` when none arrived) and `durationMs`, the time from
-sending the request to decoding the body, retries included. It suits logging
-and metrics, and is what `consoleLogger` uses:
+interruption. Its `ctx` also has:
+
+- `response`: the one the plugins returned; when a plugin failed after a
+  response arrived, the last one the network sent; `undefined` when none
+  arrived;
+- `durationMs`: the time from sending the request to decoding the body,
+  retries included.
+
+It suits logging and metrics, and is what `consoleLogger` uses:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -1416,11 +2298,11 @@ export const auth = Fetch.plugin({
     }),
 });
 
-// makeApi now needs Session; calls fail with SessionExpired too.
-export const makeApi = Fetch.make({
+// Api.layer now needs Session; calls fail with SessionExpired too.
+export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
   plugins: [auth],
-});
+}) {}
 ```
 
 ### Example: a deadline with its own error
@@ -1456,181 +2338,25 @@ export const deadline = Fetch.plugin({
 
 ### Tips
 
-- Services a plugin needs are required by `make`, once. Calls don't need
-  them. Services provided around a call win over those `make` saw.
+- Services a plugin needs are required once, by the client's layer (or by
+  `Fetch.make`). Calls don't need them. Services provided around a call win
+  over those the client was built with.
 - Plugin names must be unique.
 - Write `wrap` bodies with `Effect.gen`. A ternary that returns two different
   Effects can't be typed.
 - Pass plugin lists inline, or let TypeScript infer them. Annotating a list as
   `Fetch.Plugin.Any[]` erases the plugins' types.
 
-## Endpoints
+## Structuring an app
 
-Once a call is made from more than one place, you start repeating its path,
-its schemas and its rules. An endpoint saves them once, and gives you a
-function to call.
+A client is declared once, and endpoints are bound to it once, in a layer.
+Where each piece lives depends on the size of your app. These are patterns,
+not rules: effetch works the same way whichever you pick.
 
-### Defining endpoints
+### A small app
 
-`api.endpoint` takes a route, the method and the path in one string, and what
-every call to it shares. It returns a function that takes the rest:
-
-```ts
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-
-import * as Fetch from "@monarcode/effetch";
-import { bearer } from "@monarcode/effetch/plugins";
-
-declare const readToken: () => Promise<string | null>;
-
-const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
-const NewUser = Schema.Struct({ name: Schema.String });
-const Credentials = Schema.Struct({
-  user: Schema.String,
-  password: Schema.String,
-});
-const Session = Schema.Struct({ token: Schema.String });
-
-const makeApi = Effect.gen(function* () {
-  const api = yield* Fetch.make({
-    baseUrl: "https://api.example.com",
-    plugins: [bearer({ token: () => readToken() })],
-  });
-  return {
-    getUser: api.endpoint("GET /users/:id", { output: User }),
-    listUsers: api.endpoint("GET /users", { output: Schema.Array(User) }),
-    createUser: api.endpoint("POST /users", { input: NewUser, output: User }),
-    login: api.endpoint("POST /auth/login", {
-      input: Credentials,
-      output: Session,
-      plugins: { bearer: false },
-    }),
-  };
-});
-
-export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
-  "Api",
-) {}
-
-export const program = Effect.gen(function* () {
-  const { getUser, listUsers, createUser } = yield* Api;
-  const ada = yield* createUser({ body: { name: "Ada" } });
-  const users = yield* listUsers({ query: { page: 2 } });
-  const user = yield* getUser({ params: { id: ada.id } });
-  return { users, user };
-});
-```
-
-`getUser({ params: { id } })` sends exactly what
-`api.get("/users/:id", { output: User, params: { id } })` does, and returns
-the same Effect. Endpoints add no new behaviour: a call goes through the same
-plugins, decoding and errors as the method it stands for, so everything above
-applies to both.
-
-The route is an uppercase method, one space, then a path that starts with `/`
-or a full `http(s)://` URL. TypeScript checks it as you type: `"GTE /users"`
-and `"get /users"` don't compile, and your editor suggests the methods.
-
-### Defining endpoints without a client
-
-`api.endpoint` needs a client, and a client only exists inside an Effect, so
-those endpoints only exist once the layer that makes them is built.
-`Fetch.endpoint` takes the same route and definition with no client, and
-returns plain data you can read at module level. `api.bind` then makes it an
-endpoint of that client:
-
-```ts
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-
-import * as Fetch from "@monarcode/effetch";
-import { bearer } from "@monarcode/effetch/plugins";
-
-const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
-const Session = Schema.Struct({ token: Schema.String });
-
-// At module level, next to the schemas
-export const getUser = Fetch.endpoint("GET /users/:id", { output: User });
-export const login = Fetch.endpoint("POST /auth/login", { output: Session });
-
-getUser.route; // "GET /users/:id"
-getUser.output; // User
-
-// Where the client is
-export const makeApi = Effect.gen(function* () {
-  const api = yield* Fetch.make({
-    baseUrl: "https://api.example.com",
-    plugins: [bearer({ token: "token" })],
-  });
-  return {
-    getUser: api.bind(getUser),
-    login: api.bind(login, { plugins: { bearer: false } }),
-  };
-});
-```
-
-`api.bind(Fetch.endpoint(route, definition))` is the endpoint
-`api.endpoint(route, definition)` makes, with the same type and the same
-calls. Since a definition doesn't know its client:
-
-- **Plugin overrides are given when binding,** where they're checked against
-  the client's plugins. A definition takes no `plugins`.
-- **A definition without an `error` schema** uses the `defaultError` of the
-  client it's bound to.
-- **Headers can be given in both.** The binding's win over the definition's.
-
-The route is checked as you type, as with `api.endpoint`, and `Fetch.endpoint`
-throws on a malformed one, so a bad route fails as soon as its module is
-imported.
-
-Define endpoints this way when:
-
-- they should be listed next to their schemas, in a file with no client (see
-  [a feature-sliced app](#a-feature-sliced-app));
-- one definition serves several clients, such as staging and production;
-- a tool works from your endpoints, and needs their routes and schemas
-  without a client.
-
-#### Binding several at once
-
-`api.bindAll` binds a record of definitions, each under its own name. An
-entry can also be a `[definition, options]` pair, with the options
-`api.bind` takes:
-
-```ts
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-
-import * as Fetch from "@monarcode/effetch";
-import { bearer } from "@monarcode/effetch/plugins";
-
-const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
-const Session = Schema.Struct({ token: Schema.String });
-
-const getUser = Fetch.endpoint("GET /users/:id", { output: User });
-const login = Fetch.endpoint("POST /auth/login", { output: Session });
-
-export const makeApi = Effect.gen(function* () {
-  const api = yield* Fetch.make({
-    baseUrl: "https://api.example.com",
-    plugins: [bearer({ token: "token" })],
-  });
-  return api.bindAll({
-    getUser,
-    login: [login, { plugins: { bearer: false } }],
-  });
-});
-```
-
-Each endpoint has the type `api.bind` gives it.
-
-#### Sharing them as a service
-
-`Fetch.Endpoints` declares the endpoints as a service class, as
-`Fetch.Service` does for a client. It takes the service's id, the client's
-service and the record `bindAll` takes:
+Keep the client in one file, and each area's endpoints in its own file, as a
+`Fetch.Endpoints` class. One layer puts them together:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -1639,487 +2365,57 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import * as Fetch from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const NewUser = Schema.Struct({ name: Schema.String });
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
-const getUser = Fetch.endpoint("GET /users/:id", { output: User });
-const listUsers = Fetch.endpoint("GET /users", { output: Schema.Array(User) });
-
+// api.ts
 export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
+  plugins: [bearer({ token: "token" })],
 }) {}
 
-export class UserApi extends Fetch.Endpoints<UserApi>()("UserApi", Api, {
-  get: getUser,
-  list: listUsers,
+// users.ts
+export class Users extends Fetch.Endpoints<Users>()("Users", Api, {
+  get: Fetch.endpoint("GET /users/:id", { output: User }),
+  create: Fetch.endpoint("POST /users", { input: NewUser, output: User }),
+  login: [
+    Fetch.endpoint("POST /auth/login", { output: User }),
+    { plugins: { bearer: false } },
+  ],
 }) {}
 
-export const program = Effect.gen(function* () {
-  const users = yield* UserApi;
-  return yield* users.get({ params: { id: 1 } });
-});
+// todos.ts
+export class Todos extends Fetch.Endpoints<Todos>()("Todos", Api, {
+  list: Fetch.endpoint("GET /todos", { output: Schema.Array(Todo) }),
+}) {}
 
-export const AppLayer = UserApi.layer.pipe(
+// layer.ts
+export const AppLayer = Layer.mergeAll(Users.layer, Todos.layer).pipe(
   Layer.provideMerge(Api.layer),
   Layer.provide(FetchHttpClient.layer),
 );
-```
 
-- **`UserApi` is the service.** `yield* UserApi` gives the endpoints.
-- **`UserApi.layer` binds them** to the client once, when it's built. It
-  needs the client's service, here `Api`. The client can also be a service
-  you wrote by hand.
-- **`UserApi.definitions` is the record you passed**, frozen. You can read
-  it when the module loads.
-
-### Calling an endpoint
-
-What's fixed goes in the definition, and what changes goes in each call:
-
-| Defined once, on the endpoint       | Passed with each call     |
-| ----------------------------------- | ------------------------- |
-| `output`, `error`, `input`, `query` | `params`, `query`, `body` |
-| `headers`, `plugins`                | `headers`, `plugins`      |
-
-- `params` are required when the route's path has any, as with the methods.
-  An endpoint that needs nothing more is called with no arguments:
-  `listUsers()`.
-- With an `input` schema, `body` is required and typed by it.
-- `GET`, `HEAD`, `OPTIONS` and `TRACE` endpoints take no `body` and no
-  `input`, and TypeScript rejects them.
-- With a `query` schema, `query` is typed by it, and required when the
-  schema has required fields. See
-  [Typed query parameters](#typed-query-parameters).
-
-### Typed query parameters
-
-Give an endpoint a `query` schema, usually a `Schema.Struct`, and each call's
-`query` is typed by it and encoded with it before it's sent. A `Schema.Class`
-works too, called with an instance:
-
-```ts
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-
-import * as Fetch from "@monarcode/effetch";
-
-const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
-
-const TodoFilters = Schema.Struct({
-  done: Schema.optional(Schema.Boolean),
-  since: Schema.optional(Schema.Date),
-  pageSize: Schema.optional(Schema.Finite),
-}).pipe(Schema.encodeKeys({ pageSize: "page_size" }));
-
-export const listTodos = Fetch.endpoint("GET /todos", {
-  query: TodoFilters,
-  output: Schema.Array(Todo),
-});
-
+// anywhere
 export const program = Effect.gen(function* () {
-  const api = yield* Fetch.make({ baseUrl: "https://api.example.com" });
-  const list = api.bind(listTodos);
-  // GET /todos?done=false&since=2026-01-01T00%3A00%3A00.000Z&page_size=20
-  return yield* list({
-    query: { done: false, since: new Date("2026-01-01"), pageSize: 20 },
-  });
+  const users = yield* Users;
+  const api = yield* Api; // for one-off calls
+  const user = yield* users.get({ params: { id: 1 } });
+  yield* api.post("/users/:id/ping", { params: { id: user.id } });
+  return user;
 });
 ```
 
-Each field is encoded to a string: a `Date` to its ISO string, a boolean to
-`"true"` or `"false"`, a number to its digits. An array repeats the key.
-Rename keys with `Schema.encodeKeys`, as above. A field you leave out isn't
-sent, but a `null` is sent as the string `"null"`, so prefer optional fields
-to nullable ones. A `Schema.Redacted` field is sent as its value and, with
-Effect 4.1 or later, stays redacted in Effect's logs and traces.
+The plugin override on `login` is checked against `Api`'s plugins, and every
+endpoint's errors are typed with `Api`'s `defaultError` and `statusErrors`.
 
-A query that doesn't match the schema, or a field that encodes to an object,
-is a bug, not an error to handle: the call dies before anything is sent. See
-[Bugs are defects](#bugs-are-defects). A schema with a field that has no
-string encoding, such as `Schema.instanceOf(Uint8Array)`, throws when the
-endpoint is defined.
-
-The schema is the endpoint's `query` property. `client.bind`,
-`client.bindAll` and `Fetch.Endpoints` keep it, and `api.endpoint` takes one
-too.
-
-### Building an endpoint's URL
-
-`endpoint.url(options)` returns the URL a call with the same `params` and
-`query` would go to, as a string, for a link, an `<img>` source, or a cache
-key:
+To make endpoints with `client.endpoint` instead, write each area as a
+function of the client, typed `Effect.Success<typeof Api>`, so overrides and
+errors are still checked against your plugins and `defaultError`:
 
 ```ts
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-
-import * as Fetch from "@monarcode/effetch";
-
-const getFile = Fetch.endpoint("GET /files/:name", {
-  query: Schema.Struct({ download: Schema.optional(Schema.Boolean) }),
-});
-
-// "/files/report.pdf?download=true"
-export const path = getFile.url({
-  params: { name: "report.pdf" },
-  query: { download: true },
-});
-
-export const link = Effect.gen(function* () {
-  const api = yield* Fetch.make({ baseUrl: "https://api.example.com" });
-  // "https://api.example.com/files/report.pdf?download=true"
-  return api.bind(getFile).url({
-    params: { name: "report.pdf" },
-    query: { download: true },
-  });
-});
-```
-
-On a bound endpoint, the URL starts with the client's `baseUrl`. On a
-definition from `Fetch.endpoint`, which has no client, it's the path alone,
-unless the route is a full URL. The URL is built before plugins run, so
-anything a plugin adds, such as a token in the query, isn't in it.
-
-`url` throws when a path parameter is missing or the query doesn't match the
-schema, as a call would die. It encodes the query synchronously, so on an
-endpoint whose query schema needs services to encode, calling it doesn't
-compile.
-
-### Defaults and overrides
-
-- **Headers.** A call's headers win over the endpoint's, which win over the
-  client's. A bound endpoint's headers are the binding's over the
-  definition's. Unlike the client's, an endpoint's headers can set
-  `content-type`.
-- **Plugins.** A call's plugin override wins over the endpoint's (given to
-  `api.endpoint`, or when binding), and when both give options, they're
-  merged. An endpoint defined with `retry: false` can still be retried in one
-  call with `plugins: { retry: { times: 2 } }`.
-- **Schemas** belong to the endpoint, and can't be changed per call.
-
-Each endpoint also has `route`, `method` and `path` properties, for log labels
-or cache keys. Plugins see the same route, as
-[`ctx.route`](#knowing-the-route). Its `output`, `error` and `input`
-properties are its schemas, for things like decoding cached data or building
-test fixtures: `output` and `input` are `undefined` when the endpoint has
-none, and `error` is the schema error bodies are decoded with, the
-endpoint's, else the client's `defaultError`, else `Schema.Unknown`.
-
-### Why use endpoints
-
-An HTTP call mixes two kinds of information:
-
-| Fixed by the API                                     | Different on every call             |
-| ---------------------------------------------------- | ----------------------------------- |
-| the route; the response, error and body schemas      | path params, query values, the body |
-| rules for that route, such as "login sends no token" | a one-off header or plugin override |
-
-With the methods, you write both at every call site. Three calls to
-`GET /users/:id` repeat the path and the `User` schema three times, and a
-mistake in one of them, such as the wrong schema or a forgotten
-`bearer: false`, still compiles. An endpoint takes the first column once, when
-it's defined, and only the second column when it's called. That gives you:
-
-- **One place per route.** A path or a schema changes in one line, and the
-  service that holds your endpoints lists the API you use.
-- **Stricter types than a method can have.** A method only learns its HTTP
-  method and its `input` at the call, so it has to accept both ways. An
-  endpoint knows them up front: `body` is required when there's an `input`
-  (it's optional with `api.post`), a `GET` endpoint rejects a `body` at
-  compile time (`api.request("GET", …)` only dies at runtime), and the route
-  is checked as you type.
-- **Defaults that can't be forgotten.** An endpoint's headers and plugin
-  overrides apply to every call.
-- **A name instead of a URL.** Call sites read `users.get(…)`, and `route`,
-  `method` and `path` are there for query keys and log labels.
-
-An endpoint is a saved call, not a contract shared with a server. For that,
-use Effect's `HttpApi`.
-
-### Endpoints or methods?
-
-Use an endpoint when a call:
-
-- is made from more than one place;
-- has rules every call must follow, such as an auth exception or a content
-  type;
-- sends a body with an `input` schema;
-- belongs to a backend whose API you want listed in one place.
-
-Use a method for one-off calls, and for calls whose method or path is only
-known at runtime. Mixing them is normal: keep the client next to its
-endpoints, for the calls that aren't worth one.
-
-Avoid:
-
-- **`api.endpoint(…)(…)` at a call site.** That's a method call written
-  twice: use the method.
-- **Making or binding endpoints in code that runs on every request.** Do it
-  once, when the layer that holds them is built.
-- **Passing a bound endpoint's plugin overrides at every call.** A definition
-  can't hold them, since it doesn't know the client's plugins: give them once,
-  when binding, as in `api.bind(login, { plugins: { bearer: false } })`.
-- **Spreading several groups of endpoints into one object.** When two use the
-  same name, the later one silently wins. Nest them instead:
-  `{ users, todos }`.
-
-## Streaming responses
-
-Some APIs send their answer a piece at a time: progress feeds,
-notifications, exports, the answers of language models. `api.sse` and
-`api.ndjson` give such a body as an Effect `Stream`, one value at a time,
-as it arrives.
-
-### Server-Sent Events
-
-`api.sse` reads a `text/event-stream` body. Each value is an event, with
-its `event` name (`"message"` when the server sends none), its `id`, and its
-`data`, decoded with `output`:
-
-```ts
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-
-import * as Fetch from "@monarcode/effetch";
-
-const JobEvent = Schema.Struct({ percent: Schema.Finite });
-
-export const followJob = (api: Fetch.Client, id: number) =>
-  api.sse("/jobs/:id/events", { params: { id }, output: JobEvent }).pipe(
-    Stream.takeUntil((event) => event.data.percent === 100),
-    Stream.runForEach((event) => Effect.log(`${event.data.percent}%`)),
-  );
-```
-
-- `output` decodes each event's `data` as JSON. Without it, or with
-  `Fetch.text()`, `data` is the text as it was sent.
-- `method` defaults to `"GET"`. APIs that stream the answer to a request
-  take `"POST"` and a `body`:
-
-  ```ts
-  import * as Schema from "effect/Schema";
-
-  import type * as Fetch from "@monarcode/effetch";
-
-  const Prompt = Schema.Struct({ prompt: Schema.String });
-  const Delta = Schema.Struct({ text: Schema.String });
-
-  export const complete = (api: Fetch.Client, prompt: string) =>
-    api.sse("/completions", {
-      method: "POST",
-      input: Prompt,
-      body: { prompt },
-      output: Delta,
-    });
-  ```
-
-- The request sends `Accept: text/event-stream`, unless the call or the
-  client sets an `accept` header.
-- Events are parsed by the [WHATWG rules][sse-spec]: comment lines are
-  ignored, a multi-line `data` is joined with `\n`, and an `id` carries over
-  to the events after it. The stream doesn't reconnect, and ignores
-  `retry:` lines.
-- A response whose `Content-Type` is set to another type than
-  `text/event-stream`, such as a login page from a proxy, fails the stream
-  with a `DecodeError`.
-
-`output` decodes every event, so an event whose data doesn't match it
-fails the stream, after the events before it. When the server ends with a
-sentinel that isn't JSON, such as `data: [DONE]`, leave `output` out, stop
-at the sentinel, then decode the rest:
-
-```ts
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-
-import type * as Fetch from "@monarcode/effetch";
-
-const Delta = Schema.fromJsonString(Schema.Struct({ text: Schema.String }));
-
-export const deltas = (api: Fetch.Client, prompt: string) =>
-  api.sse("/completions", { method: "POST", body: { prompt } }).pipe(
-    Stream.takeWhile((event) => event.data !== "[DONE]"),
-    Stream.mapEffect((event) => Schema.decodeUnknownEffect(Delta)(event.data)),
-  );
-```
-
-`api.sse` parses events with Effect's `encoding/Sse` module, which Effect
-marks unstable.
-
-[sse-spec]: https://html.spec.whatwg.org/multipage/server-sent-events.html
-
-### Newline-delimited JSON
-
-`api.ndjson` reads an `application/x-ndjson` body (also called JSON Lines):
-one JSON value per line, decoded with `output`:
-
-```ts
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-
-import type * as Fetch from "@monarcode/effetch";
-
-const Row = Schema.Struct({ id: Schema.Finite, email: Schema.String });
-
-export const countRows = (api: Fetch.Client) =>
-  api.ndjson("/export/users", { output: Row }).pipe(Stream.runCount);
-```
-
-- Without `output`, each value is the parsed JSON, typed `unknown`.
-  `Fetch.text()` gives each line's text instead.
-- Blank lines are skipped, and the last line needs no line end.
-- The request sends `Accept: application/x-ndjson`, unless an `accept`
-  header is set.
-
-### Stream endpoints
-
-An endpoint with `stream: "sse"` or `stream: "ndjson"` returns a `Stream`
-from its calls, with every way of making or binding one:
-
-```ts
-import * as Schema from "effect/Schema";
-
-import * as Fetch from "@monarcode/effetch";
-
-const JobEvent = Schema.Struct({ percent: Schema.Finite });
-
-export const jobEvents = Fetch.endpoint("GET /jobs/:id/events", {
-  output: JobEvent,
-  stream: "sse",
-});
-
-export const follow = (api: Fetch.Client, id: number) =>
-  api.bind(jobEvents)({ params: { id } });
-```
-
-### How a stream fails
-
-A stream's request runs as any call does, up to the response's headers:
-
-- Plugins run once. `retry` and `timeout` apply to getting the response,
-  not to reading the body.
-- When no response arrives, the stream fails with a `NetworkError`.
-- An error status fails it with an `HttpError`, or a
-  [`statusErrors`](#errors-by-status) error, before it gives any value.
-- A `204 No Content` or `205 Reset Content` gives an empty stream.
-
-Then the body is read as it arrives. The values before a failure are given
-first. A value that doesn't match `output`, or a body that breaks off,
-fails the stream with a `DecodeError`, which names the event or the line:
-`Line 3 doesn't match the output schema`.
-
-For plugins, the call ends when the response's headers arrive. Their
-`onExit` hooks, and so `logger` and `consoleLogger`, report it then, with
-the time to the headers, and a `DecodeError` while reading the body doesn't
-reach them. Handle it on the stream, with `Stream.catchTag("DecodeError", …)`
-or `Stream.tapError`.
-
-### Stopping a stream
-
-Interrupting the stream, or taking only part of it, as with `Stream.take`,
-aborts the request. Nothing else is needed to close the connection.
-
-A stream can't take `responseMode`, or an `output` made with
-`Fetch.bytes()`. A call that passes one dies, and a definition with one
-throws when it's made.
-
-## Pagination
-
-`Fetch.paginate` pages through a list, as a `Stream` of pages. It calls a
-bound endpoint for the first page, then for the next one, until `next`
-says there's none:
-
-```ts
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-
-import * as Fetch from "@monarcode/effetch";
-
-const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
-
-const listTodos = Fetch.endpoint("GET /todos", {
-  query: Schema.Struct({ page: Schema.Finite }),
-  output: Schema.Array(Todo),
-});
-
-export const allTodos = (api: Fetch.Client) =>
-  Fetch.paginate(api.bind(listTodos), {
-    start: 1,
-    request: (page) => ({ query: { page } }),
-    next: (todos, page) =>
-      todos.length === 0 ? Option.none() : Option.some(page + 1),
-  }).pipe(Stream.flattenIterable, Stream.runCollect);
-```
-
-- `start` is the state of the first page, such as a page number or a
-  cursor.
-- `request(state)` gives the page's call options: `params`, `query`, `body`
-  and `headers`, typed by the endpoint.
-- `next(page, state, response)` gives the next page's state, or
-  `Option.none()` after the last page.
-
-Each page is one value of the stream, so a page that's a list stays a list.
-`Stream.flattenIterable` gives its items one by one.
-
-The stream is lazy: it sends a page's call only when the page is needed, so
-`Stream.take(1)` sends one. A call that fails fails the stream with the
-call's error.
-
-### Cursors in headers
-
-When the next page's cursor is in a header, such as a `Link` header, define
-the endpoint with `responseMode: "decoded-and-response"`. `next` then gets
-each page's response:
-
-```ts
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-
-import * as Fetch from "@monarcode/effetch";
-
-const Item = Schema.Struct({ id: Schema.Finite });
-
-const listItems = Fetch.endpoint("GET /items", {
-  output: Schema.Array(Item),
-  responseMode: "decoded-and-response",
-});
-
-// The cursor is percent-encoded in the URL, and `query` encodes it again.
-const nextCursor = (link: string | undefined) =>
-  Option.fromNullishOr(
-    /[?&]cursor=([^&>]+)[^>]*>;\s*rel="next"/.exec(link ?? "")?.[1],
-  ).pipe(Option.flatMap(Option.liftThrowable(decodeURIComponent)));
-
-export const allItems = (api: Fetch.Client) =>
-  Fetch.paginate(api.bind(listItems), {
-    start: undefined as string | undefined,
-    request: (cursor) => (cursor === undefined ? {} : { query: { cursor } }),
-    next: (_items, _cursor, response) => nextCursor(response.headers.link),
-  });
-```
-
-`Fetch.paginate` takes a bound endpoint, from `client.endpoint`,
-`client.bind`, `client.bindAll` or `Fetch.Endpoints`. A definition made by
-`Fetch.endpoint` needs binding first, and a stream endpoint can't be paged.
-
-## Structuring an app
-
-An endpoint calls through a client, so it's made, or bound, wherever a client
-is available: in a layer that reads it, or in a function that takes it. Its
-definition can live elsewhere: [`Fetch.endpoint`](#defining-endpoints-without-a-client)
-needs no client, so definitions can sit next to their schemas, and only the
-binding needs the client. Where each goes depends on the size of your app.
-
-### A small app
-
-Keep the client in one file, and each area's endpoints in another, as a
-function of the client. One service makes the client once, and calls each
-function once:
-
-```ts
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -2127,59 +2423,27 @@ import * as Fetch from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
-const NewUser = Schema.Struct({ name: Schema.String });
-const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
-// client.ts
-export const makeClient = Fetch.make({
+class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
   plugins: [bearer({ token: "token" })],
-});
-export type Client = Effect.Success<typeof makeClient>;
+}) {}
 
-// users.ts
-export const users = (api: Client) => ({
+export const users = (api: Effect.Success<typeof Api>) => ({
   get: api.endpoint("GET /users/:id", { output: User }),
-  create: api.endpoint("POST /users", { input: NewUser, output: User }),
   login: api.endpoint("POST /auth/login", {
     output: User,
     plugins: { bearer: false },
   }),
 });
-
-// todos.ts
-export const todos = (api: Client) => ({
-  list: api.endpoint("GET /todos", { output: Schema.Array(Todo) }),
-});
-
-// api.ts
-const makeApi = Effect.map(makeClient, (client) => ({
-  client, // for one-off calls
-  users: users(client),
-  todos: todos(client),
-}));
-
-export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
-  "Api",
-) {}
-
-// anywhere
-export const program = Effect.gen(function* () {
-  const { users } = yield* Api;
-  return yield* users.get({ params: { id: 1 } });
-});
 ```
-
-`Client` is the type of your client, plugins and `defaultError` included, so
-the plugin overrides in `users.ts` are checked against your plugins, and
-errors are typed with your `defaultError`.
 
 ### A feature-sliced app
 
-When your app is split into feature modules, each with its own schemas, turn
-it around. The client becomes shared infrastructure that knows nothing about
-the modules. Each module defines its endpoints next to its schemas, with no
-client, and binds them to the client in its data layer:
+When your app is split into feature modules, each with its own schemas, the
+client becomes shared infrastructure that knows nothing about the modules.
+Each module defines its endpoints next to its schemas, with no client, and
+binds them to the client in its data layer:
 
 ```text
 src/
@@ -2261,9 +2525,8 @@ This scales well as the app grows:
   the infrastructure.
 - **A module with 20 endpoints has 20 definitions** in its own `contract/`
   folder, beside their schemas, and 20 one-line entries in its
-  `Fetch.Endpoints` class in `data/`. When
-  they serve separate concerns, split them into several services, each in its
-  own file.
+  `Fetch.Endpoints` class in `data/`. When they serve separate concerns,
+  split them into several services, each in its own file.
 - **Every module's data service is its endpoints,** as `TodoApi` is here: one
   line per operation, and every type inferred, so every module's `data/`
   folder looks the same.
@@ -2283,9 +2546,9 @@ modules and two backends: `todos` declares its definitions with
 
 ### Several backends
 
-Make one client per backend, each in its own service, with its own `baseUrl`,
-`defaultError` and plugins. Each module, or each area's function, uses the
-client of the backend it talks to, and one `HttpClient` layer serves them all.
+Declare one client per backend, each with its own id, `baseUrl`,
+`defaultError` and plugins. Each module uses the client of the backend it
+talks to, and one `HttpClient` layer serves them all.
 
 - Plugins are values: one `bearer` can serve several clients.
 - `ctx.route` has no host. A plugin that groups by route and is shared by
@@ -2307,7 +2570,9 @@ the real client, with its plugins, `defaultError` and `statusErrors`.
 ### A fake backend from your endpoints
 
 `FetchTest.layer` takes a list of handlers, one per route, and is an
-`HttpClient` layer. Provide it where `FetchHttpClient.layer` goes:
+`HttpClient` layer. Provide it where `FetchHttpClient.layer` goes. A client
+whose `layer` is [overridden](#providing-the-client) to provide its own
+`HttpClient` ignores it, so test with a layer that doesn't:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -2342,6 +2607,12 @@ class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.test",
 }) {}
 
+class TodoApi extends Fetch.Endpoints<TodoApi>()("TodoApi", Api, {
+  get: getTodo,
+  create: createTodo,
+  list: listTodos,
+}) {}
+
 const Backend = FetchTest.layer([
   FetchTest.respond(getTodo, ({ params }) =>
     // params are strings, as they are in the URL
@@ -2357,12 +2628,17 @@ const Backend = FetchTest.layer([
   FetchTest.fail(listTodos, 503),
 ]);
 
+const TestLayer = TodoApi.layer.pipe(
+  Layer.provide(Api.layer),
+  Layer.provide(Backend),
+);
+
 export const test = Effect.gen(function* () {
-  const api = yield* Api;
-  const todo = yield* api.bind(getTodo)({ params: { id: 1 } });
+  const todos = yield* TodoApi;
+  const todo = yield* todos.get({ params: { id: 1 } });
   // todo.due is a Date again: it went over the wire as a string
   return todo;
-}).pipe(Effect.provide(Api.layer.pipe(Layer.provide(Backend))));
+}).pipe(Effect.provide(TestLayer));
 ```
 
 What a handler gets and returns is typed by its endpoint, and checked as a
@@ -2576,6 +2852,10 @@ import * as Fetch from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.test",
+}) {}
+
 const sent: Array<string> = [];
 
 const TestHttpClient = Layer.succeed(
@@ -2592,17 +2872,21 @@ const TestHttpClient = Layer.succeed(
 );
 
 const program = Effect.gen(function* () {
-  const api = yield* Fetch.make({ baseUrl: "https://api.test" });
+  const api = yield* Api;
   return yield* api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 });
 
 const todo = await Effect.runPromise(
-  program.pipe(Effect.provide(TestHttpClient)),
+  program.pipe(Effect.provide(Api.layer.pipe(Layer.provide(TestHttpClient)))),
 );
 // todo: { id: 1, title: "Write docs" }; sent: ["GET https://api.test/todos/1"]
 ```
 
 ## Platform notes
+
+effetch has no platform-specific imports or builds, and runs wherever Effect's
+`HttpClient` does: browsers, React Native, Node 20 or newer, Bun and Deno.
+Two platforms need a little setup.
 
 ### Browsers
 
@@ -2647,8 +2931,31 @@ page's URL.
   `FetchHttpClient.Fetch`:
   `Layer.succeed(FetchHttpClient.Fetch)(expoFetch as typeof globalThis.fetch)`.
 - Metro's terminal drops `console.groupCollapsed` and everything inside it,
-  so `consoleLogger` doesn't collapse its groups in React Native (see
-  [Console logging](#console-logging)).
+  so `consoleLogger` doesn't collapse its groups in React Native (see the
+  details under [Console logging](#console-logging)).
+
+## Coming from axios or ky
+
+The following table maps what you know from axios and ky to effetch:
+
+| axios or ky                                                   | effetch                                                                                                                                   |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `axios.create`, `ky.create`                                   | [`Fetch.Service`](#declaring-a-client), or [`Fetch.make`](#fetchservice-or-fetchmake) in a script                                         |
+| `ky.extend`, a client per API version                         | A second `Fetch.Service` from `{ ...Api.config, baseUrl }` (see [A client from another](#a-client-from-another))                          |
+| `baseURL`, `prefixUrl`                                        | `baseUrl`, a string or an Effect such as a `Config`                                                                                       |
+| `params`, `searchParams`                                      | `query`, a plain object, or typed by an endpoint's [`query` schema](#typed-query-parameters)                                              |
+| Interceptors, `hooks.beforeRequest` and `hooks.afterResponse` | A [plugin](#writing-plugins)'s `onRequest` and `onResponse`                                                                               |
+| `hooks.beforeError`                                           | `Effect.mapError` on the call. A plugin's `onError` sees errors but can't change them                                                     |
+| `retry`, `timeout`                                            | The [`retry` and `timeout` plugins](#built-in-plugins), which a call can turn off or adjust                                               |
+| ky's `totalTimeout`                                           | `retry({ budget })`, or `Effect.timeout` around a call                                                                                    |
+| `AbortController`, `signal`                                   | Interruption: `Fiber.interrupt`, `Effect.race`, `Effect.timeout`. An interrupted call aborts its request                                  |
+| `validateStatus`, `throwHttpErrors: false`                    | `Effect.catchTag("HttpError", …)`, [`statusErrors`](#errors-by-status), or [`Fetch.catchStatus`](#catching-a-status) and `Fetch.optional` |
+| `error.response.data`, ky's `HTTPError` body                  | `HttpError.body`, decoded with `defaultError` or the call's `error` schema                                                                |
+| `ky.get(url).json<T>()`, `axios.get<T>(url)`                  | `api.get(path, { output: Schema })`: the body is checked, not cast                                                                        |
+| `responseType: "text"` or `"arraybuffer"`                     | `output: Fetch.text()` or `Fetch.bytes()` (see [Text and bytes](#text-and-bytes))                                                         |
+| Reading the status and headers with the data                  | `responseMode: "decoded-and-response"` (see [The body and the response](#the-body-and-the-response))                                      |
+| `responseType: "stream"`, `onDownloadProgress` for events     | [`api.sse` and `api.ndjson`](#streaming-responses)                                                                                        |
+| The `fetch` option or an `adapter` in tests                   | [`FetchTest`](#testing), or any `HttpClient` layer                                                                                        |
 
 ## Reference
 
@@ -2672,12 +2979,22 @@ page's URL.
 
 ### API
 
+Every export is documented, with an example, in the type declarations your
+editor shows. This list says where each one is covered here.
+
 `@monarcode/effetch`:
 
-- `make`, `ClientConfig`, `Client`: [creating a client](#creating-a-client)
-  and [making calls](#making-calls).
 - `Service`, `ServiceClass` (and `ServiceClass.Any`), `isService`:
-  [sharing a client as a service](#sharing-it-across-your-app).
+  [declaring a client](#declaring-a-client).
+- `make`, `ClientConfig`, `Client`: [setting up a client](#setting-up-a-client)
+  and [making calls](#making-calls).
+- `endpoint`, `UnboundEndpoint`, `UnboundDefinition`, `AnyUnboundEndpoint`:
+  [defining endpoints](#defining-endpoints).
+- `Endpoints`, `EndpointsClass`:
+  [sharing endpoints as a service](#sharing-endpoints-as-a-service).
+- `BindMethod`, `BindOptions`, `BindAllMethod`, `EndpointDefinitions`,
+  `EndpointEntry`, `BoundEndpoint`, `BoundEndpoints`:
+  [other ways to bind endpoints](#other-ways-to-bind-endpoints).
 - `Endpoint`, `EndpointMethod`, `EndpointDefinition`, `EndpointOptions`,
   `EndpointBody`, `EndpointArgs`, `EndpointRoute`, `ValidRoute`,
   `RouteMethod`, `RoutePath`: [endpoints](#endpoints).
@@ -2685,11 +3002,6 @@ page's URL.
   [typed query parameters](#typed-query-parameters).
 - `EndpointUrlOptions`, `EndpointUrlArgs`:
   [building an endpoint's URL](#building-an-endpoints-url).
-- `endpoint`, `UnboundEndpoint`, `UnboundDefinition`, `AnyUnboundEndpoint`,
-  `BindMethod`, `BindOptions`, `BindAllMethod`, `EndpointDefinitions`,
-  `EndpointEntry`,
-  `BoundEndpoint`, `BoundEndpoints`, `Endpoints`, `EndpointsClass`:
-  [endpoints without a client](#defining-endpoints-without-a-client).
 - `text`, `bytes`, `TextSchema`, `BytesSchema`:
   [text and bytes](#text-and-bytes).
 - `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,
@@ -2715,7 +3027,7 @@ page's URL.
   returns a call; to take a call as an argument, accept any
   `Effect.Effect<A, E, R>`.
 
-`@monarcode/effetch/plugins`:
+`@monarcode/effetch/plugins` ([plugins](#plugins)):
 
 - `bearer`, `BearerOptions`, `BearerPlugin`, `TokenSource`, `TokenValue`,
   `RefreshSource`.
@@ -2737,9 +3049,6 @@ page's URL.
 - `reply`, `Reply`, `ReplyOptions`.
 - `fail`, `FailBody`, `FailServices`.
 - `requests`, `Recorder`, `SentRequest`.
-
-Every export is documented, with an example, in the type declarations your
-editor shows.
 
 ## Examples
 

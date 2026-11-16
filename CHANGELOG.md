@@ -370,10 +370,19 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ### Documentation
 
-- The README has new sections: "Coming from axios or ky", which maps their
-  options and hooks to effetch; "A client from another"; "Streaming
-  responses"; "Pagination"; and "Stream endpoints in tests". "Built-in
-  plugins" says how to limit each attempt or the whole call.
+- The README is rewritten around `Fetch.Service`, the recommended way to
+  set up a client. Getting started declares a client as a service, and a
+  new "Fetch.Service or Fetch.make?" section says when to use each.
+  Endpoints start from `Fetch.endpoint` and `Fetch.Endpoints`, with
+  `client.bind`, `client.bindAll` and `client.endpoint` as the other ways to
+  bind them. Long lists of edge cases are folded into "Details" blocks.
+- The README adds badges for bundle size (without `effect`), types,
+  provenance and license, and for the runtimes effetch targets.
+- The README has new sections: "Providing the client", "Coming from axios or
+  ky", which maps their options and hooks to effetch; "A client from
+  another"; "Streaming responses"; "Pagination"; and "Stream endpoints in
+  tests". "Built-in plugins" says how to limit each attempt or the whole
+  call, and the configuration table lists `statusErrors`.
 - `examples/streams.ts` shows Server-Sent Events, newline-delimited JSON, an
   answer that ends with `[DONE]`, and a list paged by its `Link` header.
   `examples/basic.ts` handles its `404` with `Fetch.catchStatus`.
