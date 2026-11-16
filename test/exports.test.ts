@@ -12,10 +12,12 @@ describe("public entry points", () => {
 			"NetworkError",
 			"Service",
 			"bytes",
+			"catchStatus",
 			"endpoint",
 			"isFetchError",
 			"isService",
 			"make",
+			"optional",
 			"plugin",
 			"text",
 		]);

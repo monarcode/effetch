@@ -32,6 +32,9 @@ export type QueryValue = UrlParams.Coercible;
  * Arrays repeat the key (`tags=a&tags=b`); `null` and `undefined` entries
  * and array items are dropped.
  *
+ * To type an endpoint's query and encode values such as dates, give the
+ * endpoint a `query` schema instead (see {@link QuerySchema}).
+ *
  * @example
  * ```ts
  * import type * as Fetch from "@monarcode/effetch";
@@ -76,6 +79,50 @@ export type QueryInput = {
  */
 export type QueryOf<Q> = {
 	readonly [K in keyof Q]: QueryValue | ReadonlyArray<QueryValue>;
+};
+
+/**
+ * A schema for an endpoint's `query`: an object schema, usually a
+ * `Schema.Struct`, whose fields are the query parameters. A call's `query`
+ * is then typed by the schema's `Type`, and encoded with it before it's
+ * sent. A `Schema.Class` works too, and its calls take an instance.
+ *
+ * Each field is encoded to a string, as Effect's `Schema.toCodecStringTree`
+ * does: a `Date` becomes its ISO string, a boolean `"true"` or `"false"`,
+ * and a `null` the string `"null"`. An array repeats the key. A field left
+ * out, or `undefined` in a `Schema.optional` field, isn't sent, so prefer
+ * optional fields to nullable ones. Rename keys with `Schema.encodeKeys`.
+ * A `Schema.Redacted` field is sent as its value and, with Effect 4.1 or
+ * later, stays redacted in Effect's logs and traces.
+ *
+ * Defining an endpoint throws when a field has no string encoding, such as
+ * `Schema.instanceOf(Uint8Array)`. A call dies, before sending, when its
+ * query doesn't match the schema or a field encodes to an object, which
+ * can't be a query parameter. A schema whose encoding needs services adds
+ * them to the call's services, and `endpoint.url`, which encodes
+ * synchronously, can't be called with it.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * const TodoFilters: Fetch.QuerySchema = Schema.Struct({
+ *   done: Schema.optional(Schema.Boolean),
+ *   since: Schema.optional(Schema.Date),
+ *   pageSize: Schema.optional(Schema.Finite),
+ * }).pipe(Schema.encodeKeys({ pageSize: "page_size" }));
+ * // { done: true, pageSize: 20 } → ?done=true&page_size=20
+ * ```
+ *
+ * @since 0.1.0
+ */
+// The encoded side is what becomes the query, so it's the one that must be
+// a record. The type side only has to be an object: a `Schema.Class`
+// instance has no index signature.
+export type QuerySchema = Schema.Top & {
+	readonly Type: object;
+	readonly Encoded: { readonly [key: string]: unknown };
 };
 
 /**
@@ -579,10 +626,13 @@ export type CallError<
 
 /**
  * The services a call requires: those needed to decode `output`, `error`
- * and the `statusErrors` maps' errors, and to encode `input`.
+ * and the `statusErrors` maps' errors, and to encode `input` and an
+ * endpoint's `query`.
  *
  * - `SE`: the `statusErrors` maps of the call, the endpoint and the client,
  *   as a union. `undefined` (the default) when there are none.
+ * - `QS`: the endpoint's `query` schema (see {@link QuerySchema}), or
+ *   `undefined` (the default) without one.
  *
  * @example
  * ```ts
@@ -604,11 +654,13 @@ export type CallServices<
 	EB extends AnySchema,
 	I extends AnySchema | undefined,
 	SE extends StatusErrorMap | undefined = undefined,
+	QS extends QuerySchema | undefined = undefined,
 > =
 	| (O extends AnySchema ? O["DecodingServices"] : never)
 	| EB["DecodingServices"]
 	| (I extends AnySchema ? I["EncodingServices"] : never)
-	| StatusErrorServices<SE>;
+	| StatusErrorServices<SE>
+	| (QS extends AnySchema ? QS["EncodingServices"] : never);
 
 /**
  * The Effect a call returns: it succeeds with {@link Success}, fails with
@@ -623,6 +675,8 @@ export type CallServices<
  *   as a union. `undefined` (the default) when there are none.
  * - `M`: the {@link ResponseMode}, or `undefined` (the default) for the
  *   decoded body alone.
+ * - `QS`: an endpoint's `query` schema (see {@link QuerySchema}), or
+ *   `undefined` (the default) without one.
  *
  * Use it to type functions that return a call. To take a call as an
  * argument, accept any `Effect.Effect<A, E, R>`: TypeScript can't infer
@@ -651,6 +705,7 @@ export type CallEffect<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	SE extends StatusErrorMap | undefined = undefined,
 	M extends ResponseMode | undefined = undefined,
+	QS extends QuerySchema | undefined = undefined,
 > = Effect.Effect<
 	Success<O, M>,
 	// CallError and CallServices, written out: through the aliases, editors
@@ -665,6 +720,7 @@ export type CallEffect<
 	| EB["DecodingServices"]
 	| (I extends AnySchema ? I["EncodingServices"] : never)
 	| StatusErrorServices<SE>
+	| (QS extends AnySchema ? QS["EncodingServices"] : never)
 >;
 
 /**

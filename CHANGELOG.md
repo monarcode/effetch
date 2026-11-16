@@ -173,6 +173,72 @@ All notable changes to `@monarcode/effetch`, newest first.
     as JSON.
   - New types: `TextSchema` and `BytesSchema`.
 
+- A `query` schema on an endpoint types each call's `query` and encodes it
+  before it's sent:
+
+  ```ts
+  const listTodos = Fetch.endpoint("GET /todos", {
+    query: Schema.Struct({
+      done: Schema.optional(Schema.Boolean),
+      since: Schema.optional(Schema.Date),
+    }),
+  });
+  // list({ query: { done: true, since } }) → ?done=true&since=2026-…Z
+  ```
+
+  - The schema can be a `Schema.Struct`, or a `Schema.Class` called with an
+    instance.
+  - Each field is encoded to a string, as `Schema.toCodecStringTree`
+    encodes it. Arrays repeat the key, fields left out aren't sent, and
+    `Schema.encodeKeys` renames keys. A `Schema.Redacted` field is sent as
+    its value and, with Effect 4.1 or later, stays redacted in logs and
+    traces.
+  - A schema with a field that has no string encoding throws when the
+    endpoint is defined.
+  - `query` is required on a call when the schema has required fields.
+  - A query that doesn't match the schema, or a field that encodes to an
+    object, makes the call die before anything is sent.
+  - The schema's encoding services join the call's services.
+    `CallServices` and `CallEffect` gain a last type parameter for the
+    schema, defaulted.
+  - It's allowed on `client.endpoint` and `Fetch.endpoint`. `bind`,
+    `bindAll` and `Fetch.Endpoints` keep it, and endpoints and definitions
+    gain a `query` property.
+  - New types: `QuerySchema` and `EndpointQuery`. `Endpoint`,
+    `EndpointDefinition`, `EndpointOptions`, `EndpointArgs`,
+    `UnboundEndpoint` and `UnboundDefinition` gain a last type parameter
+    for the schema, defaulted. Code that passes `client.bind`'s type
+    arguments explicitly needs one more.
+
+- `endpoint.url(options)` returns the URL a call with the same `params` and
+  `query` goes to, for links and cache keys:
+  `getFile.url({ params: { name: "a.pdf" } })`.
+  - On a bound endpoint, it starts with the client's `baseUrl`. On a
+    definition, it's the path alone, unless the route is a full URL.
+  - It's built before plugins run.
+  - It's made as the call's URL is, so `..` segments, a route's own query
+    string and the host are normalized the same way.
+  - It throws for a missing path parameter or a query that doesn't match
+    the schema. On an endpoint whose query schema needs services to
+    encode, calling it doesn't compile.
+  - New types: `EndpointUrlOptions` and `EndpointUrlArgs`.
+
+- `Fetch.catchStatus(status, handler)` handles an `HttpError` with one of
+  the given statuses, data-last or data-first. The handler's `error.status`
+  is narrowed to them. `HttpError` stays in the error type.
+
+  ```ts
+  api
+    .get("/me")
+    .pipe(Fetch.catchStatus([401, 403], () => Effect.succeed(null)));
+  ```
+
+- `Fetch.optional` succeeds with `Option.none()` on a `404` and
+  `Option.some(value)` otherwise: `getTodo({ params: { id } }).pipe(Fetch.optional)`.
+  - A status that `statusErrors` maps fails with your error, so neither
+    sees it.
+  - New type: `CaughtStatus`.
+
 ## 0.1.0-rc.2
 
 ### Added

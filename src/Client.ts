@@ -638,7 +638,11 @@ export const make = <
 			applyDefaults,
 		);
 		const statusErrors = freezeStatusErrors(config.statusErrors);
-		const defaults = { defaultError: config.defaultError, statusErrors };
+		const defaults = {
+			defaultError: config.defaultError,
+			statusErrors,
+			baseUrl,
+		};
 		const call = makeCall({
 			errorSchema: config.defaultError,
 			statusErrors,

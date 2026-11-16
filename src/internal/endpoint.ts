@@ -2,10 +2,20 @@ import * as Headers from "effect/http/Headers";
 import * as HttpMethod from "effect/http/HttpMethod";
 import * as Schema from "effect/Schema";
 
-import type { AnySchema, ResponseMode, StatusErrorMap } from "../Options.js";
+import type {
+	AnySchema,
+	QueryInput,
+	QuerySchema,
+	ResponseMode,
+	StatusErrorMap,
+} from "../Options.js";
+import type { PathParamValue } from "../Path.js";
+import { isRecord } from "./object.js";
 import { mergeOverrides, type OverrideMap } from "./plugins.js";
+import { checkQuerySchema, encodeQuerySync } from "./query.js";
 import type { Call, RuntimeOptions } from "./request.js";
 import { freezeStatusErrors, joinStatusErrors } from "./statusErrors.js";
+import { requestTarget, targetUrl } from "./target.js";
 import { isAbsoluteUrl } from "./url.js";
 
 /** An endpoint's definition, as seen at runtime. */
@@ -17,13 +27,43 @@ export interface RuntimeDefinition {
 	readonly headers?: Headers.Input | undefined;
 	readonly plugins?: OverrideMap | undefined;
 	readonly responseMode?: ResponseMode | undefined;
+	readonly query?: QuerySchema | undefined;
 }
 
-/** What an endpoint takes from its client's config: the error defaults. */
+/**
+ * What an endpoint takes from its client's config: the error defaults,
+ * and the `baseUrl`, once read, for `url`.
+ */
 export interface ClientDefaults {
 	readonly defaultError?: AnySchema | undefined;
 	readonly statusErrors?: StatusErrorMap | undefined;
+	readonly baseUrl?: string | undefined;
 }
+
+/** What `endpoint.url` takes, as seen at runtime. */
+export interface RuntimeUrlOptions {
+	readonly params?: { readonly [name: string]: PathParamValue } | undefined;
+	readonly query?: QueryInput | undefined;
+}
+
+/**
+ * The URL a call with `options` sends to, before plugins: `baseUrl`, the
+ * path with its params, then the query, encoded with `querySchema` if
+ * there is one. Built with the call's own `requestTarget`. Throws when a
+ * param is missing or the query can't be encoded.
+ */
+const endpointUrl = (
+	baseUrl: string | undefined,
+	path: string,
+	querySchema: QuerySchema | undefined,
+	options: RuntimeUrlOptions | null | undefined,
+): string => {
+	const query =
+		querySchema === undefined
+			? options?.query
+			: encodeQuerySync(querySchema, options?.query);
+	return targetUrl(baseUrl, requestTarget(path, options?.params, query));
+};
 
 /** An endpoint, as seen at runtime. */
 export interface RuntimeEndpoint {
@@ -43,6 +83,9 @@ export interface RuntimeEndpoint {
 	readonly input: AnySchema | undefined;
 	/** The `responseMode`, or `undefined` without one. */
 	readonly responseMode: ResponseMode | undefined;
+	/** The `query` schema, or `undefined` without one. */
+	readonly query: QuerySchema | undefined;
+	readonly url: (options?: RuntimeUrlOptions) => string;
 }
 
 /** A definition made without a client, as seen at runtime: no plugins. */
@@ -59,6 +102,8 @@ export interface RuntimeUnboundEndpoint {
 	readonly input: AnySchema | undefined;
 	readonly headers: Headers.Headers | undefined;
 	readonly responseMode: ResponseMode | undefined;
+	readonly query: QuerySchema | undefined;
+	readonly url: (options?: RuntimeUrlOptions) => string;
 }
 
 /** What a definition is bound with, as seen at runtime. */
@@ -118,6 +163,7 @@ export const makeEndpoint = (
 	definition: RuntimeDefinition = {},
 ): RuntimeEndpoint => {
 	const { method, path } = parseRoute(route);
+	checkQuerySchema(definition?.query);
 	const send = call(method);
 	const headers =
 		definition.headers === undefined
@@ -134,6 +180,7 @@ export const makeEndpoint = (
 			headers: mergeHeaders(headers, options.headers),
 			plugins: mergeOverrides(definition.plugins, options.plugins),
 			responseMode: options.responseMode ?? definition.responseMode,
+			querySchema: definition.query,
 		});
 	return Object.assign(endpoint, {
 		route,
@@ -144,6 +191,9 @@ export const makeEndpoint = (
 		statusErrors: joinStatusErrors([statusErrors, client.statusErrors]),
 		input: definition.input,
 		responseMode: definition.responseMode,
+		query: definition.query,
+		url: (options?: RuntimeUrlOptions) =>
+			endpointUrl(client.baseUrl, path, definition.query, options),
 	});
 };
 
@@ -156,6 +206,7 @@ export const makeUnboundEndpoint = (
 	definition: RuntimeUnboundDefinition = {},
 ): RuntimeUnboundEndpoint => {
 	const { method, path } = parseRoute(route);
+	checkQuerySchema(definition?.query);
 	return Object.freeze({
 		route,
 		method,
@@ -169,6 +220,9 @@ export const makeUnboundEndpoint = (
 				? undefined
 				: Headers.fromInput(definition.headers),
 		responseMode: definition.responseMode,
+		query: definition.query,
+		url: (options?: RuntimeUrlOptions) =>
+			endpointUrl(undefined, path, definition.query, options),
 	});
 };
 
@@ -214,6 +268,7 @@ const makeEndpointFrom = (
 		headers: mergeHeaders(unbound.headers, options.headers),
 		plugins: options.plugins,
 		responseMode: unbound.responseMode,
+		query: unbound.query,
 	});
 
 /** A record of definitions, as `bindAll` takes it at runtime. */
@@ -229,10 +284,6 @@ interface Entry {
 	/** Whether it was given as a `[definition, options]` pair. */
 	readonly pair: boolean;
 }
-
-/** `true` for a non-null object that isn't an array. */
-const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
-	typeof u === "object" && u !== null && !Array.isArray(u);
 
 /**
  * A frozen copy of a binding's options: `headers` as Effect `Headers`, and

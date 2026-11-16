@@ -56,6 +56,7 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
   - [What can go wrong](#what-can-go-wrong)
   - [Catching errors](#catching-errors)
   - [Typed error bodies](#typed-error-bodies)
+  - [Errors by status](#errors-by-status)
   - [Safe to log](#safe-to-log)
   - [Bugs are defects](#bugs-are-defects)
 - [Plugins](#plugins)
@@ -76,6 +77,8 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
   - [Defining endpoints](#defining-endpoints)
   - [Defining endpoints without a client](#defining-endpoints-without-a-client)
   - [Calling an endpoint](#calling-an-endpoint)
+  - [Typed query parameters](#typed-query-parameters)
+  - [Building an endpoint's URL](#building-an-endpoints-url)
   - [Defaults and overrides](#defaults-and-overrides)
   - [Why use endpoints](#why-use-endpoints)
   - [Endpoints or methods?](#endpoints-or-methods)
@@ -424,6 +427,9 @@ are dropped, so you can pass optional filters as they are. With Effect 4.1 or
 later, a value can also be `Redacted`, such as `Redacted.make(apiKey)`: it's
 sent as its value, and Effect keeps it out of its own logs and traces.
 
+To type an endpoint's query and send values such as dates, give the endpoint
+a schema for it. See [Typed query parameters](#typed-query-parameters).
+
 ### Sending a body
 
 ```ts
@@ -670,6 +676,47 @@ For a single error, `Effect.catchTag` does the same.
 
 `Fetch.FetchError` is the union of the three errors, and `Fetch.isFetchError`
 tells them apart from other values.
+
+#### Catching a status
+
+To handle one or more statuses, use `Fetch.catchStatus`. For the common "a
+404 means there's nothing there", `Fetch.optional` succeeds with
+`Option.none()` on a 404 and `Option.some(value)` otherwise:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+// Option<Todo>: none for a 404.
+export const findTodo = (id: number) =>
+  api.get("/todos/:id", { params: { id }, output: Todo }).pipe(Fetch.optional);
+
+// "signed out" for a 401 or a 403.
+export const me = api
+  .get("/me")
+  .pipe(
+    Fetch.catchStatus([401, 403], (error) =>
+      Effect.succeed(`signed out (${error.status})`),
+    ),
+  );
+```
+
+The handler gets the `HttpError`, with `status` narrowed to the statuses you
+gave, and what it returns joins the call's type. `HttpError` stays in the
+error type, since other statuses still fail with it. Both work on endpoint
+calls too, and `catchStatus` also takes the effect first:
+`Fetch.catchStatus(effect, 404, handler)`.
+
+A status that [`statusErrors`](#errors-by-status) maps fails with your error,
+not an `HttpError`, so `catchStatus` and `optional` never see it. Catch your
+error by its tag instead. The handler's `error.body` is `unknown`; for the
+typed body of an `error` schema, use `Effect.catchTag("HttpError", …)`.
 
 ### Typed error bodies
 
@@ -1541,10 +1588,10 @@ export const AppLayer = UserApi.layer.pipe(
 
 What's fixed goes in the definition, and what changes goes in each call:
 
-| Defined once, on the endpoint | Passed with each call     |
-| ----------------------------- | ------------------------- |
-| `output`, `error`, `input`    | `params`, `query`, `body` |
-| `headers`, `plugins`          | `headers`, `plugins`      |
+| Defined once, on the endpoint       | Passed with each call     |
+| ----------------------------------- | ------------------------- |
+| `output`, `error`, `input`, `query` | `params`, `query`, `body` |
+| `headers`, `plugins`                | `headers`, `plugins`      |
 
 - `params` are required when the route's path has any, as with the methods.
   An endpoint that needs nothing more is called with no arguments:
@@ -1552,6 +1599,103 @@ What's fixed goes in the definition, and what changes goes in each call:
 - With an `input` schema, `body` is required and typed by it.
 - `GET`, `HEAD`, `OPTIONS` and `TRACE` endpoints take no `body` and no
   `input`, and TypeScript rejects them.
+- With a `query` schema, `query` is typed by it, and required when the
+  schema has required fields. See
+  [Typed query parameters](#typed-query-parameters).
+
+### Typed query parameters
+
+Give an endpoint a `query` schema, usually a `Schema.Struct`, and each call's
+`query` is typed by it and encoded with it before it's sent. A `Schema.Class`
+works too, called with an instance:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+const TodoFilters = Schema.Struct({
+  done: Schema.optional(Schema.Boolean),
+  since: Schema.optional(Schema.Date),
+  pageSize: Schema.optional(Schema.Finite),
+}).pipe(Schema.encodeKeys({ pageSize: "page_size" }));
+
+export const listTodos = Fetch.endpoint("GET /todos", {
+  query: TodoFilters,
+  output: Schema.Array(Todo),
+});
+
+export const program = Effect.gen(function* () {
+  const api = yield* Fetch.make({ baseUrl: "https://api.example.com" });
+  const list = api.bind(listTodos);
+  // GET /todos?done=false&since=2026-01-01T00%3A00%3A00.000Z&page_size=20
+  return yield* list({
+    query: { done: false, since: new Date("2026-01-01"), pageSize: 20 },
+  });
+});
+```
+
+Each field is encoded to a string: a `Date` to its ISO string, a boolean to
+`"true"` or `"false"`, a number to its digits. An array repeats the key.
+Rename keys with `Schema.encodeKeys`, as above. A field you leave out isn't
+sent, but a `null` is sent as the string `"null"`, so prefer optional fields
+to nullable ones. A `Schema.Redacted` field is sent as its value and, with
+Effect 4.1 or later, stays redacted in Effect's logs and traces.
+
+A query that doesn't match the schema, or a field that encodes to an object,
+is a bug, not an error to handle: the call dies before anything is sent. See
+[Bugs are defects](#bugs-are-defects). A schema with a field that has no
+string encoding, such as `Schema.instanceOf(Uint8Array)`, throws when the
+endpoint is defined.
+
+The schema is the endpoint's `query` property. `client.bind`,
+`client.bindAll` and `Fetch.Endpoints` keep it, and `api.endpoint` takes one
+too.
+
+### Building an endpoint's URL
+
+`endpoint.url(options)` returns the URL a call with the same `params` and
+`query` would go to, as a string, for a link, an `<img>` source, or a cache
+key:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+const getFile = Fetch.endpoint("GET /files/:name", {
+  query: Schema.Struct({ download: Schema.optional(Schema.Boolean) }),
+});
+
+// "/files/report.pdf?download=true"
+export const path = getFile.url({
+  params: { name: "report.pdf" },
+  query: { download: true },
+});
+
+export const link = Effect.gen(function* () {
+  const api = yield* Fetch.make({ baseUrl: "https://api.example.com" });
+  // "https://api.example.com/files/report.pdf?download=true"
+  return api.bind(getFile).url({
+    params: { name: "report.pdf" },
+    query: { download: true },
+  });
+});
+```
+
+On a bound endpoint, the URL starts with the client's `baseUrl`. On a
+definition from `Fetch.endpoint`, which has no client, it's the path alone,
+unless the route is a full URL. The URL is built before plugins run, so
+anything a plugin adds, such as a token in the query, isn't in it.
+
+`url` throws when a path parameter is missing or the query doesn't match the
+schema, as a call would die. It encodes the query synchronously, so on an
+endpoint whose query schema needs services to encode, calling it doesn't
+compile.
 
 ### Defaults and overrides
 
@@ -1916,7 +2060,7 @@ page's URL.
 
 - A path parameter is a whole segment: `/files/:name.json` has one parameter
   called `name.json`.
-- No query schemas or optional path parameters yet.
+- No optional path parameters yet.
 - Paths shouldn't contain `?` or `#`. Pass query parameters with `query`.
 - `timeout` and the logged duration cover the time until the response
   headers arrive, not downloading the body.
@@ -1933,6 +2077,10 @@ page's URL.
 - `Endpoint`, `EndpointMethod`, `EndpointDefinition`, `EndpointOptions`,
   `EndpointBody`, `EndpointArgs`, `EndpointRoute`, `ValidRoute`,
   `RouteMethod`, `RoutePath`: [endpoints](#endpoints).
+- `QuerySchema`, `EndpointQuery`:
+  [typed query parameters](#typed-query-parameters).
+- `EndpointUrlOptions`, `EndpointUrlArgs`:
+  [building an endpoint's URL](#building-an-endpoints-url).
 - `endpoint`, `UnboundEndpoint`, `UnboundDefinition`, `AnyUnboundEndpoint`,
   `BindMethod`, `BindOptions`, `BindAllMethod`, `EndpointDefinitions`,
   `EndpointEntry`,
@@ -1942,6 +2090,8 @@ page's URL.
   [text and bytes](#text-and-bytes).
 - `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,
   `FetchError`, `isFetchError`: [errors](#handling-errors).
+- `catchStatus`, `optional`, `CaughtStatus`:
+  [catching a status](#catching-a-status).
 - `plugin`, `Plugin` (and the `Plugin.*` helper types), `PluginContext`,
   `PluginExitContext`:
   [writing plugins](#writing-plugins).

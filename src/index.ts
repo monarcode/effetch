@@ -16,7 +16,10 @@ export type {
 	EndpointEntry,
 	EndpointMethod,
 	EndpointOptions,
+	EndpointQuery,
 	EndpointRoute,
+	EndpointUrlArgs,
+	EndpointUrlOptions,
 	RouteMethod,
 	RoutePath,
 	UnboundDefinition,
@@ -44,6 +47,7 @@ export type {
 	ParamsOption,
 	QueryInput,
 	QueryOf,
+	QuerySchema,
 	QueryValue,
 	RequestMethod,
 	RequestOptions,
@@ -55,6 +59,8 @@ export type {
 	Success,
 } from "./Options.js";
 export { bytes, text } from "./Output.js";
+export { catchStatus, optional } from "./Status.js";
+export type { CaughtStatus } from "./Status.js";
 export type { BytesSchema, TextSchema } from "./Output.js";
 export type { PathParamNames, PathParams, PathParamValue } from "./Path.js";
 export { Endpoints } from "./Endpoints.js";

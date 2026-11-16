@@ -74,6 +74,7 @@ describe("Fetch.Endpoints", () => {
 					undefined,
 					undefined,
 					undefined,
+					undefined,
 					undefined
 				>
 			>

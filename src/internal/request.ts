@@ -10,6 +10,7 @@ import type * as HttpMethod from "effect/http/HttpMethod";
 import type {
 	AnySchema,
 	QueryInput,
+	QuerySchema,
 	RequestOptions,
 	ResponseMode,
 	StatusErrorMap,
@@ -17,7 +18,6 @@ import type {
 import type { Plugin } from "../Plugin.js";
 import { encodeBody } from "./body.js";
 import { acceptFor, bodyFormat } from "./output.js";
-import { interpolatePath } from "./path.js";
 import type { ApplyDefaults } from "./pipeline.js";
 import {
 	hasExitHooks,
@@ -29,8 +29,9 @@ import {
 	runErrorHooks,
 	runExitHooks,
 } from "./plugins.js";
-import { toUrlParams } from "./query.js";
+import { encodeQuery } from "./query.js";
 import { checkStatus, decodeOutput } from "./response.js";
+import { requestTarget } from "./target.js";
 
 export type RuntimeOptions = Omit<
 	RequestOptions<
@@ -44,7 +45,11 @@ export type RuntimeOptions = Omit<
 		ResponseMode | undefined
 	>,
 	"plugins"
-> & { readonly plugins?: OverrideMap | undefined };
+> & {
+	readonly plugins?: OverrideMap | undefined;
+	/** An endpoint's query schema, to encode `query` with. */
+	readonly querySchema?: QuerySchema | undefined;
+};
 
 export interface RequesterState {
 	readonly errorSchema: AnySchema | undefined;
@@ -71,10 +76,14 @@ const buildRequest = (
 				new Error(`A ${method} request can't have a body`),
 			);
 		}
-		let request = HttpClientRequest.make(method)(
-			interpolatePath(path, options.params),
-			{ urlParams: toUrlParams(options.query) },
-		);
+		const query =
+			options.querySchema === undefined
+				? options.query
+				: yield* encodeQuery(options.querySchema, options.query);
+		const target = requestTarget(path, options.params, query);
+		let request = HttpClientRequest.make(method)(target.path, {
+			urlParams: target.urlParams,
+		});
 		const body = yield* encodeBody(options.body, options.input);
 		if (body !== undefined) {
 			request = HttpClientRequest.setBody(request, body);

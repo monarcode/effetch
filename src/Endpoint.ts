@@ -6,13 +6,13 @@ import type { DecodeError, HttpError, NetworkError } from "./Errors.js";
 import {
 	makeUnboundEndpoint,
 	type RuntimeUnboundDefinition,
-	type RuntimeUnboundEndpoint,
 } from "./internal/endpoint.js";
 import type {
 	AnySchema,
 	ParamsOption,
 	QueryInput,
 	QueryOf,
+	QuerySchema,
 	ResponseMode,
 	StatusError,
 	StatusErrorMap,
@@ -126,6 +126,8 @@ type NoBodyRoute<R extends string> = [RouteMethod<R>] extends [
  *   both give options, they're merged.
  * - `responseMode`: what every call succeeds with (see
  *   {@link ResponseMode}). A call's own `responseMode` wins.
+ * - `query`: a schema for the query parameters (see {@link QuerySchema}).
+ *   Each call's `query` is then typed by it, and encoded with it.
  *
  * - `R`: the route, for the method and the path.
  * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`O` and `I`
@@ -133,6 +135,7 @@ type NoBodyRoute<R extends string> = [RouteMethod<R>] extends [
  * - `Ps`: the client's plugins.
  * - `SE`: the `statusErrors` map, or `undefined` without one.
  * - `M`: the `responseMode`, or `undefined` without one.
+ * - `QS`: the `query` schema, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -166,6 +169,7 @@ export interface EndpointDefinition<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	SE extends StatusErrorMap | undefined = undefined,
 	M extends ResponseMode | undefined = undefined,
+	QS extends QuerySchema | undefined = undefined,
 > {
 	/** Decodes the 2xx body. Without it, calls return the raw response. */
 	readonly output?: O;
@@ -184,6 +188,11 @@ export interface EndpointDefinition<
 	readonly plugins?: Plugin.Overrides<Ps> | undefined;
 	/** What every call succeeds with. A call's own `responseMode` wins. */
 	readonly responseMode?: M;
+	/**
+	 * Types and encodes each call's `query`, and makes it required when the
+	 * schema has required fields. See {@link QuerySchema}.
+	 */
+	readonly query?: QS;
 }
 
 /**
@@ -215,15 +224,45 @@ export type EndpointBody<R extends string, I extends AnySchema | undefined> =
 			: { readonly body?: unknown };
 
 /**
+ * The `query` option of an endpoint call. With a `query` schema (see
+ * {@link QuerySchema}), it's typed by the schema's `Type`, and required when
+ * that has required fields. Without one, it's any {@link QueryInput}, typed
+ * as `Q`.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * const Page = Schema.Struct({ page: Schema.Finite });
+ *
+ * const typed: Fetch.EndpointQuery<typeof Page> = { query: { page: 2 } };
+ * const plain: Fetch.EndpointQuery<undefined> = { query: { search: "docs" } };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type EndpointQuery<
+	QS extends QuerySchema | undefined,
+	Q extends QueryOf<Q> = QueryInput,
+> = [QS] extends [QuerySchema]
+	? {} extends QS["Type"]
+		? { readonly query?: QS["Type"] | undefined }
+		: { readonly query: QS["Type"] }
+	: { readonly query?: Q | undefined };
+
+/**
  * The options of one endpoint call: `params` for the route's path (see
  * {@link ParamsOption}), `body` (see {@link EndpointBody}), `query`,
  * `headers`, `plugins` and `responseMode`. The schemas are fixed by the
  * endpoint.
  *
- * - `Q`: the type of `query`, checked with {@link QueryOf}. Defaults to
- *   {@link QueryInput}.
+ * - `Q`: the type of `query` without a query schema, checked with
+ *   {@link QueryOf}. Defaults to {@link QueryInput}.
  * - `M`: the call's {@link ResponseMode}, which wins over the endpoint's,
  *   or `undefined` without one.
+ * - `QS`: the endpoint's `query` schema, which types `query` (see
+ *   {@link EndpointQuery}), or `undefined` without one.
  *
  * @example
  * ```ts
@@ -244,9 +283,10 @@ export type EndpointOptions<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	Q extends QueryOf<Q> = QueryInput,
 	M extends ResponseMode | undefined = undefined,
+	QS extends QuerySchema | undefined = undefined,
 > = ParamsOption<RoutePath<R>> &
-	EndpointBody<R, I> & {
-		readonly query?: Q | undefined;
+	EndpointBody<R, I> &
+	EndpointQuery<QS, Q> & {
 		readonly headers?: Headers.Input | undefined;
 		readonly plugins?: Plugin.Overrides<Ps> | undefined;
 		readonly responseMode?: M;
@@ -254,8 +294,8 @@ export type EndpointOptions<
 
 /**
  * The arguments of an endpoint call: the options object `T` is required
- * when route `R` has path params or the endpoint has an `input` schema,
- * and optional otherwise.
+ * when route `R` has path params, the endpoint has an `input` schema, or
+ * its `query` schema `QS` has required fields, and optional otherwise.
  *
  * @example
  * ```ts
@@ -269,16 +309,74 @@ export type EndpointOptions<
  *
  * @since 0.1.0
  */
-export type EndpointArgs<R extends string, I extends AnySchema | undefined, T> =
-	Partial<Requirements<R, I>> extends Requirements<R, I>
+export type EndpointArgs<
+	R extends string,
+	I extends AnySchema | undefined,
+	T,
+	QS extends QuerySchema | undefined = undefined,
+> =
+	Partial<Requirements<R, I, QS>> extends Requirements<R, I, QS>
 		? [options?: T]
 		: [options: T];
 
-/** The options that can be required: `params` and `body`. */
+/** The options that can be required: `params`, `body` and `query`. */
 type Requirements<
 	R extends string,
 	I extends AnySchema | undefined,
-> = ParamsOption<RoutePath<R>> & EndpointBody<R, I>;
+	QS extends QuerySchema | undefined,
+> = ParamsOption<RoutePath<R>> & EndpointBody<R, I> & EndpointQuery<QS>;
+
+/**
+ * What `endpoint.url` takes: `params` for the route's path (see
+ * {@link ParamsOption}) and `query` (see {@link EndpointQuery}), as a call
+ * takes them.
+ *
+ * @example
+ * ```ts
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * const options: Fetch.EndpointUrlOptions<"GET /files/:id", undefined> = {
+ *   params: { id: "a1" },
+ *   query: { download: 1 },
+ * };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type EndpointUrlOptions<
+	R extends string,
+	QS extends QuerySchema | undefined,
+	Q extends QueryOf<Q> = QueryInput,
+> = ParamsOption<RoutePath<R>> & EndpointQuery<QS, Q>;
+
+/**
+ * The arguments of `endpoint.url`: its {@link EndpointUrlOptions}, which
+ * can be left out when nothing in them is required.
+ *
+ * A query schema whose encoding needs services can't be encoded by `url`,
+ * which runs synchronously, so then `url` takes only a message saying so,
+ * and no call to it compiles.
+ *
+ * @example
+ * ```ts
+ * import type * as Fetch from "@monarcode/effetch";
+ *
+ * const args: Fetch.EndpointUrlArgs<"GET /files/:id", undefined> = [
+ *   { params: { id: "a1" } },
+ * ];
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type EndpointUrlArgs<
+	R extends string,
+	QS extends QuerySchema | undefined,
+	Q extends QueryOf<Q> = QueryInput,
+> = [QS extends AnySchema ? QS["EncodingServices"] : never] extends [never]
+	? EndpointArgs<R, undefined, EndpointUrlOptions<R, QS, Q>, QS>
+	: [
+			unsupported: "endpoint.url can't encode a query schema whose encoding needs services",
+		];
 
 /**
  * An endpoint made by `client.endpoint` or `client.bind`: a function that
@@ -298,6 +396,7 @@ type Requirements<
  *   union, or `undefined` without any.
  * - `M`: the endpoint's {@link ResponseMode}, or `undefined` without one.
  *   A call's own `responseMode` wins.
+ * - `QS`: the endpoint's `query` schema, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -324,12 +423,13 @@ export interface Endpoint<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	SE extends StatusErrorMap | undefined = undefined,
 	M extends ResponseMode | undefined = undefined,
+	QS extends QuerySchema | undefined = undefined,
 > {
 	<
 		Q extends QueryOf<Q> = QueryInput,
 		CM extends ResponseMode | undefined = undefined,
 	>(
-		...args: EndpointArgs<R, I, EndpointOptions<R, I, Ps, Q, CM>>
+		...args: EndpointArgs<R, I, EndpointOptions<R, I, Ps, Q, CM, QS>, QS>
 	): Effect.Effect<
 		// The call's mode, else the endpoint's.
 		Success<O, NoInfer<CM extends undefined ? M : CM>>,
@@ -343,6 +443,7 @@ export interface Endpoint<
 		| EB["DecodingServices"]
 		| (I extends AnySchema ? I["EncodingServices"] : never)
 		| StatusErrorServices<SE>
+		| (QS extends AnySchema ? QS["EncodingServices"] : never)
 	>;
 	/** The route the endpoint was defined with, such as `"GET /users/:id"`. */
 	readonly route: R;
@@ -369,6 +470,23 @@ export interface Endpoint<
 	readonly input: I;
 	/** What calls succeed with, or `undefined` for the decoded body alone. */
 	readonly responseMode: M;
+	/** The schema `query` is typed and encoded with, or `undefined` without one. */
+	readonly query: QS;
+	/**
+	 * Builds the URL a call with these `params` and `query` sends to,
+	 * without sending anything: the client's `baseUrl`, the path with its
+	 * params filled in, then the query string. Use it for links, `<img>`
+	 * sources, downloads and cache keys.
+	 *
+	 * It's the URL before plugins run: a plugin that changes the request's
+	 * URL isn't reflected. It throws when a param is missing, or the query
+	 * doesn't match the `query` schema, as the call dies then. It can't be
+	 * called when the query schema's encoding needs services (see
+	 * {@link EndpointUrlArgs}).
+	 */
+	url<Q extends QueryOf<Q> = QueryInput>(
+		...args: EndpointUrlArgs<R, QS, Q>
+	): string;
 }
 
 /**
@@ -405,10 +523,11 @@ export interface EndpointMethod<
 		I extends AnySchema | undefined = undefined,
 		SE extends StatusErrorMap | undefined = undefined,
 		M extends ResponseMode | undefined = undefined,
+		QS extends QuerySchema | undefined = undefined,
 	>(
 		route: ValidRoute<R>,
-		definition?: EndpointDefinition<R, O, EB, I, Ps, SE, M>,
-	): Endpoint<R, O, EB, I, Ps, SE | ClientSE, M>;
+		definition?: EndpointDefinition<R, O, EB, I, Ps, SE, M, QS>,
+	): Endpoint<R, O, EB, I, Ps, SE | ClientSE, M, QS>;
 }
 
 /**
@@ -431,6 +550,8 @@ export interface EndpointMethod<
  *   client's headers, these can set `content-type`.
  * - `responseMode`: what every call succeeds with (see
  *   {@link ResponseMode}). A call's own `responseMode` wins.
+ * - `query`: a schema for the query parameters (see {@link QuerySchema}).
+ *   Each call's `query` is then typed by it, and encoded with it.
  *
  * Plugin overrides are given when binding, in {@link BindOptions}: a
  * definition doesn't know which plugins a client has.
@@ -440,6 +561,7 @@ export interface EndpointMethod<
  *   when absent).
  * - `SE`: the `statusErrors` map, or `undefined` without one.
  * - `M`: the `responseMode`, or `undefined` without one.
+ * - `QS`: the `query` schema, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -470,6 +592,7 @@ export interface UnboundDefinition<
 	I extends AnySchema | undefined,
 	SE extends StatusErrorMap | undefined = undefined,
 	M extends ResponseMode | undefined = undefined,
+	QS extends QuerySchema | undefined = undefined,
 > {
 	/** Decodes the 2xx body. Without it, calls return the raw response. */
 	readonly output?: O;
@@ -486,6 +609,11 @@ export interface UnboundDefinition<
 	readonly headers?: Headers.Input | undefined;
 	/** What every call succeeds with. A call's own `responseMode` wins. */
 	readonly responseMode?: M;
+	/**
+	 * Types and encodes each call's `query`, and makes it required when the
+	 * schema has required fields. See {@link QuerySchema}.
+	 */
+	readonly query?: QS;
 }
 
 /**
@@ -504,6 +632,7 @@ export interface UnboundDefinition<
  *   `defaultError`).
  * - `SE`: the `statusErrors` map, or `undefined` without one.
  * - `M`: the `responseMode`, or `undefined` without one.
+ * - `QS`: the `query` schema, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -529,6 +658,7 @@ export interface UnboundEndpoint<
 	I extends AnySchema | undefined,
 	SE extends StatusErrorMap | undefined = undefined,
 	M extends ResponseMode | undefined = undefined,
+	QS extends QuerySchema | undefined = undefined,
 > {
 	/** The route the endpoint was defined with, such as `"GET /users/:id"`. */
 	readonly route: R;
@@ -554,6 +684,22 @@ export interface UnboundEndpoint<
 	readonly headers: Headers.Headers | undefined;
 	/** What calls succeed with, or `undefined` for the decoded body alone. */
 	readonly responseMode: M;
+	/** The schema `query` is typed and encoded with, or `undefined` without one. */
+	readonly query: QS;
+	/**
+	 * Builds the path a call with these `params` and `query` sends to,
+	 * relative, without a client's `baseUrl`: the path with its params
+	 * filled in, then the query string. A route with an absolute URL gives
+	 * that URL. Once bound, the endpoint's `url` adds the client's
+	 * `baseUrl`.
+	 *
+	 * It throws when a param is missing, or the query doesn't match the
+	 * `query` schema. It can't be called when the query schema's encoding
+	 * needs services (see {@link EndpointUrlArgs}).
+	 */
+	url<Q extends QueryOf<Q> = QueryInput>(
+		...args: EndpointUrlArgs<R, QS, Q>
+	): string;
 }
 
 /**
@@ -621,11 +767,12 @@ export interface BindMethod<
 		EB extends AnySchema | undefined,
 		I extends AnySchema | undefined,
 		SE extends StatusErrorMap | undefined,
-		// No default: with one, a definition written inline in the call
-		// loses its mode's literal type.
+		// No default on M: with one, a definition written inline in the call
+		// loses its literal types. QS has none to match.
 		M extends ResponseMode | undefined,
+		QS extends QuerySchema | undefined,
 	>(
-		definition: UnboundEndpoint<R, O, EB, I, SE, M>,
+		definition: UnboundEndpoint<R, O, EB, I, SE, M, QS>,
 		options?: BindOptions<Ps>,
 	): Endpoint<
 		R,
@@ -634,7 +781,8 @@ export interface BindMethod<
 		I,
 		Ps,
 		SE | ClientSE,
-		M
+		M,
+		QS
 	>;
 }
 
@@ -652,17 +800,24 @@ export interface BindMethod<
  *
  * @since 0.1.0
  */
-// `any`: `UnboundEndpoint` is invariant in its schemas, so only `any`
-// accepts every definition.
-// oxlint-disable-next-line no-explicit-any
-export type AnyUnboundEndpoint = UnboundEndpoint<
-	string,
-	any,
-	any,
-	any,
-	any,
-	any
->;
+// `any`: `UnboundEndpoint` is invariant in its route and schemas (`url`
+// takes them), so only `any` accepts every definition. The route, method
+// and path are typed again, so they aren't `any` too, and `url` takes
+// whatever a definition's `url` takes.
+export interface AnyUnboundEndpoint extends Omit<
+	// oxlint-disable-next-line no-explicit-any
+	UnboundEndpoint<any, any, any, any, any, any, any>,
+	"route" | "method" | "path" | "url"
+> {
+	/** The route the endpoint was defined with, such as `"GET /users/:id"`. */
+	readonly route: string;
+	/** The route's HTTP method, such as `"GET"`. */
+	readonly method: HttpMethod.HttpMethod;
+	/** The route's path, with its `:params` unfilled, such as `"/users/:id"`. */
+	readonly path: string;
+	/** Builds the URL a call sends to. Its arguments depend on the route. */
+	readonly url: (...args: never) => string;
+}
 
 /**
  * How `client.bindAll` and `Fetch.Endpoints` check one entry of a record of
@@ -761,7 +916,8 @@ export type BoundEndpoint<
 				infer EB,
 				infer I,
 				infer SE,
-				infer M
+				infer M,
+				infer QS
 		  >
 		? Endpoint<
 				R,
@@ -770,7 +926,8 @@ export type BoundEndpoint<
 				I,
 				Ps,
 				SE | ClientSE,
-				M
+				M,
+				QS
 			>
 		: never;
 
@@ -856,8 +1013,13 @@ export interface BindAllMethod<
  *   it's bound to.
  * - `statusErrors` (see {@link StatusErrorMap}) are tried before those of
  *   the client it's bound to.
+ * - With a `query` schema (see {@link QuerySchema}), each call's `query` is
+ *   typed and encoded by it, and required when the schema has required
+ *   fields.
  * - Plugin overrides are given when binding: a definition doesn't know
  *   which plugins a client has.
+ * - `definition.url(options)` builds the URL a call would go to, without
+ *   the client's `baseUrl`.
  *
  * Use it when endpoints should be listed next to their schemas, read
  * without a client, or bound to more than one client. Otherwise
@@ -883,6 +1045,10 @@ export interface BindAllMethod<
  *   output: Session,
  * });
  * export const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+ * export const listUsers = Fetch.endpoint("GET /users", {
+ *   query: Schema.Struct({ page: Schema.optional(Schema.Finite) }),
+ *   output: Schema.Array(User),
+ * });
  *
  * // Bound once there is a client.
  * const makeApi = Effect.gen(function* () {
@@ -906,13 +1072,16 @@ export function endpoint<
 	I extends AnySchema | undefined = undefined,
 	SE extends StatusErrorMap | undefined = undefined,
 	M extends ResponseMode | undefined = undefined,
+	QS extends QuerySchema | undefined = undefined,
 >(
 	route: ValidRoute<R>,
-	definition?: UnboundDefinition<R, O, EB, I, SE, M>,
-): UnboundEndpoint<R, O, EB, I, SE, M>;
+	definition?: UnboundDefinition<R, O, EB, I, SE, M, QS>,
+): UnboundEndpoint<R, O, EB, I, SE, M, QS>;
+// `unknown`: the typed `url` takes no arguments when the query schema needs
+// services, which the runtime `url` can't be checked against.
 export function endpoint(
 	route: string,
 	definition?: RuntimeUnboundDefinition,
-): RuntimeUnboundEndpoint {
+): unknown {
 	return makeUnboundEndpoint(route, definition);
 }
