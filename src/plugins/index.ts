@@ -2,6 +2,7 @@ export { bearer } from "./bearer.js";
 export type {
 	BearerOptions,
 	BearerPlugin,
+	RefreshSource,
 	TokenSource,
 	TokenValue,
 } from "./bearer.js";
@@ -18,6 +19,11 @@ export type {
 export { logger } from "./logger.js";
 export type { LoggerOptions, LoggerPlugin } from "./logger.js";
 export { retry } from "./retry.js";
-export type { RetryOptions, RetryPlugin } from "./retry.js";
+export type {
+	RetryBudgetOptions,
+	RetryBudgetPlugin,
+	RetryOptions,
+	RetryPlugin,
+} from "./retry.js";
 export { TimeoutError, timeout } from "./timeout.js";
 export type { TimeoutOptions, TimeoutPlugin } from "./timeout.js";

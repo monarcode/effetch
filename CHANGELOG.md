@@ -102,6 +102,40 @@ All notable changes to `@monarcode/effetch`, newest first.
     needs `Fetch.make` and a hand-written service, as before.
   - `Fetch.make`, `Client` and `ClientConfig` are unchanged.
 
+- `bearer({ refresh })` renews an expired token. When a request that
+  `bearer` signed gets a `401`, it asks `refresh` for a new token and sends
+  the request again with it, once:
+
+  ```ts
+  bearer({ token: () => tokens.access(), refresh: () => tokens.renew() });
+  ```
+
+  - `refresh` is a function of the refused request, sync or async, or an
+    Effect, whose error and services become the client's.
+  - Requests refused with the same token share one refresh, and its token
+    or error. Requests refused with different tokens get their own. A
+    caller that's interrupted doesn't cancel the refresh for the others.
+  - When `refresh` gives `null`, `undefined` or `""`, or the new token is
+    refused too, the call ends with the `401`.
+  - Requests with their own `Authorization` header, sent without a token,
+    with a stream body, or that skip `bearer` aren't refreshed. Make the
+    refresh call itself skip `bearer`.
+  - New type: `RefreshSource`. Without `refresh`, `bearer` is unchanged.
+
+- `retry({ retryAfter })` waits as long as a retried response's
+  `Retry-After` header asks, in seconds or as an HTTP date, in place of the
+  schedule's delay. `true` waits up to 1 minute, and `{ max }` up to `max`.
+  It's off by default.
+
+- `retry({ budget })` limits the whole call, every attempt and wait
+  included. A retry whose wait would end at or after the budget isn't made, and
+  the call ends with its last response or `NetworkError`. When the budget
+  runs out during an attempt, the call fails with `TimeoutError`. Calls can
+  override it: `plugins: { retry: { budget: "2 minutes" } }`.
+  - `retry` with a `budget` returns the new `RetryBudgetPlugin` type, which
+    adds `TimeoutError`. New type: `RetryBudgetOptions`.
+  - `retry` without a `budget` still returns `RetryPlugin`, with no errors.
+
 ## 0.1.0-rc.2
 
 ### Added

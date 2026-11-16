@@ -60,6 +60,8 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
   - [Bugs are defects](#bugs-are-defects)
 - [Plugins](#plugins)
   - [Built-in plugins](#built-in-plugins)
+  - [Refreshing a token](#refreshing-a-token)
+  - [Retry-After and a time limit](#retry-after-and-a-time-limit)
   - [Console logging](#console-logging)
   - [Plugin order](#plugin-order)
   - [Changing plugins for one call](#changing-plugins-for-one-call)
@@ -504,16 +506,22 @@ export const archive = api.post("/todos/:id/archive", {
 
 ### All call options
 
-| Option    | What it does                                                                                                                                                                           |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `params`  | Values for the path's `:params`. Required, with exactly those names, when the path has any; not allowed otherwise. Values are URI-encoded.                                             |
-| `query`   | An object of query parameters. Arrays repeat the key, and `null` and `undefined` are dropped.                                                                                          |
-| `headers` | Headers for this call. They win over the client's, and over the body's `content-type`.                                                                                                 |
-| `body`    | Sent by its type: `HttpBody`, string, `ArrayBuffer` and typed arrays, `Blob`/`File`, `FormData` and `URLSearchParams` as they are, anything else as JSON.                              |
-| `input`   | A schema that `body` is encoded with before it's sent as JSON. `body` is then typed by the schema.                                                                                     |
-| `output`  | A schema the 2xx JSON body is decoded with. The call then sends `Accept: application/json` (unless you set `accept`). Without it, the call succeeds with the raw `HttpClientResponse`. |
-| `error`   | A schema for the body of error responses, replacing the client's `defaultError`.                                                                                                       |
-| `plugins` | Plugin overrides for this call (see [Changing plugins for one call](#changing-plugins-for-one-call)).                                                                                  |
+| Option                                                                    | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `params`                                                                  | Values for the path's `:params`. Required, with exactly those names, when the path has any; not allowed otherwise. Values are URI-encoded.                                                                                                                                                                                                                                                                                                           |
+| `query`                                                                   | An object of query parameters. Arrays repeat the key, and `null` and `undefined` are dropped.                                                                                                                                                                                                                                                                                                                                                        |
+| `headers`                                                                 | Headers for this call. They win over the client's, and over the body's `content-type`.                                                                                                                                                                                                                                                                                                                                                               |
+| `body`                                                                    | Sent by its type: `HttpBody`, string, `ArrayBuffer` and typed arrays, `Blob`/`File`, `FormData` and `URLSearchParams` as they are, anything else as JSON.                                                                                                                                                                                                                                                                                            |
+| `input`                                                                   | A schema that `body` is encoded with before it's sent as JSON. `body` is then typed by the schema.                                                                                                                                                                                                                                                                                                                                                   |
+| `output`                                                                  | A schema the 2xx JSON body is decoded with. The call then sends `Accept: application/json` (unless you set `accept`). Without it, the call succeeds with the raw `HttpClientResponse`.                                                                                                                                                                                                                                                               |
+| `error`                                                                   | A schema for the body of error responses, replacing the client's `defaultError`.                                                                                                                                                                                                                                                                                                                                                                     |
+| `plugins`                                                                 | Plugin                                                                                                                                                                                                                                                                                                                                                                                                                                               | What it does                                         | Per call |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `bearer({ token, scheme?, refresh? })`                                    | Sends `Authorization: Bearer <token>`. The token is a string, a function of the request (sync or async), or an Effect, read for every request. `null`, `undefined` and `""` send no header, and an existing `Authorization` header is kept. With `refresh`, a `401` gets a new token and the request is sent again, once. See [Refreshing a token](#refreshing-a-token).                                                                             | `false`                                              |
+| `logger({ level? })`                                                      | Logs one entry per call at Debug (or Info): `GET <url> 200 (35ms)`, or `failed` with the cause, with the call's [route](#knowing-the-route) as an annotation. Never logs headers or query strings.                                                                                                                                                                                                                                                   | `false`                                              |
+| `consoleLogger(options?)`                                                 | Prints each call to the console while you develop: a line with the route, status, duration and outcome, opening a group with the full URL, headers, bodies and error. Sensitive headers, query parameters and body keys are redacted. See [Console logging](#console-logging).                                                                                                                                                                       | `false`, its settings                                |
+| `retry({ times?, schedule?, methods?, statuses?, retryAfter?, budget? })` | Retries network errors and 408, 429, 500, 502, 503 and 504, 2 times by default, with jittered exponential backoff from 200ms. Only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) by default, so a `POST` is never sent twice. When retries run out, the last response is returned. `retryAfter` waits as `Retry-After` asks, and `budget` limits the whole call. See [Retry-After and a time limit](#retry-after-and-a-time-limit). | `false`, `{ times }`, and `{ budget }` with a budget |
+| `timeout({ duration })`                                                   | Fails with `TimeoutError` and aborts the request when the response headers don't arrive in time. Downloading the body isn't covered.                                                                                                                                                                                                                                                                                                                 | `false`, `{ duration }`                              |
 
 ### When the methods aren't enough
 
@@ -785,6 +793,88 @@ A `bearer` token function that throws, or whose promise rejects, makes the
 call die. To fail with a typed error instead, pass an Effect: its error and
 services become the client's, and `make` asks for the services.
 
+### Refreshing a token
+
+To renew an expired access token without failing the call, give `bearer` a
+`refresh`. When a request that `bearer` signed gets a `401`, it asks
+`refresh` for a new token, then sends the request again with it:
+
+```ts
+import * as Fetch from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+declare const tokens: {
+  readonly access: () => string | undefined;
+  readonly renew: () => Promise<string | undefined>;
+};
+
+export const makeApi = Fetch.make({
+  baseUrl: "https://api.example.com",
+  plugins: [
+    bearer({ token: () => tokens.access(), refresh: () => tokens.renew() }),
+  ],
+});
+```
+
+- `refresh` is a function of the refused request, as it was sent, sync or
+  async, or an Effect. Like `token`, an Effect's error and services become
+  the client's.
+- Calls refused with the same token share one refresh, so the token is
+  renewed once, and they all get its token or its error. Calls refused with
+  different tokens, such as other users' on a server, get their own.
+- A call that times out or is interrupted while it waits doesn't cancel the
+  refresh for the others.
+- The request is sent again once. If the new token is refused too, the call
+  ends with that `401`.
+- When `refresh` gives `null`, `undefined` or `""`, such as when the session
+  has ended, the call ends with the `401`, and nothing more is sent.
+- A request with its own `Authorization` header, sent without a token, or
+  with a stream body, which can't be sent twice, isn't refreshed. Neither is
+  a call that skips `bearer`.
+- Make the refresh call itself skip `bearer`: `plugins: { bearer: false }`.
+  Calls made inside an Effect `refresh` never refresh, but a function that
+  runs the client with `Effect.runPromise` can't be told apart: a `401` to
+  it would wait for the refresh it's part of.
+- Every method is sent again, a `POST` included: a `401` means the server
+  didn't act on the request.
+
+The new token is used for that request only. Store it where `token` reads it,
+so later requests send it too.
+
+To sign out instead, see [Example: signing out on a 401](#example-signing-out-on-a-401).
+
+### Retry-After and a time limit
+
+`retry` has two options for servers that are overloaded or slow:
+
+- `retryAfter`: when a retried response has a `Retry-After` header, wait as
+  long as it asks (`Retry-After: 120`, or an HTTP date) in place of the
+  schedule's delay. `true` waits up to 1 minute, and `{ max }` up to `max`.
+  It's off by default, so a server can't make calls wait.
+- `budget`: how long the whole call may take, every attempt and wait
+  included. No retry is made when its wait would end at or after the budget: the
+  call ends with its last response or `NetworkError`. When the budget runs
+  out during an attempt, the attempt is aborted, and the call fails with
+  `TimeoutError`. Calls can override it.
+
+For "10 seconds per attempt, 30 seconds in all", use both `timeout` and a
+budget:
+
+```ts
+import * as Fetch from "@monarcode/effetch";
+import { retry, timeout } from "@monarcode/effetch/plugins";
+
+export const makeApi = Fetch.make({
+  baseUrl: "https://api.example.com",
+  plugins: [
+    retry({ times: 5, retryAfter: true, budget: "30 seconds" }),
+    timeout({ duration: "10 seconds" }),
+  ],
+});
+
+// Per call: api.get("/report", { plugins: { retry: { budget: "2 minutes" } } })
+```
+
 ### Console logging
 
 `logger` writes one structured entry per call for production logs, and leaves
@@ -916,7 +1006,11 @@ the way back. The order above is the one to use:
 - `logger` sees the whole call, retries included (`consoleLogger` sees the
   whole call wherever it is);
 - each retry gets its own timeout, and asks for the token again;
-- a timed-out attempt isn't retried.
+- a timed-out attempt isn't retried;
+- `retry`'s `budget` covers every attempt and wait, while `timeout` covers
+  one attempt;
+- a `401` that `bearer` refreshes is sent again inside the same attempt, so
+  it shares that attempt's timeout.
 
 ### Changing plugins for one call
 
@@ -1070,7 +1164,8 @@ export const timing = Fetch.plugin({
 ### Example: signing out on a 401
 
 The classic plugin: send the session's token, and when the API answers `401`,
-sign out and fail with a typed `SessionExpired`:
+sign out and fail with a typed `SessionExpired`. To renew the token instead,
+see [Refreshing a token](#refreshing-a-token).
 
 ```ts
 import * as Context from "effect/Context";
