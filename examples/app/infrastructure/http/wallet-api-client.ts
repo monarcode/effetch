@@ -1,7 +1,4 @@
 import * as Config from "effect/Config";
-import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import * as Fetch from "@monarcode/effetch";
@@ -18,26 +15,21 @@ export const WalletApiError = Schema.Struct({
 	reason: Schema.String,
 });
 
-const makeWalletApiClient = Fetch.make({
-	baseUrl: Config.String("WALLET_API_URL"),
-	defaultError: WalletApiError,
-	// The shared error, read from this backend's body: its message is
-	// `reason`.
-	statusErrors: {
-		401: SessionExpired.pipe(Schema.encodeKeys({ message: "reason" })),
+export class WalletApiClient extends Fetch.Service<WalletApiClient>()(
+	"infrastructure/http/WalletApiClient",
+	{
+		baseUrl: Config.String("WALLET_API_URL"),
+		defaultError: WalletApiError,
+		// The shared error, read from this backend's body: its message is
+		// `reason`.
+		statusErrors: {
+			401: SessionExpired.pipe(Schema.encodeKeys({ message: "reason" })),
+		},
+		plugins: [
+			logger(),
+			reportErrors("wallet"),
+			timeout({ duration: "10 seconds" }),
+			auth,
+		],
 	},
-	plugins: [
-		logger(),
-		reportErrors("wallet"),
-		timeout({ duration: "10 seconds" }),
-		auth,
-	],
-});
-
-export class WalletApiClient extends Context.Service<
-	WalletApiClient,
-	Effect.Success<typeof makeWalletApiClient>
->()("infrastructure/http/WalletApiClient") {}
-
-export const WalletApiClientLive =
-	Layer.effect(WalletApiClient)(makeWalletApiClient);
+) {}

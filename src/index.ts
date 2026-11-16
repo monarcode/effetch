@@ -48,5 +48,7 @@ export type {
 	Success,
 } from "./Options.js";
 export type { PathParamNames, PathParams, PathParamValue } from "./Path.js";
+export { isService, Service } from "./Service.js";
+export type { ServiceClass } from "./Service.js";
 export { plugin } from "./Plugin.js";
 export type { Plugin, PluginContext, PluginExitContext } from "./Plugin.js";

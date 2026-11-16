@@ -291,11 +291,10 @@ Every option is optional:
 
 ### Sharing it across your app
 
-`Fetch.make` returns an Effect that builds the client. Build it once, and
-share it as a service:
+Build the client once, and share it as a service. `Fetch.Service` takes the
+same config as `Fetch.make` and declares the service in one class:
 
 ```ts
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -305,15 +304,11 @@ import * as Fetch from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
-const makeApi = Fetch.make({ baseUrl: "https://api.example.com" });
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
 
-export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
-  "Api",
-) {}
-
-export const ApiLive = Layer.effect(Api)(makeApi).pipe(
-  Layer.provide(FetchHttpClient.layer),
-);
+export const ApiLive = Api.layer.pipe(Layer.provide(FetchHttpClient.layer));
 
 // Anywhere in your app
 export const program = Effect.gen(function* () {
@@ -325,16 +320,66 @@ export const program = Effect.gen(function* () {
 export const runnable = program.pipe(Effect.provide(ApiLive));
 ```
 
-Two things worth knowing:
+The class gives you three things:
 
-- **Your client's type is `Effect.Success<typeof makeApi>`.** It includes
-  your plugins and your `defaultError`. Use it wherever you need to type a
-  client, such as a function parameter. `Fetch.Client` is the type of a client
-  without plugins, and yours won't fit it.
+- **`Api` is the service.** `yield* Api` gives the client, typed from the
+  config.
+- **`Api.layer` builds the client.** It needs an `HttpClient`, plus
+  whatever the `baseUrl` Effect and the plugins need. Every layer that
+  depends on it in one layer graph gets the same client.
+- **`Api.config` is the config you passed**, frozen. You can read it when
+  the module loads, before any layer is built, for example to get the
+  `defaultError` and `statusErrors` schemas.
+
+Two more things worth knowing:
+
+- **Your client's type is `Effect.Success<typeof Api>`.** It includes your
+  plugins and your `defaultError`. Use it wherever you need to type a
+  client, such as a function parameter. `Fetch.Client` is the type of a
+  client without plugins, and yours won't fit it.
 - **Calls need nothing from the environment.** The client holds on to the
   `HttpClient`, the base URL and any services its plugins need. Its calls only
   need the services of their own schemas, if any, so they run anywhere: in a
   service, in a query function, or with `Effect.runPromise`.
+
+Give each client its own id: two classes with the same id are the same
+service.
+
+#### When the config isn't known up front
+
+`Fetch.Service` needs its config when the module loads. A `baseUrl` that's
+an Effect, such as a `Config`, is fine: it runs when the layer is built.
+When the config itself comes from an Effect, for example headers read from
+a service, call `Fetch.make` inside that Effect and declare the service by
+hand:
+
+```ts
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+import * as Fetch from "@monarcode/effetch";
+
+class Tenant extends Context.Service<Tenant, { readonly id: string }>()(
+  "Tenant",
+) {}
+
+const makeApi = Effect.gen(function* () {
+  const tenant = yield* Tenant;
+  return yield* Fetch.make({
+    baseUrl: "https://api.example.com",
+    headers: { "x-tenant": tenant.id },
+  });
+});
+
+export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
+  "Api",
+) {}
+
+export const ApiLive = Layer.effect(Api)(makeApi);
+```
+
+Use `Fetch.make` alone, without a service, in scripts and tests.
 
 ## Making calls
 
@@ -1445,14 +1490,10 @@ import * as Schema from "effect/Schema";
 import * as Fetch from "@monarcode/effetch";
 
 // infrastructure/http/app-api-client.ts: how to reach the backend, nothing else
-const makeAppApiClient = Fetch.make({ baseUrl: Config.String("APP_API_URL") });
-
-export class AppApiClient extends Context.Service<
-  AppApiClient,
-  Effect.Success<typeof makeAppApiClient>
->()("AppApiClient") {}
-
-export const AppApiClientLive = Layer.effect(AppApiClient)(makeAppApiClient);
+export class AppApiClient extends Fetch.Service<AppApiClient>()(
+  "AppApiClient",
+  { baseUrl: Config.String("APP_API_URL") },
+) {}
 
 // modules/todos/contract/todos.ts: schemas and endpoints, no client
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
@@ -1483,7 +1524,7 @@ export const TodoApiLive = Layer.effect(TodoApi)(makeTodoApi);
 
 // runtime.ts
 export const AppLayer = TodoApiLive.pipe(
-  Layer.provideMerge(AppApiClientLive),
+  Layer.provideMerge(AppApiClient.layer),
   Layer.provide(FetchHttpClient.layer),
 );
 
@@ -1586,29 +1627,24 @@ const todo = await Effect.runPromise(
 
 Effect's `HttpClient` adds `traceparent` and `b3` tracing headers to every
 request. Cross-origin calls to APIs that don't allow those headers then fail
-the CORS preflight. Turn propagation off where the client is made, and it
-applies to all its calls:
+the CORS preflight. Turn propagation off in the layer that makes the client,
+and it applies to all its calls:
 
 ```ts
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 
 import * as Fetch from "@monarcode/effetch";
 
-const makeApi = Fetch.make({ baseUrl: "https://api.example.com" });
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
 
-export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
-  "Api",
-) {}
-
-export const ApiLive = Layer.effect(Api)(
-  makeApi.pipe(
-    Effect.provideService(HttpClient.TracerPropagationEnabled, false),
-  ),
-).pipe(Layer.provide(FetchHttpClient.layer));
+export const ApiLive = Api.layer.pipe(
+  Layer.provide(Layer.succeed(HttpClient.TracerPropagationEnabled)(false)),
+  Layer.provide(FetchHttpClient.layer),
+);
 ```
 
 In a browser, a relative path without a `baseUrl` is resolved against the
@@ -1646,6 +1682,8 @@ page's URL.
 
 - `make`, `ClientConfig`, `Client`: [creating a client](#creating-a-client)
   and [making calls](#making-calls).
+- `Service`, `ServiceClass` (and `ServiceClass.Any`), `isService`:
+  [sharing a client as a service](#sharing-it-across-your-app).
 - `Endpoint`, `EndpointMethod`, `EndpointDefinition`, `EndpointOptions`,
   `EndpointBody`, `EndpointArgs`, `EndpointRoute`, `ValidRoute`,
   `RouteMethod`, `RoutePath`: [endpoints](#endpoints).

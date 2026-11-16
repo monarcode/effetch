@@ -494,6 +494,10 @@ export interface Client<
  * An `HttpClient` that fails on non-2xx statuses (`filterStatusOk`) works
  * too: effetch takes the response back and reports the usual `HttpError`.
  *
+ * To share a client as a service, `Fetch.Service` declares the service, its
+ * layer and its config in one class. The example below is the hand-written
+ * form, for a config that is only known inside an Effect.
+ *
  * **Browsers and tracing headers.** Effect's `HttpClient` adds `traceparent`
  * and `b3` headers to every request. In a browser, those make cross-origin
  * calls to APIs that don't allow them fail the CORS preflight. Turn that

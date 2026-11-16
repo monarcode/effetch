@@ -1,7 +1,4 @@
 import * as Config from "effect/Config";
-import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import * as Fetch from "@monarcode/effetch";
@@ -21,16 +18,12 @@ export const AppApiError = Schema.Struct({
 	message: Schema.String,
 });
 
-const makeAppApiClient = Fetch.make({
-	baseUrl: Config.String("APP_API_URL"),
-	defaultError: AppApiError,
-	statusErrors: { 401: SessionExpired },
-	plugins: [logger(), reportErrors("app"), retry(), auth],
-});
-
-export class AppApiClient extends Context.Service<
-	AppApiClient,
-	Effect.Success<typeof makeAppApiClient>
->()("infrastructure/http/AppApiClient") {}
-
-export const AppApiClientLive = Layer.effect(AppApiClient)(makeAppApiClient);
+export class AppApiClient extends Fetch.Service<AppApiClient>()(
+	"infrastructure/http/AppApiClient",
+	{
+		baseUrl: Config.String("APP_API_URL"),
+		defaultError: AppApiError,
+		statusErrors: { 401: SessionExpired },
+		plugins: [logger(), reportErrors("app"), retry(), auth],
+	},
+) {}

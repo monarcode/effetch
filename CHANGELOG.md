@@ -2,6 +2,57 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## 0.1.0-rc.3
+
+### Added
+
+- `Fetch.Service` declares a client as a service in one class, with its
+  layer and its config. It takes the config `Fetch.make` takes. Before:
+
+  ```ts
+  const makeApi = Fetch.make({ baseUrl, defaultError: ApiError });
+
+  class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
+    "Api",
+  ) {}
+
+  const ApiLive = Layer.effect(Api)(makeApi);
+  ```
+
+  After:
+
+  ```ts
+  class Api extends Fetch.Service<Api>()("Api", {
+    baseUrl,
+    defaultError: ApiError,
+  }) {}
+
+  const ApiLive = Api.layer;
+  ```
+
+  - `yield* Api` gives the client, typed from the config, as before.
+  - `Api.layer` builds the client with `Fetch.make`. It needs and fails
+    with what `Fetch.make(config)` needs and fails with. Every layer that
+    depends on it in one layer graph gets the same client.
+  - `Api.config` is the config, readable when the module loads, before any
+    layer is built. It's a frozen copy, down to its `statusErrors`,
+    `plugins` and `headers`, and the layer builds the client from that
+    copy, so changing the object you passed changes nothing. Its `headers`
+    is an Effect `Headers` value, so an `authorization` header stays
+    redacted when the config is logged.
+  - To make `Api.layer` provide its `HttpClient` too, override it in the
+    class:
+    `static override readonly layer = super.layer.pipe(Layer.provide(FetchHttpClient.layer))`.
+    An override can need less than `Api.layer`, but not more, and can't add
+    an error.
+  - `Fetch.isService` tells a class made by `Fetch.Service`, or a subclass
+    of one, from any other value, including a `Context.Service` key.
+  - New types: `ServiceClass` and `ServiceClass.Any`.
+  - The config must be known when the module loads. A `baseUrl` Effect,
+    such as a `Config`, is fine. A config that comes from an Effect still
+    needs `Fetch.make` and a hand-written service, as before.
+  - `Fetch.make`, `Client` and `ClientConfig` are unchanged.
+
 ## 0.1.0-rc.2
 
 ### Added

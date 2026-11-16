@@ -94,6 +94,17 @@ const definedMapped = Fetch.endpoint("GET /todos/:id", {
 	statusErrors: { 404: TodoNotFound },
 });
 export const /*statusBound*/statusBound = mapped.bind(definedMapped)({ params: { id: 1 } });
+
+export class Api extends Fetch./*service*/Service<Api>()("Api", {
+	defaultError: ApiError,
+	statusErrors: { 404: TodoNotFound },
+}) {}
+export const /*apiLayer*/apiLayer = Api./*layer*/layer;
+export const /*apiConfig*/apiConfig = Api./*config*/config;
+export const /*serviceCall*/serviceCall = Effect.gen(function* () {
+	const client = yield* Api;
+	return yield* client.get("/todos/:id", { params: { id: 1 }, output: Todo });
+});
 `;
 
 const config = ts.getParsedCommandLineOfConfigFile(
@@ -151,6 +162,9 @@ for (const [marker, file, docs] of [
 	["endpoint", "Client.d.ts", "Defines an endpoint"],
 	["define", "Endpoint.d.ts", "Defines an endpoint without a client"],
 	["bind", "Client.d.ts", "Binds an endpoint defined with"],
+	["service", "Service.d.ts", "Declares a client as a service class"],
+	["layer", "Service.d.ts", "Builds the client with"],
+	["config", "Service.d.ts", "The config the class was declared with"],
 ]) {
 	const definitions = service.getDefinitionAtPosition(probe, at(marker)) ?? [];
 	const targets = definitions.map((definition) =>
@@ -171,6 +185,8 @@ for (const [marker, file, docs] of [
 		marker === "get" ||
 			marker === "endpoint" ||
 			marker === "bind" ||
+			marker === "layer" ||
+			marker === "config" ||
 			(tags.includes("example") && tags.includes("since")),
 		`Hover on ${marker} lacks @example or @since: ${tags.join(", ")}`,
 	);
@@ -319,6 +335,7 @@ for (const [marker, errors, services] of [
 		[...callErrors, "SessionExpired", "TodoNotFound"].sort(),
 		["never"],
 	],
+	["serviceCall", [...callErrors, "TodoNotFound"].sort(), ["Api"]],
 ]) {
 	const hover = ts.displayPartsToString(
 		service.getQuickInfoAtPosition(probe, at(marker))?.displayParts,
@@ -331,6 +348,29 @@ for (const [marker, errors, services] of [
 		`Hover on ${marker} doesn't show Effect.Effect<…, ${errors.join(" | ")}, ${services.join(" | ")}>: ${hover}`,
 	);
 }
+
+// A Fetch.Service class's statics name their types, from the config.
+const apiLayerHover = ts
+	.displayPartsToString(
+		service.getQuickInfoAtPosition(probe, at("apiLayer"))?.displayParts,
+	)
+	.replace(/\s+/g, " ");
+expect(
+	/Layer(\.Layer)?<Api, never, HttpClient(\.HttpClient)?>$/.test(
+		apiLayerHover,
+	),
+	`Hover on a Fetch.Service layer doesn't show its type: ${apiLayerHover}`,
+);
+const apiConfigHover = ts
+	.displayPartsToString(
+		service.getQuickInfoAtPosition(probe, at("apiConfig"))?.displayParts,
+	)
+	.replace(/\s+/g, " ");
+expect(
+	apiConfigHover.includes("Fetch.ClientConfig<") &&
+		apiConfigHover.includes("404: typeof TodoNotFound"),
+	`Hover on a Fetch.Service config doesn't show its type: ${apiConfigHover}`,
+);
 
 const queryStart = source.lastIndexOf("\n", at("query")) + 1;
 const queryEnd = source.indexOf("\n", at("query"));

@@ -63,6 +63,7 @@ import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Fetch from "@monarcode/effetch";
 import {
@@ -333,6 +334,35 @@ const missingTodo: string | { readonly id: number } =
 	await Effect.runPromise(statusProgram);
 if (missingTodo !== "No todo 9") {
 	throw new Error(`Unexpected statusErrors result: ${JSON.stringify(missingTodo)}`);
+}
+
+// A client as a service class: its config is readable without a layer.
+class Api extends Fetch.Service<Api>()("smoke/Api", {
+	baseUrl: "https://api.test",
+	statusErrors: { 404: TodoNotFound },
+}) {}
+if (
+	!Fetch.isService(Api) ||
+	!Object.isFrozen(Api.config) ||
+	Api.config.statusErrors?.[404] !== TodoNotFound
+) {
+	throw new Error("Unexpected Fetch.Service class");
+}
+
+const serviceProgram = Effect.gen(function* () {
+	const api = yield* Api;
+	return yield* api.get("/todos/:id", { params: { id: 9 }, output: Todo });
+}).pipe(
+	Effect.catchTag("TodoNotFound", (error) => Effect.succeed(error.message)),
+	Effect.provide(
+		Api.layer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient)(notFound))),
+	),
+);
+
+const viaService: string | { readonly id: number } =
+	await Effect.runPromise(serviceProgram);
+if (viaService !== "No todo 9") {
+	throw new Error(`Unexpected Fetch.Service result: ${JSON.stringify(viaService)}`);
 }
 
 console.log("smoke: ok");

@@ -16,9 +16,12 @@ Complete programs using effetch. They're typechecked with the package
 `endpoints.ts` and `backends.ts` keep everything in one file, which suits a
 small app. `app/` is a layout for an app with many endpoints and modules.
 
-Throughout, the Effect that builds a client or a service is named after what
-it builds: `makeApi` builds `Api`, `makeAppApiClient` builds `AppApiClient`,
-`makeTodoApi` builds `TodoApi`.
+A client shared as a service is a `Fetch.Service` class, with its layer as
+`.layer`: `Api` in `basic.ts`, `builtins.ts` and `plugins.ts`, and
+`AppApiClient` and `WalletApiClient` in `app/`. Any other service is built by
+an Effect named after it: `makeApi` builds the `Api` of `endpoints.ts` and
+`status-errors.ts` (the client's endpoints), and `makeTodoApi` builds
+`TodoApi`.
 
 ## `app/`: endpoints in a feature-sliced app
 
