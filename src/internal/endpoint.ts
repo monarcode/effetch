@@ -165,16 +165,39 @@ export const makeUnboundEndpoint = (
 	});
 };
 
+/** `true` if `u` looks like what `Fetch.endpoint` returns. */
+const isUnboundEndpoint = (u: unknown): u is RuntimeUnboundEndpoint =>
+	typeof u === "object" &&
+	u !== null &&
+	typeof (u as { readonly route?: unknown }).route === "string" &&
+	typeof (u as { readonly method?: unknown }).method === "string" &&
+	typeof (u as { readonly path?: unknown }).path === "string";
+
 /**
  * Binds a definition to a client: the endpoint `makeEndpoint` makes from the
  * same route and definition, with the binding's headers over the
- * definition's and its plugin overrides.
+ * definition's and its plugin overrides. Throws when `unbound` isn't a
+ * definition, such as an endpoint that's already bound.
  */
 export const bindEndpoint = (
 	call: (method: HttpMethod.HttpMethod) => Call,
 	client: ClientDefaults,
 	unbound: RuntimeUnboundEndpoint,
-	options: RuntimeBindOptions = {},
+	options: RuntimeBindOptions | null = {},
+): RuntimeEndpoint => {
+	if (!isUnboundEndpoint(unbound)) {
+		throw new Error(
+			"client.bind takes an endpoint definition: pass what Fetch.endpoint returns",
+		);
+	}
+	return makeEndpointFrom(call, client, unbound, options ?? {});
+};
+
+const makeEndpointFrom = (
+	call: (method: HttpMethod.HttpMethod) => Call,
+	client: ClientDefaults,
+	unbound: RuntimeUnboundEndpoint,
+	options: RuntimeBindOptions,
 ): RuntimeEndpoint =>
 	makeEndpoint(call, client, unbound.route, {
 		output: unbound.output,
@@ -184,3 +207,109 @@ export const bindEndpoint = (
 		headers: mergeHeaders(unbound.headers, options.headers),
 		plugins: options.plugins,
 	});
+
+/** A record of definitions, as `bindAll` takes it at runtime. */
+export interface RuntimeDefinitions {
+	readonly [name: string]: unknown;
+}
+
+/** One entry of a record of definitions, checked and split. */
+interface Entry {
+	readonly name: string;
+	readonly unbound: RuntimeUnboundEndpoint;
+	readonly options: RuntimeBindOptions | undefined;
+	/** Whether it was given as a `[definition, options]` pair. */
+	readonly pair: boolean;
+}
+
+/** `true` for a non-null object that isn't an array. */
+const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> =>
+	typeof u === "object" && u !== null && !Array.isArray(u);
+
+/**
+ * A frozen copy of a binding's options: `headers` as Effect `Headers`, and
+ * `plugins` copied down to each override.
+ */
+const snapshotOptions = (options: RuntimeBindOptions): RuntimeBindOptions => {
+	const copy: { headers?: Headers.Input; plugins?: OverrideMap } = {};
+	if (options.headers !== undefined) {
+		copy.headers = Object.freeze(Headers.fromInput(options.headers));
+	}
+	if (options.plugins !== undefined) {
+		copy.plugins = Object.freeze(
+			Object.fromEntries(
+				Object.entries(options.plugins).map(([name, override]) => [
+					name,
+					isRecord(override) ? Object.freeze({ ...override }) : override,
+				]),
+			),
+		) as OverrideMap;
+	}
+	return Object.freeze(copy);
+};
+
+/**
+ * Checks and splits every string-keyed entry of `definitions`. Throws when
+ * an entry isn't a definition or a `[definition, options]` pair: that's a
+ * bug in the calling code. Options are copied and frozen.
+ */
+const entriesOf = (definitions: RuntimeDefinitions): ReadonlyArray<Entry> =>
+	Object.keys(definitions).map((name) => {
+		const entry = definitions[name];
+		const pair = Array.isArray(entry);
+		const [unbound, options] = pair
+			? (entry as ReadonlyArray<unknown>)
+			: [entry, undefined];
+		const valid =
+			isUnboundEndpoint(unbound) &&
+			(!pair || (entry as ReadonlyArray<unknown>).length === 2) &&
+			(options === undefined || options === null || isRecord(options));
+		if (!valid) {
+			throw new Error(
+				`"${name}" isn't an endpoint definition: pass what Fetch.endpoint returns, or a [definition, options] pair`,
+			);
+		}
+		return {
+			name,
+			unbound,
+			options: isRecord(options)
+				? snapshotOptions(options as RuntimeBindOptions)
+				: undefined,
+			pair,
+		};
+	});
+
+/**
+ * A frozen copy of `definitions`, checked, with each pair and its options
+ * copied and frozen. For `Fetch.Endpoints`, when a class is declared.
+ */
+export const snapshotDefinitions = (definitions: unknown): RuntimeDefinitions =>
+	Object.freeze(
+		Object.fromEntries(
+			entriesOf(definitions as RuntimeDefinitions).map(
+				({ name, unbound, options, pair }) => [
+					name,
+					pair ? Object.freeze([unbound, options]) : unbound,
+				],
+			),
+		),
+	);
+
+/**
+ * Binds every definition in `definitions`, under the same names. Throws
+ * when an entry isn't a definition: that's a bug in the calling code.
+ */
+export const bindAllEndpoints = (
+	call: (method: HttpMethod.HttpMethod) => Call,
+	client: ClientDefaults,
+	definitions: RuntimeDefinitions,
+): { readonly [name: string]: RuntimeEndpoint } =>
+	// `fromEntries`, so a name such as "__proto__" stays an own key.
+	Object.freeze(
+		Object.fromEntries(
+			entriesOf(definitions).map(({ name, unbound, options }) => [
+				name,
+				bindEndpoint(call, client, unbound, options),
+			]),
+		),
+	);

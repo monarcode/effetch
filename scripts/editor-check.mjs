@@ -101,6 +101,12 @@ export class Api extends Fetch./*service*/Service<Api>()("Api", {
 }) {}
 export const /*apiLayer*/apiLayer = Api./*layer*/layer;
 export const /*apiConfig*/apiConfig = Api./*config*/config;
+export class TodoApi extends Fetch./*endpointsClass*/Endpoints<TodoApi>()("TodoApi", Api, {
+	get: getTodoDefinition,
+}) {}
+declare const todos: Effect.Success<typeof TodoApi>;
+export const /*todosGet*/todosGet = todos.get;
+export const allBound = typed./*bindAll*/bindAll({ get: getTodoDefinition });
 export const /*serviceCall*/serviceCall = Effect.gen(function* () {
 	const client = yield* Api;
 	return yield* client.get("/todos/:id", { params: { id: 1 }, output: Todo });
@@ -165,6 +171,8 @@ for (const [marker, file, docs] of [
 	["service", "Service.d.ts", "Declares a client as a service class"],
 	["layer", "Service.d.ts", "Builds the client with"],
 	["config", "Service.d.ts", "The config the class was declared with"],
+	["endpointsClass", "Endpoints.d.ts", "Declares a module's endpoints"],
+	["bindAll", "Client.d.ts", "Binds a record of endpoint definitions"],
 ]) {
 	const definitions = service.getDefinitionAtPosition(probe, at(marker)) ?? [];
 	const targets = definitions.map((definition) =>
@@ -186,6 +194,7 @@ for (const [marker, file, docs] of [
 			marker === "endpoint" ||
 			marker === "bind" ||
 			marker === "layer" ||
+			marker === "bindAll" ||
 			marker === "config" ||
 			(tags.includes("example") && tags.includes("since")),
 		`Hover on ${marker} lacks @example or @since: ${tags.join(", ")}`,
@@ -348,6 +357,17 @@ for (const [marker, errors, services] of [
 		`Hover on ${marker} doesn't show Effect.Effect<…, ${errors.join(" | ")}, ${services.join(" | ")}>: ${hover}`,
 	);
 }
+
+// A Fetch.Endpoints service's endpoints hover as Endpoint types.
+const todosGetHover = ts
+	.displayPartsToString(
+		service.getQuickInfoAtPosition(probe, at("todosGet"))?.displayParts,
+	)
+	.replace(/\s+/g, " ");
+expect(
+	todosGetHover.includes('Endpoint<"GET /todos/:id"'),
+	`Hover on a Fetch.Endpoints endpoint doesn't name its type and route: ${todosGetHover}`,
+);
 
 // A Fetch.Service class's statics name their types, from the config.
 const apiLayerHover = ts

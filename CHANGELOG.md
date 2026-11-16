@@ -6,6 +6,55 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ### Added
 
+- `Fetch.Endpoints` declares a module's endpoints as a service, in one
+  class, with its layer. It takes the service's id, the client's service
+  and a record of definitions made with `Fetch.endpoint`. Before:
+
+  ```ts
+  const makeTodoApi = AppApiClient.useSync((client) => ({
+    list: client.bind(listTodos),
+    get: client.bind(getTodo),
+  }));
+
+  class TodoApi extends Context.Service<
+    TodoApi,
+    Effect.Success<typeof makeTodoApi>
+  >()("TodoApi") {}
+
+  const TodoApiLive = Layer.effect(TodoApi)(makeTodoApi);
+  ```
+
+  After:
+
+  ```ts
+  class TodoApi extends Fetch.Endpoints<TodoApi>()("TodoApi", AppApiClient, {
+    list: listTodos,
+    get: getTodo,
+  }) {}
+
+  const TodoApiLive = TodoApi.layer;
+  ```
+
+  - `yield* TodoApi` gives the endpoints, each typed as `client.bind`
+    types it, with the client's plugins, `defaultError` and
+    `statusErrors`.
+  - `TodoApi.layer` binds the definitions once, when it's built, and needs
+    the client's service. The client can be a `Fetch.Service` class or a
+    service written by hand.
+  - `TodoApi.definitions` is the record, frozen, readable when the module
+    loads.
+  - An entry can be a `[definition, options]` pair, with the options
+    `client.bind` takes: `refresh: [refresh, { plugins: { bearer: false } }]`.
+
+- `client.bindAll({ list, get })` binds a record of definitions at once,
+  each under its name, as `client.bind` binds one. Pairs work as above, and
+  their options are checked as `client.bind` checks them. An entry that
+  isn't a definition throws, and `Fetch.Endpoints` checks its entries when
+  the class is declared.
+- New types: `EndpointsClass`, `EndpointDefinitions`, `EndpointEntry`,
+  `BoundEndpoint`,
+  `BoundEndpoints`, `BindAllMethod` and `AnyUnboundEndpoint`. `Client`
+  gains the `bindAll` member.
 - `Fetch.Service` declares a client as a service in one class, with its
   layer and its config. It takes the config `Fetch.make` takes. Before:
 

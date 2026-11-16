@@ -18,10 +18,11 @@ small app. `app/` is a layout for an app with many endpoints and modules.
 
 A client shared as a service is a `Fetch.Service` class, with its layer as
 `.layer`: `Api` in `basic.ts`, `builtins.ts` and `plugins.ts`, and
-`AppApiClient` and `WalletApiClient` in `app/`. Any other service is built by
-an Effect named after it: `makeApi` builds the `Api` of `endpoints.ts` and
-`status-errors.ts` (the client's endpoints), and `makeTodoApi` builds
-`TodoApi`.
+`AppApiClient` and `WalletApiClient` in `app/`. A record of definitions shared
+as a service is a `Fetch.Endpoints` class: `TodoApi` in `app/`. Any other
+service is built by an Effect named after it: `makeApi` builds the `Api` of
+`endpoints.ts` and `status-errors.ts` (the client's endpoints), and
+`makeWalletApi` builds `WalletApi`.
 
 ## `app/`: endpoints in a feature-sliced app
 
@@ -71,7 +72,7 @@ Read it in that order: a client, a module, the runtime, then `main.ts`.
 2. **A module's endpoints sit next to its schemas, and its `data/` folder
    connects them to the client it talks to.** `todos` defines them in
    `contract/todos.ts` with `Fetch.endpoint`, which needs no client, and
-   binds them in `data/` with `client.bind`. `wallet` makes them in `data/`
+   declares them as a service in `data/` with `Fetch.Endpoints`. `wallet` makes them in `data/`
    with `client.endpoint`, importing the schemas from `contract/`. Both give
    the same endpoints; use the first when something should read the routes
    and schemas without a client. Either way, dependencies point one way:

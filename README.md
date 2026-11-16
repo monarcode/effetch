@@ -1288,6 +1288,85 @@ Define endpoints this way when:
 - a tool works from your endpoints, and needs their routes and schemas
   without a client.
 
+#### Binding several at once
+
+`api.bindAll` binds a record of definitions, each under its own name. An
+entry can also be a `[definition, options]` pair, with the options
+`api.bind` takes:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const Session = Schema.Struct({ token: Schema.String });
+
+const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+const login = Fetch.endpoint("POST /auth/login", { output: Session });
+
+export const makeApi = Effect.gen(function* () {
+  const api = yield* Fetch.make({
+    baseUrl: "https://api.example.com",
+    plugins: [bearer({ token: "token" })],
+  });
+  return api.bindAll({
+    getUser,
+    login: [login, { plugins: { bearer: false } }],
+  });
+});
+```
+
+Each endpoint has the type `api.bind` gives it.
+
+#### Sharing them as a service
+
+`Fetch.Endpoints` declares the endpoints as a service class, as
+`Fetch.Service` does for a client. It takes the service's id, the client's
+service and the record `bindAll` takes:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+
+const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+const listUsers = Fetch.endpoint("GET /users", { output: Schema.Array(User) });
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+export class UserApi extends Fetch.Endpoints<UserApi>()("UserApi", Api, {
+  get: getUser,
+  list: listUsers,
+}) {}
+
+export const program = Effect.gen(function* () {
+  const users = yield* UserApi;
+  return yield* users.get({ params: { id: 1 } });
+});
+
+export const AppLayer = UserApi.layer.pipe(
+  Layer.provideMerge(Api.layer),
+  Layer.provide(FetchHttpClient.layer),
+);
+```
+
+- **`UserApi` is the service.** `yield* UserApi` gives the endpoints.
+- **`UserApi.layer` binds them** to the client once, when it's built. It
+  needs the client's service, here `Api`. The client can also be a service
+  you wrote by hand.
+- **`UserApi.definitions` is the record you passed**, frozen. You can read
+  it when the module loads.
+
 ### Calling an endpoint
 
 What's fixed goes in the definition, and what changes goes in each call:
@@ -1481,7 +1560,6 @@ src/
 
 ```ts
 import * as Config from "effect/Config";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -1509,21 +1587,18 @@ export const createTodo = Fetch.endpoint("POST /todos", {
 });
 
 // modules/todos/data/todo.api.ts: the endpoints, bound, as the module's service
-const makeTodoApi = AppApiClient.useSync((client) => ({
-  list: client.bind(listTodos),
-  get: client.bind(getTodo),
-  create: client.bind(createTodo),
-}));
-
-export class TodoApi extends Context.Service<
-  TodoApi,
-  Effect.Success<typeof makeTodoApi>
->()("TodoApi") {}
-
-export const TodoApiLive = Layer.effect(TodoApi)(makeTodoApi);
+export class TodoApi extends Fetch.Endpoints<TodoApi>()(
+  "TodoApi",
+  AppApiClient,
+  {
+    list: listTodos,
+    get: getTodo,
+    create: createTodo,
+  },
+) {}
 
 // runtime.ts
-export const AppLayer = TodoApiLive.pipe(
+export const AppLayer = TodoApi.layer.pipe(
   Layer.provideMerge(AppApiClient.layer),
   Layer.provide(FetchHttpClient.layer),
 );
@@ -1542,7 +1617,8 @@ This scales well as the app grows:
   has, and it never imports a module: dependencies point from the modules to
   the infrastructure.
 - **A module with 20 endpoints has 20 definitions** in its own `contract/`
-  folder, beside their schemas, and 20 one-line bindings in `data/`. When
+  folder, beside their schemas, and 20 one-line entries in its
+  `Fetch.Endpoints` class in `data/`. When
   they serve separate concerns, split them into several services, each in its
   own file.
 - **Every module's data service is its endpoints,** as `TodoApi` is here: one
@@ -1559,8 +1635,8 @@ This scales well as the app grows:
 import only the schemas from `contract/`. Define them with `Fetch.endpoint`
 when something should read the routes and schemas without a client.
 [`examples/app`](examples/app) is a complete app in this layout, with two
-modules and two backends: `todos` binds definitions, and `wallet` uses
-`client.endpoint`.
+modules and two backends: `todos` declares its definitions with
+`Fetch.Endpoints`, and `wallet` uses `client.endpoint`.
 
 ### Several backends
 
@@ -1687,8 +1763,10 @@ page's URL.
 - `Endpoint`, `EndpointMethod`, `EndpointDefinition`, `EndpointOptions`,
   `EndpointBody`, `EndpointArgs`, `EndpointRoute`, `ValidRoute`,
   `RouteMethod`, `RoutePath`: [endpoints](#endpoints).
-- `endpoint`, `UnboundEndpoint`, `UnboundDefinition`, `BindMethod`,
-  `BindOptions`:
+- `endpoint`, `UnboundEndpoint`, `UnboundDefinition`, `AnyUnboundEndpoint`,
+  `BindMethod`, `BindOptions`, `BindAllMethod`, `EndpointDefinitions`,
+  `EndpointEntry`,
+  `BoundEndpoint`, `BoundEndpoints`, `Endpoints`, `EndpointsClass`:
   [endpoints without a client](#defining-endpoints-without-a-client).
 - `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,
   `FetchError`, `isFetchError`: [errors](#handling-errors).

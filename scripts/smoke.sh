@@ -365,6 +365,34 @@ if (viaService !== "No todo 9") {
 	throw new Error(`Unexpected Fetch.Service result: ${JSON.stringify(viaService)}`);
 }
 
+// A module's endpoints as a service class, on top of the client's.
+class TodoApi extends Fetch.Endpoints<TodoApi>()("smoke/TodoApi", Api, {
+	get: Fetch.endpoint("GET /todos/:id", { output: Todo }),
+	missing: [getMissing, { headers: { "x-op": "missing" } }],
+}) {}
+if (!Object.isFrozen(TodoApi.definitions)) {
+	throw new Error("Unexpected Fetch.Endpoints definitions");
+}
+
+const endpointsProgram = Effect.gen(function* () {
+	const todos = yield* TodoApi;
+	return yield* todos.missing({ params: { id: 9 } });
+}).pipe(
+	Effect.catchTag("TodoNotFound", (error) => Effect.succeed(error.message)),
+	Effect.provide(
+		TodoApi.layer.pipe(
+			Layer.provide(Api.layer),
+			Layer.provide(Layer.succeed(HttpClient.HttpClient)(notFound)),
+		),
+	),
+);
+
+const viaEndpoints: string | { readonly id: number } =
+	await Effect.runPromise(endpointsProgram);
+if (viaEndpoints !== "No todo 9") {
+	throw new Error(`Unexpected Fetch.Endpoints result: ${JSON.stringify(viaEndpoints)}`);
+}
+
 console.log("smoke: ok");
 TS
 

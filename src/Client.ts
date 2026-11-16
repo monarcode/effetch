@@ -4,13 +4,15 @@ import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpMethod from "effect/http/HttpMethod";
 import type * as Schema from "effect/Schema";
 
-import type { BindMethod, EndpointMethod } from "./Endpoint.js";
+import type { BindAllMethod, BindMethod, EndpointMethod } from "./Endpoint.js";
 import type { NetworkError } from "./Errors.js";
 import {
+	bindAllEndpoints,
 	bindEndpoint,
 	makeEndpoint,
 	type RuntimeBindOptions,
 	type RuntimeDefinition,
+	type RuntimeDefinitions,
 	type RuntimeUnboundEndpoint,
 } from "./internal/endpoint.js";
 import { makeApplyDefaults, mapClientErrors } from "./internal/pipeline.js";
@@ -429,6 +431,9 @@ export interface Client<
 	 * several clients: each endpoint sends to its own client's `baseUrl`,
 	 * with its plugins.
 	 *
+	 * To bind a record of definitions at once, use `client.bindAll`. To
+	 * share them as a service, use `Fetch.Endpoints`.
+	 *
 	 * @example
 	 * ```ts
 	 * import * as Context from "effect/Context";
@@ -464,6 +469,47 @@ export interface Client<
 	 * ```
 	 */
 	readonly bind: BindMethod<Ps, EB, SE>;
+
+	/**
+	 * Binds a record of endpoint definitions at once: each entry is bound as
+	 * `client.bind` binds it, and keeps its name. An entry is a definition
+	 * made with `Fetch.endpoint`, or a `[definition, options]` pair, where
+	 * `options` are the options (`BindOptions`) `client.bind` takes.
+	 *
+	 * Binding does nothing on its own: no request is sent until an endpoint
+	 * is called. An entry that isn't a definition throws, since that's a
+	 * bug in the calling code. To share the endpoints as a service, see
+	 * `Fetch.Endpoints`, which calls this when its layer is built.
+	 *
+	 * @example
+	 * ```ts
+	 * import * as Effect from "effect/Effect";
+	 * import * as Schema from "effect/Schema";
+	 * import * as Fetch from "@monarcode/effetch";
+	 * import { bearer } from "@monarcode/effetch/plugins";
+	 *
+	 * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+	 * const Session = Schema.Struct({ token: Schema.String });
+	 *
+	 * const listTodos = Fetch.endpoint("GET /todos", { output: Schema.Array(Todo) });
+	 * const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
+	 * const refresh = Fetch.endpoint("POST /auth/refresh", { output: Session });
+	 *
+	 * const program = Effect.gen(function* () {
+	 *   const api = yield* Fetch.make({
+	 *     baseUrl: "https://api.example.com",
+	 *     plugins: [bearer({ token: "token" })],
+	 *   });
+	 *   const todos = api.bindAll({
+	 *     list: listTodos,
+	 *     get: getTodo,
+	 *     refresh: [refresh, { plugins: { bearer: false } }],
+	 *   });
+	 *   return yield* todos.get({ params: { id: 1 } });
+	 * });
+	 * ```
+	 */
+	readonly bindAll: BindAllMethod<Ps, EB, SE>;
 }
 
 /**
@@ -622,6 +668,8 @@ export const make = <
 				definition: RuntimeUnboundEndpoint,
 				options?: RuntimeBindOptions,
 			) => bindEndpoint(call, defaults, definition, options),
+			bindAll: (definitions: RuntimeDefinitions) =>
+				bindAllEndpoints(call, defaults, definitions),
 		};
 		return client as unknown as Client<Ps, EB, SE>;
 	});

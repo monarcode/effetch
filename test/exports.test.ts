@@ -7,6 +7,7 @@ describe("public entry points", () => {
 	it("@monarcode/effetch exports exactly these values", () => {
 		expect(Object.keys(Fetch).sort()).toEqual([
 			"DecodeError",
+			"Endpoints",
 			"HttpError",
 			"NetworkError",
 			"Service",

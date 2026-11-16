@@ -601,6 +601,193 @@ export interface BindMethod<
 }
 
 /**
+ * Any {@link UnboundEndpoint}, whatever its route and schemas. Use it to
+ * constrain a parameter that takes definitions.
+ *
+ * @example
+ * ```ts
+ * import * as Fetch from "@monarcode/effetch";
+ *
+ * const routes = (definitions: ReadonlyArray<Fetch.AnyUnboundEndpoint>) =>
+ *   definitions.map((definition) => definition.route);
+ * ```
+ *
+ * @since 0.1.0
+ */
+// `any`: `UnboundEndpoint` is invariant in its schemas, so only `any`
+// accepts every definition.
+// oxlint-disable-next-line no-explicit-any
+export type AnyUnboundEndpoint = UnboundEndpoint<string, any, any, any, any>;
+
+/**
+ * How `client.bindAll` and `Fetch.Endpoints` check one entry of a record of
+ * definitions, given the entry's own type `E` and the client's plugins
+ * `Ps`. An entry is a definition made with {@link endpoint}, or a pair of
+ * a definition and the {@link BindOptions} to bind it with. A pair's
+ * options are checked as `client.bind` checks them, so a misspelt option
+ * or plugin name is an error.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import * as Fetch from "@monarcode/effetch";
+ *
+ * const getTodo = Fetch.endpoint("GET /todos/:id", {
+ *   output: Schema.Struct({ id: Schema.Finite }),
+ * });
+ *
+ * const entry: Fetch.EndpointEntry<
+ *   readonly [typeof getTodo, object],
+ *   []
+ * > = [getTodo, { headers: { "x-client": "web" } }];
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type EndpointEntry<
+	E,
+	Ps extends ReadonlyArray<Plugin.Any>,
+> = E extends readonly [infer U extends AnyUnboundEndpoint, unknown]
+	? readonly [U, BindOptions<Ps>]
+	: E extends AnyUnboundEndpoint
+		? E
+		: AnyUnboundEndpoint | readonly [AnyUnboundEndpoint, BindOptions<Ps>];
+
+/**
+ * What `client.bindAll` and `Fetch.Endpoints` take: a record of
+ * definitions made with {@link endpoint}, by the name each endpoint gets,
+ * each entry checked by {@link EndpointEntry}. `D` is the record's own
+ * type, and `Ps` the client's plugins. Names are strings: symbol keys are
+ * left out.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import * as Fetch from "@monarcode/effetch";
+ *
+ * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+ *
+ * const definitions = {
+ *   list: Fetch.endpoint("GET /todos", { output: Schema.Array(Todo) }),
+ *   get: [
+ *     Fetch.endpoint("GET /todos/:id", { output: Todo }),
+ *     { headers: { "x-client": "web" } },
+ *   ],
+ * } as const;
+ *
+ * const checked: Fetch.EndpointDefinitions<typeof definitions, []> = definitions;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type EndpointDefinitions<D, Ps extends ReadonlyArray<Plugin.Any>> = {
+	readonly [K in keyof D]: EndpointEntry<D[K], Ps>;
+};
+
+/**
+ * The endpoint a client makes from one entry of
+ * {@link EndpointDefinitions}: what `client.bind` returns for that
+ * definition. `Ps`, `DefaultEB` and `ClientSE` are the client's, as in
+ * {@link BindMethod}.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import * as Fetch from "@monarcode/effetch";
+ *
+ * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+ * const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
+ *
+ * type GetTodo = Fetch.BoundEndpoint<typeof getTodo, [], Schema.Unknown>;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type BoundEndpoint<
+	D,
+	Ps extends ReadonlyArray<Plugin.Any>,
+	DefaultEB extends AnySchema,
+	ClientSE extends StatusErrorMap | undefined = undefined,
+> = D extends readonly [infer U, unknown]
+	? BoundEndpoint<U, Ps, DefaultEB, ClientSE>
+	: D extends UnboundEndpoint<infer R, infer O, infer EB, infer I, infer SE>
+		? Endpoint<
+				R,
+				O,
+				EB extends AnySchema ? EB : DefaultEB,
+				I,
+				Ps,
+				SE | ClientSE
+			>
+		: never;
+
+/**
+ * The endpoints `client.bindAll` makes from a record of
+ * {@link EndpointDefinitions}: one {@link Endpoint} for each entry, under
+ * the same name.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import * as Fetch from "@monarcode/effetch";
+ *
+ * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+ * const definitions = {
+ *   list: Fetch.endpoint("GET /todos", { output: Schema.Array(Todo) }),
+ *   get: Fetch.endpoint("GET /todos/:id", { output: Todo }),
+ * };
+ *
+ * type Todos = Fetch.BoundEndpoints<typeof definitions, [], Schema.Unknown>;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type BoundEndpoints<
+	D,
+	Ps extends ReadonlyArray<Plugin.Any>,
+	DefaultEB extends AnySchema,
+	ClientSE extends StatusErrorMap | undefined = undefined,
+> = {
+	readonly [K in keyof D as K extends symbol ? never : K]: BoundEndpoint<
+		D[K],
+		Ps,
+		DefaultEB,
+		ClientSE
+	>;
+};
+
+/**
+ * The signature of `client.bindAll`: binds a record of definitions at
+ * once, as `client.bind` binds each one. `Ps`, `DefaultEB` and `ClientSE`
+ * are the client's, as in {@link BindMethod}.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema";
+ * import * as Fetch from "@monarcode/effetch";
+ *
+ * declare const bindAll: Fetch.BindAllMethod<[], Schema.Unknown>;
+ *
+ * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+ * const todos = bindAll({
+ *   list: Fetch.endpoint("GET /todos", { output: Schema.Array(Todo) }),
+ *   get: Fetch.endpoint("GET /todos/:id", { output: Todo }),
+ * });
+ * ```
+ *
+ * @since 0.1.0
+ */
+export interface BindAllMethod<
+	Ps extends ReadonlyArray<Plugin.Any>,
+	DefaultEB extends AnySchema,
+	ClientSE extends StatusErrorMap | undefined = undefined,
+> {
+	<const D>(
+		definitions: EndpointDefinitions<D, Ps>,
+	): BoundEndpoints<D, Ps, DefaultEB, ClientSE>;
+}
+
+/**
  * Defines an endpoint without a client: a route like `"GET /users/:id"` and
  * the schemas and headers to call it with. You get back plain data, an
  * {@link UnboundEndpoint}, that you can export from module level next to
@@ -622,6 +809,9 @@ export interface BindMethod<
  * Use it when endpoints should be listed next to their schemas, read
  * without a client, or bound to more than one client. Otherwise
  * `client.endpoint` does the same in one step.
+ *
+ * To bind several definitions at once, use `client.bindAll`. To share a
+ * module's endpoints as a service, use `Fetch.Endpoints`.
  *
  * @example
  * ```ts

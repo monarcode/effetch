@@ -2,12 +2,18 @@ export { make } from "./Client.js";
 export type { Client, ClientConfig } from "./Client.js";
 export { endpoint } from "./Endpoint.js";
 export type {
+	AnyUnboundEndpoint,
+	BindAllMethod,
 	BindMethod,
 	BindOptions,
+	BoundEndpoint,
+	BoundEndpoints,
 	Endpoint,
 	EndpointArgs,
 	EndpointBody,
 	EndpointDefinition,
+	EndpointDefinitions,
+	EndpointEntry,
 	EndpointMethod,
 	EndpointOptions,
 	EndpointRoute,
@@ -48,6 +54,8 @@ export type {
 	Success,
 } from "./Options.js";
 export type { PathParamNames, PathParams, PathParamValue } from "./Path.js";
+export { Endpoints } from "./Endpoints.js";
+export type { EndpointsClass } from "./Endpoints.js";
 export { isService, Service } from "./Service.js";
 export type { ServiceClass } from "./Service.js";
 export { plugin } from "./Plugin.js";
