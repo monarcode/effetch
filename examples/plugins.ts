@@ -127,17 +127,13 @@ const reportErrors = Fetch.plugin({
 		),
 });
 
-export const makeApi = Fetch.make({
+export class Api extends Fetch.Service<Api>()("Api", {
 	baseUrl: "https://api.example.com",
 	defaultError: ApiError,
 	plugins: [reportErrors, deadline, apiVersion, auth],
-});
+}) {}
 
-export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
-	"Api",
-) {}
-
-export const ApiLive = Layer.effect(Api)(makeApi).pipe(
+export const ApiLive = Api.layer.pipe(
 	Layer.provide(FetchHttpClient.layer),
 	Layer.provideMerge(SessionLive),
 );

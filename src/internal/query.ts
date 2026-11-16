@@ -1,7 +1,11 @@
+import * as Effect from "effect/Effect";
 import * as UrlParams from "effect/http/UrlParams";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 
-import type { QueryInput } from "../Options.js";
+import type { QueryInput, QuerySchema } from "../Options.js";
+import { messageOf } from "./message.js";
+import { hasOwn, isRecord } from "./object.js";
 
 /** One query value as `UrlParams` holds it. */
 type Param = UrlParams.UrlParams["params"][number][1];
@@ -43,4 +47,207 @@ export const toUrlParams = (
 		}
 	}
 	return UrlParams.make(entries);
+};
+
+/** The string-tree codec of each query schema, derived once. */
+type QueryCodec = Schema.Codec<unknown, unknown, unknown, unknown>;
+
+const codecs = new WeakMap<QuerySchema, QueryCodec>();
+
+const invalidQuery = (message: string, cause?: unknown): Error =>
+	new Error(`Invalid query: ${message}`, { cause });
+
+/**
+ * The codec that encodes each field of `schema` to a string. Throws when
+ * a field's schema has no string encoding, such as
+ * `Schema.instanceOf(Uint8Array)`.
+ */
+export const codecOf = (schema: QuerySchema): QueryCodec => {
+	let codec = codecs.get(schema);
+	if (codec === undefined) {
+		try {
+			codec = Schema.toCodecStringTree(schema);
+		} catch (error) {
+			throw new Error(
+				`Invalid query schema: it can't be encoded to strings: ${messageOf(error)}`,
+				{ cause: error },
+			);
+		}
+		codecs.set(schema, codec);
+	}
+	return codec;
+};
+
+/**
+ * Checks, when an endpoint is defined, that its query schema can be
+ * encoded to strings, so a bad schema throws when the module loads rather
+ * than on the first call.
+ */
+export const checkQuerySchema = (schema: QuerySchema | undefined): void => {
+	if (schema !== undefined) {
+		codecOf(schema);
+	}
+};
+
+/** What `toUrlParams` sends: a string, number, boolean or bigint. */
+const isScalar = (u: unknown): boolean =>
+	typeof u === "string" ||
+	typeof u === "number" ||
+	typeof u === "boolean" ||
+	typeof u === "bigint";
+
+const isEmpty = (u: unknown): boolean => u === null || u === undefined;
+
+/**
+ * Whether a `Redacted` query value stays redacted in `UrlParams` and is
+ * sent as its value (Effect 4.1 and later). Effect 4.0 sends `<redacted>`.
+ */
+let keepsRedacted: boolean | undefined;
+const redactedIsSent = (): boolean =>
+	(keepsRedacted ??=
+		UrlParams.toString(
+			UrlParams.make([["k", Redacted.make("v") as never]]),
+		) === "k=v");
+
+/** `true` for a `Redacted` value, or an array with one. */
+const hasRedacted = (value: unknown): boolean =>
+	Array.isArray(value)
+		? value.some((item) => Redacted.isRedacted(item))
+		: Redacted.isRedacted(value);
+
+/**
+ * Wraps an encoded field's value in `Redacted` where the field's value in
+ * `query` was one: the whole value, or the array items at the same index.
+ * With `all`, every item is wrapped.
+ */
+const hideField = (encoded: unknown, original: unknown, all: boolean) => {
+	const hide = (value: unknown) =>
+		typeof value === "string" ? Redacted.make(value) : value;
+	if (!Array.isArray(encoded)) {
+		return hide(encoded);
+	}
+	const items = Array.isArray(original) ? original : [];
+	return encoded.map((item, index) =>
+		all ||
+		items.length !== encoded.length ||
+		Redacted.isRedacted(items[index])
+			? hide(item)
+			: item,
+	);
+};
+
+/**
+ * The query to send from what the schema encoded `query` to: scalars, or
+ * arrays of them, with `null` and `undefined` dropped later by
+ * `toUrlParams`. Returns the error for anything else, such as a field that
+ * encodes to an object.
+ *
+ * The schema reveals `Schema.Redacted` fields. Where Effect keeps a
+ * `Redacted` query value redacted in its logs and traces (4.1 and later),
+ * the encoded value of a field that was `Redacted` in `query` is wrapped in
+ * `Redacted` again, so it stays out of them, as a `Redacted` value in a
+ * plain query does. That's by key, whatever the encoding does to the
+ * value. When `Schema.encodeKeys` renamed such a field, every renamed
+ * field is wrapped: hiding a value that wasn't secret only hides it from
+ * logs, and it's still sent.
+ */
+const toQuery = (encoded: unknown, query: unknown): QueryInput | Error => {
+	if (!isRecord(encoded)) {
+		return invalidQuery("the query schema doesn't encode to an object");
+	}
+	const original: Readonly<Record<string, unknown>> =
+		redactedIsSent() && isRecord(query) ? query : {};
+	const secret = new Set(
+		Object.keys(original).filter((key) => hasRedacted(original[key])),
+	);
+	// A secret field that was renamed: its new key isn't in `query`.
+	const renamed = [...secret].some((key) => !hasOwn(encoded, key));
+	const hidden = (key: string, value: unknown): unknown =>
+		secret.has(key)
+			? hideField(value, original[key], false)
+			: renamed && !hasOwn(original, key)
+				? hideField(value, undefined, true)
+				: value;
+	const result: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(encoded)) {
+		if (Array.isArray(value)) {
+			const nested = value.find((item) => !isScalar(item) && !isEmpty(item));
+			if (nested !== undefined) {
+				return invalidQuery(
+					`"${key}" encodes to ${Array.isArray(nested) ? "an array" : "an object"} inside an array, which can't be a query parameter`,
+				);
+			}
+			result[key] = hidden(key, value);
+		} else if (isScalar(value) || isEmpty(value)) {
+			result[key] = hidden(key, value);
+		} else {
+			return invalidQuery(
+				`"${key}" encodes to an object, which can't be a query parameter`,
+			);
+		}
+	}
+	return result as QueryInput;
+};
+
+/** The error for an encoding failure: a mismatch, or the schema itself. */
+const encodeError = (error: unknown): Error =>
+	Schema.isSchemaError(error)
+		? invalidQuery(
+				`it doesn't match the query schema: ${error.message}`,
+				error,
+			)
+		: invalidQuery(
+				`the query schema can't encode it: ${messageOf(error)}`,
+				error,
+			);
+
+/**
+ * Encodes a call's `query` with the endpoint's query schema, each field to
+ * a string (see `QuerySchema`). A missing `query` is encoded as `{}`.
+ *
+ * Dies (it does not fail) when `query` doesn't match the schema, the
+ * schema can't encode it, or a field encodes to an object, as an invalid
+ * body does. The defect is an `Error` whose message starts with
+ * `Invalid query:`.
+ */
+export const encodeQuery = <S extends QuerySchema>(
+	schema: S,
+	query: unknown,
+): Effect.Effect<QueryInput, never, S["EncodingServices"]> =>
+	Effect.suspend(() =>
+		Schema.encodeUnknownEffect(codecOf(schema))(query ?? {}),
+	).pipe(
+		// Defects first, so the failure's own defect below isn't wrapped twice.
+		Effect.catchDefect((defect) => Effect.die(encodeError(defect))),
+		Effect.catch((error) => Effect.die(encodeError(error))),
+		Effect.flatMap((encoded) => {
+			const result = toQuery(encoded, query);
+			return result instanceof Error
+				? Effect.die(result)
+				: Effect.succeed(result);
+		}),
+	) as Effect.Effect<QueryInput, never, S["EncodingServices"]>;
+
+/**
+ * {@link encodeQuery}, run synchronously, for `endpoint.url`. Throws the
+ * error the call would die with, and also when the schema needs services
+ * or runs asynchronously.
+ */
+export const encodeQuerySync = (
+	schema: QuerySchema,
+	query: unknown,
+): QueryInput => {
+	let encoded: unknown;
+	try {
+		encoded = Schema.encodeUnknownSync(
+			codecOf(schema) as Schema.Codec<unknown, unknown>,
+		)(query ?? {});
+	} catch (error) {
+		throw encodeError(error);
+	}
+	const result = toQuery(encoded, query);
+	if (result instanceof Error) {
+		throw result;
+	}
+	return result;
 };

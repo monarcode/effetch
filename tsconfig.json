@@ -16,7 +16,8 @@
 		"noEmit": true,
 		"paths": {
 			"@monarcode/effetch": ["./src/index.js"],
-			"@monarcode/effetch/plugins": ["./src/plugins/index.js"]
+			"@monarcode/effetch/plugins": ["./src/plugins/index.js"],
+			"@monarcode/effetch/test": ["./src/test/index.js"]
 		},
 		"plugins": [{ "name": "@effect/language-service" }]
 	},

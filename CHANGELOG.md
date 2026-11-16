@@ -2,6 +2,399 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## 0.1.0-rc.3
+
+### Changed
+
+- Code that passes `client.bind`'s type arguments explicitly needs two more,
+  for the response mode and the query schema:
+  `api.bind<R, O, EB, I, SE, M, QS>(definition)`, where `M` and `QS` are
+  `undefined` for a definition without `responseMode` or `query`. Calls
+  that let TypeScript infer them, the usual way, are unchanged. The two
+  can't have defaults: with one, a definition written inline in the call
+  loses its literal types.
+- The message logged when a plugin's `onError` or `onExit` hook fails starts
+  with `Effetch:` rather than `effetch:`.
+
+### Added
+
+- `Fetch.Service` declares a client as a service in one class, with its
+  layer and its config. It takes the config `Fetch.make` takes. Before:
+
+  ```ts
+  const makeApi = Fetch.make({ baseUrl, defaultError: ApiError });
+
+  class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
+    "Api",
+  ) {}
+
+  const ApiLive = Layer.effect(Api)(makeApi);
+  ```
+
+  After:
+
+  ```ts
+  class Api extends Fetch.Service<Api>()("Api", {
+    baseUrl,
+    defaultError: ApiError,
+  }) {}
+
+  const ApiLive = Api.layer;
+  ```
+
+  - `yield* Api` gives the client, typed from the config, as before.
+  - `Api.layer` builds the client with `Fetch.make`. It needs and fails
+    with what `Fetch.make(config)` needs and fails with. Every layer that
+    depends on it in one layer graph gets the same client.
+  - `Api.config` is the config, readable when the module loads, before any
+    layer is built. It's a frozen copy, down to its `statusErrors`,
+    `plugins` and `headers`, and the layer builds the client from that
+    copy, so changing the object you passed changes nothing. Its `headers`
+    is an Effect `Headers` value, so an `authorization` header stays
+    redacted when the config is logged.
+  - To make `Api.layer` provide its `HttpClient` too, override it in the
+    class:
+    `static override readonly layer = super.layer.pipe(Layer.provide(FetchHttpClient.layer))`.
+    An override can need less than `Api.layer`, but not more, and can't add
+    an error.
+  - `Fetch.isService` tells a class made by `Fetch.Service`, or a subclass
+    of one, from any other value, including a `Context.Service` key.
+  - New types: `ServiceClass` and `ServiceClass.Any`.
+  - The config must be known when the module loads. A `baseUrl` Effect,
+    such as a `Config`, is fine. A config that comes from an Effect still
+    needs `Fetch.make` and a hand-written service, as before.
+  - Spread `Api.config` into a second class for a related client, such as
+    another API version: `{ ...Api.config, baseUrl }`. Its client has the
+    same type.
+  - `Fetch.make`, `Client` and `ClientConfig` are unchanged.
+
+- `Fetch.Endpoints` declares a module's endpoints as a service, in one
+  class, with its layer. It takes the service's id, the client's service
+  and a record of definitions made with `Fetch.endpoint`. Before:
+
+  ```ts
+  const makeTodoApi = AppApiClient.useSync((client) => ({
+    list: client.bind(listTodos),
+    get: client.bind(getTodo),
+  }));
+
+  class TodoApi extends Context.Service<
+    TodoApi,
+    Effect.Success<typeof makeTodoApi>
+  >()("TodoApi") {}
+
+  const TodoApiLive = Layer.effect(TodoApi)(makeTodoApi);
+  ```
+
+  After:
+
+  ```ts
+  class TodoApi extends Fetch.Endpoints<TodoApi>()("TodoApi", AppApiClient, {
+    list: listTodos,
+    get: getTodo,
+  }) {}
+
+  const TodoApiLive = TodoApi.layer;
+  ```
+
+  - `yield* TodoApi` gives the endpoints, each typed as `client.bind`
+    types it, with the client's plugins, `defaultError` and
+    `statusErrors`.
+  - `TodoApi.layer` binds the definitions once, when it's built, and needs
+    the client's service. The client can be a `Fetch.Service` class or a
+    service written by hand.
+  - `TodoApi.definitions` is the record, frozen, readable when the module
+    loads.
+  - An entry can be a `[definition, options]` pair, with the options
+    `client.bind` takes: `refresh: [refresh, { plugins: { bearer: false } }]`.
+
+- `client.bindAll({ list, get })` binds a record of definitions at once,
+  each under its name, as `client.bind` binds one. Pairs work as above, and
+  their options are checked as `client.bind` checks them. An entry that
+  isn't a definition throws, and `Fetch.Endpoints` checks its entries when
+  the class is declared.
+
+- New types: `EndpointsClass`, `EndpointDefinitions`, `EndpointEntry`,
+  `BoundEndpoint`,
+  `BoundEndpoints`, `BindAllMethod` and `AnyUnboundEndpoint`. `Client`
+  gains the `bindAll` member.
+
+- `@monarcode/effetch/test` is a new entry point, with `FetchTest`: a typed
+  fake backend made from your endpoints, to test code that calls them
+  without a network or a hand-written `HttpClient`. Before:
+
+  ```ts
+  const TestHttpClient = Layer.succeed(
+    HttpClient.HttpClient,
+    HttpClient.make((request, url) =>
+      url.pathname === "/todos/1"
+        ? Effect.succeed(
+            HttpClientResponse.fromWeb(
+              request,
+              Response.json({
+                id: 1,
+                title: "Write docs",
+                due: "1970-01-01T00:00:00.000Z",
+              }),
+            ),
+          )
+        : Effect.die(new Error(`Unexpected ${request.method} ${url.href}`)),
+    ),
+  );
+  ```
+
+  After:
+
+  ```ts
+  import { FetchTest } from "@monarcode/effetch/test";
+
+  const Backend = FetchTest.layer([
+    FetchTest.respond(getTodo, ({ params }) =>
+      Effect.succeed({
+        id: Number(params.id),
+        title: "Write docs",
+        due: new Date(0),
+      }),
+    ),
+    FetchTest.fail(listTodos, 503),
+  ]);
+  ```
+
+  - `FetchTest.layer(handlers, options?)` is an `HttpClient` layer. Provide
+    it where `FetchHttpClient.layer` goes, under the real client.
+  - `FetchTest.respond(endpoint, handler, options?)` answers an endpoint's
+    requests. The handler's `params`, `query` and `body` are typed by the
+    endpoint, and decoded with its `input` and query schemas. Its result
+    is typed by `output`, and encoded with it, so a `Date` goes over the
+    wire as a string.
+  - `FetchTest.reply(status, body?, options?)` answers with any status, as
+    it is. `FetchTest.fail(endpoint, status, body?)` answers with an error,
+    its body encoded with the endpoint's `statusErrors` or `error` schema,
+    so the client decodes it into your domain error.
+  - `FetchTest.requests` gives what the backend received. It needs
+    `FetchTest.Recorder`, which the layer provides.
+  - A route matches the end of a request's path, under any `baseUrl`, or
+    the whole URL with `{ baseUrl }`. A request no route matches is a
+    defect that lists the routes.
+  - It doesn't depend on a test runner.
+
+- `api.sse(path, options)` and `api.ndjson(path, options)` read a streamed
+  body as an Effect `Stream`, one value at a time, as it arrives: the events
+  of a Server-Sent Events body, or the lines of a newline-delimited JSON
+  body. Before, streaming needed `api.httpClient` and your own parsing.
+
+  ```ts
+  api
+    .sse("/jobs/:id/events", { params: { id }, output: JobEvent })
+    .pipe(Stream.runForEach((event) => Effect.log(event.data.percent)));
+  ```
+
+  - `output` decodes each event's `data`, or each line. An SSE value is an
+    `SseEvent`, with the event's `event`, `id` and `data`.
+  - `method` defaults to `"GET"`. Pass `"POST"` with a `body` for APIs that
+    stream the answer to a request.
+  - The request runs as any call does, up to the response's headers:
+    plugins, `retry`, `timeout`, and an error status that fails with an
+    `HttpError` or a `statusErrors` error. A value that doesn't match
+    `output`, or a body that breaks off, fails the stream with a
+    `DecodeError`.
+  - The values before a failure are given first. A `204` or `205` gives an
+    empty stream, and `api.sse` fails when the `Content-Type` isn't
+    `text/event-stream`.
+  - For plugins, the call ends when the response's headers arrive: their
+    `onExit` hooks, and `logger` and `consoleLogger`, don't see the body
+    being read.
+  - Interrupting the stream, or taking part of it, aborts the request.
+  - `api.sse` uses Effect's `encoding/Sse` module, which Effect marks
+    unstable.
+  - New types: `SseEvent`, `StreamElement`, `StreamFormat`, `StreamMethod`,
+    `StreamOptions`.
+
+- `stream: "sse"` or `stream: "ndjson"` on an endpoint definition makes its
+  calls return a `Stream`, from `client.endpoint`, `client.bind`,
+  `client.bindAll` and `Fetch.Endpoints`. Endpoints have a `stream`
+  property. `FetchTest.respond` answers a stream endpoint with a list of
+  events or values (new type: `FetchTest.TestEvent`).
+
+- `Fetch.paginate(endpoint, { start, request, next })` pages through a list
+  as a lazy `Stream` of pages, calling a bound endpoint once per page:
+
+  ```ts
+  Fetch.paginate(api.bind(listTodos), {
+    start: 1,
+    request: (page) => ({ query: { page } }),
+    next: (todos, page) =>
+      todos.length === 0 ? Option.none() : Option.some(page + 1),
+  });
+  ```
+
+  - With `responseMode: "decoded-and-response"` on the endpoint, `next`
+    gets each page's response, for cursors in headers such as `Link`.
+  - New types: `PaginateOptions`, `PageEndpoint`, `PageRequest`, `PageOf`,
+    `PageResponse`.
+
+- `responseMode: "decoded-and-response"` makes a call succeed with the
+  decoded body and the response together, to read the status and headers,
+  such as a total count or an `ETag`:
+
+  ```ts
+  Effect.gen(function* () {
+    const [todos, response] = yield* api.get("/todos", {
+      output: Schema.Array(Todo),
+      responseMode: "decoded-and-response",
+    });
+  });
+  ```
+
+  - It's allowed on every method, on `client.endpoint` and `Fetch.endpoint`
+    definitions, and on each call of an endpoint, where the call's own mode
+    wins. `bind`, `bindAll` and `Fetch.Endpoints` keep a definition's mode.
+  - Without `output`, both items are the response.
+  - The default, `"decoded"`, gives the decoded body alone, as before.
+  - New type: `ResponseMode`. `Success`, `CallEffect`, `BaseOptions`,
+    `RequestOptions`, `NoBodyRequestOptions`, `Endpoint`,
+    `EndpointDefinition`, `EndpointOptions`, `UnboundEndpoint` and
+    `UnboundDefinition` gain a last type parameter for the mode, defaulted,
+    and endpoints and definitions a `responseMode` property. See Changed
+    for `client.bind`'s type arguments.
+  - A plugin's `onExit` sees the pair as the call's result.
+
+- `Fetch.text()` and `Fetch.bytes()` read a 2xx body as text or as a
+  `Uint8Array`, for `output`. `Fetch.text(schema)` reads a single value: it
+  trims the text and decodes it with a schema whose encoded side is a
+  string, such as `Schema.NumberFromString`.
+  - The call sends `Accept: text/*, */*;q=0.1` or `*/*`, unless one is set.
+  - An empty body is `""`, or a `Uint8Array` of length 0. With
+    `Fetch.text(schema)`, it fails, as for JSON.
+  - Errors are `DecodeError`, as for JSON. Error responses are still read
+    as JSON.
+  - New types: `TextSchema` and `BytesSchema`.
+
+- A `query` schema on an endpoint types each call's `query` and encodes it
+  before it's sent:
+
+  ```ts
+  const listTodos = Fetch.endpoint("GET /todos", {
+    query: Schema.Struct({
+      done: Schema.optional(Schema.Boolean),
+      since: Schema.optional(Schema.Date),
+    }),
+  });
+  // list({ query: { done: true, since } }) → ?done=true&since=2026-…Z
+  ```
+
+  - The schema can be a `Schema.Struct`, or a `Schema.Class` called with an
+    instance.
+  - Each field is encoded to a string, as `Schema.toCodecStringTree`
+    encodes it. Arrays repeat the key, fields left out aren't sent, and
+    `Schema.encodeKeys` renames keys. A `Schema.Redacted` field is sent as
+    its value and, with Effect 4.1 or later, stays redacted in logs and
+    traces.
+  - A schema with a field that has no string encoding throws when the
+    endpoint is defined.
+  - `query` is required on a call when the schema has required fields.
+  - A query that doesn't match the schema, or a field that encodes to an
+    object, makes the call die before anything is sent.
+  - The schema's encoding services join the call's services.
+    `CallServices` and `CallEffect` gain a last type parameter for the
+    schema, defaulted.
+  - It's allowed on `client.endpoint` and `Fetch.endpoint`. `bind`,
+    `bindAll` and `Fetch.Endpoints` keep it, and endpoints and definitions
+    gain a `query` property.
+  - New types: `QuerySchema` and `EndpointQuery`. `Endpoint`,
+    `EndpointDefinition`, `EndpointOptions`, `EndpointArgs`,
+    `UnboundEndpoint` and `UnboundDefinition` gain a last type parameter
+    for the schema, defaulted. See Changed for `client.bind`'s type
+    arguments.
+
+- `endpoint.url(options)` returns the URL a call with the same `params` and
+  `query` goes to, for links and cache keys:
+  `getFile.url({ params: { name: "a.pdf" } })`.
+  - On a bound endpoint, it starts with the client's `baseUrl`. On a
+    definition, it's the path alone, unless the route is a full URL.
+  - It's built before plugins run.
+  - It's made as the call's URL is, so `..` segments, a route's own query
+    string and the host are normalized the same way.
+  - It throws for a missing path parameter or a query that doesn't match
+    the schema. On an endpoint whose query schema needs services to
+    encode, calling it doesn't compile.
+  - New types: `EndpointUrlOptions` and `EndpointUrlArgs`.
+
+- `Fetch.catchStatus(status, handler)` handles an `HttpError` with one of
+  the given statuses, data-last or data-first. The handler's `error.status`
+  is narrowed to them. `HttpError` stays in the error type.
+
+  ```ts
+  api
+    .get("/me")
+    .pipe(Fetch.catchStatus([401, 403], () => Effect.succeed(null)));
+  ```
+
+- `Fetch.optional` succeeds with `Option.none()` on a `404` and
+  `Option.some(value)` otherwise: `getTodo({ params: { id } }).pipe(Fetch.optional)`.
+  - A status that `statusErrors` maps fails with your error, so neither
+    sees it.
+  - New type: `CaughtStatus`.
+
+- `bearer({ refresh })` renews an expired token. When a request that
+  `bearer` signed gets a `401`, it asks `refresh` for a new token and sends
+  the request again with it, once:
+
+  ```ts
+  bearer({ token: () => tokens.access(), refresh: () => tokens.renew() });
+  ```
+
+  - `refresh` is a function of the refused request, sync or async, or an
+    Effect, whose error and services become the client's.
+  - Requests refused with the same token share one refresh, and its token
+    or error. Requests refused with different tokens get their own. A
+    caller that's interrupted doesn't cancel the refresh for the others.
+  - When `refresh` gives `null`, `undefined` or `""`, or the new token is
+    refused too, the call ends with the `401`.
+  - Requests with their own `Authorization` header, sent without a token,
+    with a stream body, or that skip `bearer` aren't refreshed. Make the
+    refresh call itself skip `bearer`.
+  - New type: `RefreshSource`. Without `refresh`, `bearer` is unchanged.
+
+- `retry({ retryAfter })` waits as long as a retried response's
+  `Retry-After` header asks, in seconds or as an HTTP date, in place of the
+  schedule's delay. `true` waits up to 1 minute, and `{ max }` up to `max`.
+  It's off by default.
+
+- `retry({ budget })` limits the whole call, every attempt and wait
+  included. A retry whose wait would end at or after the budget isn't made, and
+  the call ends with its last response or `NetworkError`. When the budget
+  runs out during an attempt, the call fails with `TimeoutError`. Calls can
+  override it: `plugins: { retry: { budget: "2 minutes" } }`.
+  - `retry` with a `budget` returns the new `RetryBudgetPlugin` type, which
+    adds `TimeoutError`. New type: `RetryBudgetOptions`.
+  - `retry` without a `budget` still returns `RetryPlugin`, with no errors.
+
+### Documentation
+
+- The README is rewritten around `Fetch.Service`, the recommended way to
+  set up a client. Getting started declares a client as a service, and a
+  new "Fetch.Service or Fetch.make?" section says when to use each.
+  Endpoints start from `Fetch.endpoint` and `Fetch.Endpoints`, with
+  `client.bind`, `client.bindAll` and `client.endpoint` as the other ways to
+  bind them. Long lists of edge cases are folded into "Details" blocks.
+- The README adds badges for bundle size (without `effect`), types,
+  provenance and license, and for the runtimes Effetch targets.
+- The README has new sections: "Providing the client", "Coming from axios or
+  ky", which maps their options and hooks to Effetch; "A client from
+  another"; "Streaming responses"; "Pagination"; and "Stream endpoints in
+  tests". "Built-in plugins" says how to limit each attempt or the whole
+  call, and the configuration table lists `statusErrors`.
+- `examples/streams.ts` shows Server-Sent Events, newline-delimited JSON, an
+  answer that ends with `[DONE]`, and a list paged by its `Link` header.
+  `examples/basic.ts` handles its `404` with `Fetch.catchStatus`.
+- `examples/endpoints.ts`, `examples/status-errors.ts` and
+  `examples/backends.ts` declare their clients with `Fetch.Service` and their
+  endpoints with `Fetch.Endpoints`, and the JSDoc examples declare clients
+  with `Fetch.Service`. `Fetch.make`'s JSDoc says when to use it instead.
+- The docs call the package Effetch. `effetch` stays the npm and repository
+  name.
+
 ## 0.1.0-rc.2
 
 ### Added
@@ -16,7 +409,7 @@ All notable changes to `@monarcode/effetch`, newest first.
   call), `client.endpoint` and `Fetch.endpoint` (every call of the
   endpoint) and a call's options. The call's schemas are tried first, then
   the endpoint's, then the client's.
-  - Backends don't send a `_tag`, so effetch adds the schema's literal
+  - Backends don't send a `_tag`, so Effetch adds the schema's literal
     `_tag` to the body before decoding. `Schema.encodeKeys` renames fields.
   - A response that no schema decodes, or with an empty or non-JSON body,
     fails with the `HttpError` it fails with today, which stays in the
@@ -113,7 +506,7 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 - A `Redacted` query value is sent as its value. From Effect 4.1,
   `QueryValue` (Effect's `UrlParams.Coercible`) accepts `Redacted`, but
-  effetch converted it with `String()`, so `{ token: Redacted.make(key) }`
+  Effetch converted it with `String()`, so `{ token: Redacted.make(key) }`
   sent `token=<redacted>`.
 
 ## 0.1.0-rc.0
@@ -150,7 +543,7 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ### Documentation
 
-- The README is reorganized as a guide that reads top to bottom: why effetch
+- The README is reorganized as a guide that reads top to bottom: why Effetch
   (with a side-by-side with `HttpClient`), getting started, then clients,
   calls, errors, plugins and writing them, endpoints, structuring an app and
   testing, with a two-level table of contents.
@@ -192,7 +585,7 @@ package since 0.1.0-alpha.0.
 
 ## 0.1.0-alpha.0
 
-First preview of effetch: typed, schema-driven HTTP calls on Effect v4's
+First preview of Effetch: typed, schema-driven HTTP calls on Effect v4's
 `HttpClient`.
 
 ### Added

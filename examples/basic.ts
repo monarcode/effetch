@@ -1,4 +1,3 @@
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -16,19 +15,13 @@ const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
 
 const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
 
-const makeApi = Fetch.make({
+class Api extends Fetch.Service<Api>()("Api", {
 	baseUrl: "https://api.example.com",
 	headers: { accept: "application/json" },
 	defaultError: ApiError,
-});
+}) {}
 
-class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
-	"Api",
-) {}
-
-export const ApiLive = Layer.effect(Api)(makeApi).pipe(
-	Layer.provide(FetchHttpClient.layer),
-);
+export const ApiLive = Api.layer.pipe(Layer.provide(FetchHttpClient.layer));
 
 export const program = Effect.gen(function* () {
 	const api = yield* Api;
@@ -54,11 +47,11 @@ export const program = Effect.gen(function* () {
 
 	return todos.length;
 }).pipe(
+	// A 404 is handled on its own; any other error status is caught below.
+	Fetch.catchStatus(404, () => Effect.succeed(0)),
 	Effect.catchTags({
 		HttpError: (error) =>
-			error.status === 404
-				? Effect.succeed(0)
-				: Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
+			Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
 		NetworkError: () => Effect.fail("You appear to be offline"),
 		DecodeError: (error) =>
 			Effect.fail(`Unexpected response: ${error.message}`),

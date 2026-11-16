@@ -1,6 +1,4 @@
-import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import * as Fetch from "@monarcode/effetch";
 
 import { AppApiClient } from "../../../infrastructure/http/app-api-client.js";
 import {
@@ -16,20 +14,16 @@ import {
 // client, one line per operation, and every type (params, body, success and
 // errors) is inferred: there's no interface to keep in step.
 //
-// `AppApiClient.useSync` reads the shared client once, when the layer is
-// built.
+// `TodoApi.layer` binds them to the shared client once, when it's built.
 
-const makeTodoApi = AppApiClient.useSync((client) => ({
-	list: client.bind(listTodos),
-	get: client.bind(getTodo),
-	create: client.bind(createTodo),
-	update: client.bind(updateTodo),
-	remove: client.bind(removeTodo),
-}));
-
-export class TodoApi extends Context.Service<
-	TodoApi,
-	Effect.Success<typeof makeTodoApi>
->()("modules/todos/TodoApi") {}
-
-export const TodoApiLive = Layer.effect(TodoApi)(makeTodoApi);
+export class TodoApi extends Fetch.Endpoints<TodoApi>()(
+	"modules/todos/TodoApi",
+	AppApiClient,
+	{
+		list: listTodos,
+		get: getTodo,
+		create: createTodo,
+		update: updateTodo,
+		remove: removeTodo,
+	},
+) {}

@@ -69,7 +69,7 @@ type Todo = typeof Todo.Type;
 type ApiError = typeof ApiError.Type;
 type Ps = [];
 
-/** effetch's own errors for a call with an `output`. */
+/** Effetch's own errors for a call with an `output`. */
 type Own = NetworkError | DecodeError | HttpError.With<ApiError>;
 
 type Session = { readonly 401: typeof SessionExpired };

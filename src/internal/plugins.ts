@@ -289,7 +289,7 @@ const runHooks = <H>(
 				const options = mergeOptions(plugin.defaults, override);
 				return Effect.catchCause(run(hook, options, route), (failure) =>
 					Effect.logDebug(
-						`effetch: the ${name} hook of plugin "${plugin.name}" failed`,
+						`Effetch: the ${name} hook of plugin "${plugin.name}" failed`,
 						failure,
 					),
 				);

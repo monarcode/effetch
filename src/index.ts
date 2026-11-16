@@ -2,15 +2,24 @@ export { make } from "./Client.js";
 export type { Client, ClientConfig } from "./Client.js";
 export { endpoint } from "./Endpoint.js";
 export type {
+	AnyUnboundEndpoint,
+	BindAllMethod,
 	BindMethod,
 	BindOptions,
+	BoundEndpoint,
+	BoundEndpoints,
 	Endpoint,
 	EndpointArgs,
 	EndpointBody,
 	EndpointDefinition,
+	EndpointDefinitions,
+	EndpointEntry,
 	EndpointMethod,
 	EndpointOptions,
+	EndpointQuery,
 	EndpointRoute,
+	EndpointUrlArgs,
+	EndpointUrlOptions,
 	RouteMethod,
 	RoutePath,
 	UnboundDefinition,
@@ -38,15 +47,40 @@ export type {
 	ParamsOption,
 	QueryInput,
 	QueryOf,
+	QuerySchema,
 	QueryValue,
 	RequestMethod,
 	RequestOptions,
+	ResponseMode,
 	StatusError,
 	StatusErrorMap,
 	StatusErrorSchema,
 	StatusErrorServices,
 	Success,
 } from "./Options.js";
+export { bytes, text } from "./Output.js";
+export { catchStatus, optional } from "./Status.js";
+export type { CaughtStatus } from "./Status.js";
+export type { BytesSchema, TextSchema } from "./Output.js";
 export type { PathParamNames, PathParams, PathParamValue } from "./Path.js";
+export { Endpoints } from "./Endpoints.js";
+export type { EndpointsClass } from "./Endpoints.js";
+export { isService, Service } from "./Service.js";
+export type { ServiceClass } from "./Service.js";
 export { plugin } from "./Plugin.js";
 export type { Plugin, PluginContext, PluginExitContext } from "./Plugin.js";
+export type {
+	SseEvent,
+	StreamElement,
+	StreamFormat,
+	StreamMethod,
+	StreamOptions,
+} from "./Streams.js";
+export { paginate } from "./Paginate.js";
+export type {
+	PageEndpoint,
+	PageOf,
+	PageRequest,
+	PageResponse,
+	PaginateOptions,
+} from "./Paginate.js";

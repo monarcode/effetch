@@ -10,12 +10,14 @@ import type * as HttpMethod from "effect/http/HttpMethod";
 import type {
 	AnySchema,
 	QueryInput,
+	QuerySchema,
 	RequestOptions,
+	ResponseMode,
 	StatusErrorMap,
 } from "../Options.js";
 import type { Plugin } from "../Plugin.js";
 import { encodeBody } from "./body.js";
-import { interpolatePath } from "./path.js";
+import { acceptFor, bodyFormat } from "./output.js";
 import type { ApplyDefaults } from "./pipeline.js";
 import {
 	hasExitHooks,
@@ -27,8 +29,9 @@ import {
 	runErrorHooks,
 	runExitHooks,
 } from "./plugins.js";
-import { toUrlParams } from "./query.js";
+import { encodeQuery } from "./query.js";
 import { checkStatus, decodeOutput } from "./response.js";
+import { requestTarget } from "./target.js";
 
 export type RuntimeOptions = Omit<
 	RequestOptions<
@@ -38,10 +41,20 @@ export type RuntimeOptions = Omit<
 		AnySchema,
 		ReadonlyArray<Plugin.Any>,
 		QueryInput,
-		StatusErrorMap | undefined
+		StatusErrorMap | undefined,
+		ResponseMode | undefined
 	>,
 	"plugins"
-> & { readonly plugins?: OverrideMap | undefined };
+> & {
+	readonly plugins?: OverrideMap | undefined;
+	/** An endpoint's query schema, to encode `query` with. */
+	readonly querySchema?: QuerySchema | undefined;
+	/**
+	 * The `Accept` header to send when none is set, for a stream, instead
+	 * of the one `output` gives.
+	 */
+	readonly accept?: string | undefined;
+};
 
 export interface RequesterState {
 	readonly errorSchema: AnySchema | undefined;
@@ -68,10 +81,14 @@ const buildRequest = (
 				new Error(`A ${method} request can't have a body`),
 			);
 		}
-		let request = HttpClientRequest.make(method)(
-			interpolatePath(path, options.params),
-			{ urlParams: toUrlParams(options.query) },
-		);
+		const query =
+			options.querySchema === undefined
+				? options.query
+				: yield* encodeQuery(options.querySchema, options.query);
+		const target = requestTarget(path, options.params, query);
+		let request = HttpClientRequest.make(method)(target.path, {
+			urlParams: target.urlParams,
+		});
 		const body = yield* encodeBody(options.body, options.input);
 		if (body !== undefined) {
 			request = HttpClientRequest.setBody(request, body);
@@ -80,16 +97,21 @@ const buildRequest = (
 			request = HttpClientRequest.setHeaders(request, options.headers);
 		}
 		request = state.applyDefaults(request);
-		if (
-			options.output !== undefined &&
-			!Headers.has(request.headers, "accept")
-		) {
-			request = HttpClientRequest.acceptJson(request);
+		const accept =
+			options.accept ??
+			(options.output === undefined
+				? undefined
+				: acceptFor(bodyFormat(options.output)));
+		if (accept !== undefined && !Headers.has(request.headers, "accept")) {
+			request = HttpClientRequest.accept(request, accept);
 		}
 		return request;
 	});
 
-/** Checks the response's status, then decodes its body with `output`. */
+/**
+ * Checks the response's status, then decodes its body with `output`. With
+ * `responseMode: "decoded-and-response"`, gives the value and the response.
+ */
 const handle = (
 	state: RequesterState,
 	response: HttpClientResponse.HttpClientResponse,
@@ -101,9 +123,13 @@ const handle = (
 			options.error ?? state.errorSchema,
 			[options.statusErrors, state.statusErrors],
 		);
-		return options.output === undefined
-			? checked
-			: yield* decodeOutput(checked, options.output);
+		const value =
+			options.output === undefined
+				? checked
+				: yield* decodeOutput(checked, options.output);
+		return options.responseMode === "decoded-and-response"
+			? Object.freeze([value, checked])
+			: value;
 	});
 
 /**

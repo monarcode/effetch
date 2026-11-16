@@ -107,6 +107,10 @@ export interface PluginContext<Opts> {
  *   until the status was checked and the body decoded. Retries made by a
  *   plugin's `wrap` are included.
  *
+ * For a stream (`api.sse`, `api.ndjson` or a `stream` endpoint), the call
+ * ends when the response's headers arrive: `onExit` runs then, and doesn't
+ * see the body being read, or a `DecodeError` while it's read.
+ *
  * `route` is always set, as `onExit` doesn't run for requests sent through
  * `client.httpClient`.
  *
@@ -152,8 +156,8 @@ export interface PluginExitContext<Opts> extends PluginContext<Opts> {
  * - `onError` observes any failure of the call (after status check and
  *   decoding) and can't change the outcome.
  * - `onExit` observes the end of every call, success included, with its
- *   outcome, its response and how long it took. It can't change the
- *   outcome either.
+ *   outcome, its response and how long it took (see
+ *   {@link PluginExitContext}). It can't change the outcome either.
  * - `wrap` wraps the rest of the chain, for retries, timeouts and the like.
  *   It can add errors (`E`) but can't remove the ones from further in.
  *
@@ -296,9 +300,13 @@ export declare namespace Plugin {
 
 	/**
 	 * The `onExit` hook: runs once per call, when it's over, with the call's
-	 * `Exit`. On success that holds the call's result (the decoded `output`,
-	 * or the response for a call without one); otherwise the cause of its
-	 * failure, defect or interruption. It sees the final outcome,
+	 * `Exit`. On success that holds the call's result: the decoded `output`,
+	 * or the response for a call without one, or, with
+	 * `responseMode: "decoded-and-response"`, a pair of that and the
+	 * response. Otherwise it holds the cause of its failure, defect or
+	 * interruption. To tell whether the body was read, compare the result,
+	 * or its first item, with `ctx.response`: a call returns the response
+	 * itself only when it didn't decode it. It sees the final outcome,
 	 * `statusErrors` and decoding included, which suits logging and metrics.
 	 *
 	 * It can't fail or change the outcome: if it dies, the defect is logged

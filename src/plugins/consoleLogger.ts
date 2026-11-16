@@ -505,7 +505,7 @@ const messageOf = (error: unknown): string =>
 
 /**
  * A short description of `error` for the summary line: its tag or name,
- * and its message without the `"<method> <url>: "` that effetch's own
+ * and its message without the `"<method> <url>: "` that Effetch's own
  * errors start with. An `HttpError` is its tag alone, as the line shows
  * the status, and a `NetworkError` shows its cause's message.
  */
@@ -816,9 +816,21 @@ const contentLengthOf = (
 };
 
 /**
+ * Whether a call's success `value` is `response` with its body unread: a
+ * call without `output` returns it, alone or, with
+ * `responseMode: "decoded-and-response"`, as both items of the pair.
+ */
+const returnsUnread = (
+	value: unknown,
+	response: HttpClientResponse.HttpClientResponse,
+): boolean =>
+	value === response || (Array.isArray(value) && value[0] === response);
+
+/**
  * Reads the response body to print it. The body is only read when it's
  * text and the call didn't return the response itself (a call without
- * `output`, whose caller may stream it). Effect caches it, so effetch
+ * `output`, whose caller may stream it, or a stream from `api.sse` or
+ * `api.ndjson`). Effect caches it, so Effetch
  * reading it before, or the caller after, is unaffected.
  */
 const readResponseBody = (
@@ -836,7 +848,7 @@ const readResponseBody = (
 	) {
 		return Effect.succeed({ shown: undefined, bytes: undefined });
 	}
-	if (Exit.isSuccess(exit) && exit.value === response) {
+	if (Exit.isSuccess(exit) && returnsUnread(exit.value, response)) {
 		return Effect.succeed({
 			shown: "<not read: the call returns the response>",
 			bytes: undefined,
@@ -1214,7 +1226,9 @@ const resolveColor = (color: ConsoleLoggerColor): Config["color"] =>
  * A response body is read only when it's text (JSON, `text/*` other than
  * event streams, XML or a form) of at most 1 MB (or 4 × `maxBodyLength`),
  * and never when the call returns the response itself, which its caller
- * may stream, or was interrupted. Effect caches the body, so reading it
+ * may stream, or was interrupted. For `api.sse`, `api.ndjson` and stream
+ * endpoints, the entry is printed when the headers arrive, without the
+ * body. Effect caches the body, so reading it
  * doesn't affect decoding.
  *
  * It runs from the `onExit` hook, so it sees the whole call wherever it
@@ -1233,7 +1247,7 @@ const resolveColor = (color: ConsoleLoggerColor): Config["color"] =>
  *
  * declare const isDevelopment: boolean;
  *
- * const makeApi = Fetch.make({
+ * class Api extends Fetch.Service<Api>()("Api", {
  *   baseUrl: "https://api.example.com",
  *   plugins: [
  *     consoleLogger({
@@ -1242,7 +1256,7 @@ const resolveColor = (color: ConsoleLoggerColor): Config["color"] =>
  *       redact: { body: ["otp"] },
  *     }),
  *   ],
- * });
+ * }) {}
  *
  * // Per call:
  * // api.get("/export", { plugins: { consoleLogger: { detail: "summary" } } })

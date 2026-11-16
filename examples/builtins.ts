@@ -1,4 +1,3 @@
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -31,7 +30,7 @@ const session: { accessToken: string | undefined } = {
 	accessToken: undefined,
 };
 
-export const makeApi = Fetch.make({
+export class Api extends Fetch.Service<Api>()("Api", {
 	baseUrl: "https://api.example.com",
 	defaultError: ApiError,
 	plugins: [
@@ -46,15 +45,9 @@ export const makeApi = Fetch.make({
 		timeout({ duration: "10 seconds" }),
 		bearer({ token: () => session.accessToken }),
 	],
-});
+}) {}
 
-export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
-	"Api",
-) {}
-
-export const ApiLive = Layer.effect(Api)(makeApi).pipe(
-	Layer.provide(FetchHttpClient.layer),
-);
+export const ApiLive = Api.layer.pipe(Layer.provide(FetchHttpClient.layer));
 
 export const signIn = (email: string, password: string) =>
 	Effect.gen(function* () {

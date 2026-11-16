@@ -31,7 +31,9 @@ for required in \
 	package/dist/index.js \
 	package/dist/index.d.ts \
 	package/dist/plugins/index.js \
-	package/dist/plugins/index.d.ts; do
+	package/dist/plugins/index.d.ts \
+	package/dist/test/index.js \
+	package/dist/test/index.d.ts; do
 	if ! grep -qx "$required" <<<"$contents"; then
 		echo "✗ Missing from tarball: $required" >&2
 		exit 1
@@ -63,7 +65,10 @@ import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as Fetch from "@monarcode/effetch";
 import {
 	bearer,
@@ -74,6 +79,7 @@ import {
 	TimeoutError,
 	timeout,
 } from "@monarcode/effetch/plugins";
+import { FetchTest } from "@monarcode/effetch/test";
 
 const orgId: string = "acme";
 type OrgUser = `/orgs/${typeof orgId}/users/:id`;
@@ -333,6 +339,153 @@ const missingTodo: string | { readonly id: number } =
 	await Effect.runPromise(statusProgram);
 if (missingTodo !== "No todo 9") {
 	throw new Error(`Unexpected statusErrors result: ${JSON.stringify(missingTodo)}`);
+}
+
+// A client as a service class: its config is readable without a layer.
+class Api extends Fetch.Service<Api>()("smoke/Api", {
+	baseUrl: "https://api.test",
+	statusErrors: { 404: TodoNotFound },
+}) {}
+if (
+	!Fetch.isService(Api) ||
+	!Object.isFrozen(Api.config) ||
+	Api.config.statusErrors?.[404] !== TodoNotFound
+) {
+	throw new Error("Unexpected Fetch.Service class");
+}
+
+const serviceProgram = Effect.gen(function* () {
+	const api = yield* Api;
+	return yield* api.get("/todos/:id", { params: { id: 9 }, output: Todo });
+}).pipe(
+	Effect.catchTag("TodoNotFound", (error) => Effect.succeed(error.message)),
+	Effect.provide(
+		Api.layer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient)(notFound))),
+	),
+);
+
+const viaService: string | { readonly id: number } =
+	await Effect.runPromise(serviceProgram);
+if (viaService !== "No todo 9") {
+	throw new Error(`Unexpected Fetch.Service result: ${JSON.stringify(viaService)}`);
+}
+
+// A module's endpoints as a service class, on top of the client's.
+class TodoApi extends Fetch.Endpoints<TodoApi>()("smoke/TodoApi", Api, {
+	get: Fetch.endpoint("GET /todos/:id", { output: Todo }),
+	missing: [getMissing, { headers: { "x-op": "missing" } }],
+}) {}
+if (!Object.isFrozen(TodoApi.definitions)) {
+	throw new Error("Unexpected Fetch.Endpoints definitions");
+}
+
+const endpointsProgram = Effect.gen(function* () {
+	const todos = yield* TodoApi;
+	return yield* todos.missing({ params: { id: 9 } });
+}).pipe(
+	Effect.catchTag("TodoNotFound", (error) => Effect.succeed(error.message)),
+	Effect.provide(
+		TodoApi.layer.pipe(
+			Layer.provide(Api.layer),
+			Layer.provide(Layer.succeed(HttpClient.HttpClient)(notFound)),
+		),
+	),
+);
+
+const viaEndpoints: string | { readonly id: number } =
+	await Effect.runPromise(endpointsProgram);
+if (viaEndpoints !== "No todo 9") {
+	throw new Error(`Unexpected Fetch.Endpoints result: ${JSON.stringify(viaEndpoints)}`);
+}
+
+// A typed fake backend from the endpoints, under the service classes.
+const Dated = Schema.Struct({ id: Schema.Finite, due: Schema.Date });
+const getDated = Fetch.endpoint("GET /dated/:id", { output: Dated });
+const Backend = FetchTest.layer([
+	FetchTest.respond(getDated, ({ params }) =>
+		Effect.succeed({ id: Number(params.id), due: new Date(0) }),
+	),
+	FetchTest.fail(TodoApi.definitions.missing[0], 404, new TodoNotFound({ message: "No todo 9" })),
+]);
+if (Object.keys(FetchTest).sort().join() !== "Recorder,fail,layer,reply,requests,respond") {
+	throw new Error(`Unexpected FetchTest exports: ${Object.keys(FetchTest).join()}`);
+}
+
+const fakeProgram = Effect.gen(function* () {
+	const api = yield* Api;
+	const todos = yield* TodoApi;
+	const dated = yield* api.bind(getDated)({ params: { id: 4 } });
+	const missing = yield* todos.missing({ params: { id: 9 } }).pipe(
+		Effect.catchTag("TodoNotFound", (error) => Effect.succeed(error.message)),
+	);
+	const sent = yield* FetchTest.requests;
+	return { dated, missing, urls: sent.map((request) => request.url) };
+}).pipe(
+	Effect.provide(
+		TodoApi.layer.pipe(
+			Layer.provideMerge(Api.layer),
+			Layer.provideMerge(Backend),
+		),
+	),
+);
+
+const viaFake = await Effect.runPromise(fakeProgram);
+const fakeDated: { readonly id: number; readonly due: Date } = viaFake.dated;
+if (
+	fakeDated.id !== 4 ||
+	!(fakeDated.due instanceof Date) ||
+	viaFake.missing !== "No todo 9" ||
+	viaFake.urls.join() !== "https://api.test/dated/4,https://api.test/todos/9"
+) {
+	throw new Error(`Unexpected FetchTest result: ${JSON.stringify(viaFake)}`);
+}
+
+// Streams and pages, answered by FetchTest.
+const Step = Schema.Struct({ percent: Schema.Finite });
+const steps = Fetch.endpoint("GET /jobs/:id/events", { output: Step, stream: "sse" });
+const rows = Fetch.endpoint("GET /rows", { output: Step, stream: "ndjson" });
+const pageOf = Fetch.endpoint("GET /pages", {
+	query: Schema.Struct({ page: Schema.Finite }),
+	output: Schema.Array(Step),
+});
+const streamed = await Effect.runPromise(
+	Effect.gen(function* () {
+		const api = yield* Fetch.make({ baseUrl: "https://api.test" });
+		const events = yield* Stream.runCollect(api.bind(steps)({ params: { id: 1 } }));
+		const lines = yield* Stream.runCollect(api.ndjson("/rows", { output: Step }));
+		const pages = yield* Stream.runCollect(
+			Fetch.paginate(api.bind(pageOf), {
+				start: 1,
+				request: (page) => ({ query: { page } }),
+				next: (items, page) => (items.length === 0 ? Option.none() : Option.some(page + 1)),
+			}),
+		);
+		return { events: [...events], lines: [...lines], pages: [...pages] };
+	}).pipe(
+		Effect.provide(
+			FetchTest.layer([
+				FetchTest.respond(steps, ({ params }) =>
+					Effect.succeed([{ id: params.id, data: { percent: 100 } }]),
+				),
+				FetchTest.respond(rows, () => Effect.succeed([{ percent: 1 }, { percent: 2 }])),
+				FetchTest.respond(pageOf, ({ query }) =>
+					Effect.succeed(query.page === 1 ? [{ percent: 1 }] : []),
+				),
+			]),
+		),
+	),
+);
+const firstEvent: Fetch.SseEvent<{ readonly percent: number }> | undefined = streamed.events[0];
+if (
+	JSON.stringify(streamed) !==
+	JSON.stringify({
+		events: [{ event: "message", id: "1", data: { percent: 100 } }],
+		lines: [{ percent: 1 }, { percent: 2 }],
+		pages: [[{ percent: 1 }], []],
+	}) ||
+	firstEvent?.id !== "1"
+) {
+	throw new Error(`Unexpected stream result: ${JSON.stringify(streamed)}`);
 }
 
 console.log("smoke: ok");

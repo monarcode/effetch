@@ -1,15 +1,16 @@
 import * as Effect from "effect/Effect";
+import type * as HttpClientError from "effect/http/HttpClientError";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 import { DecodeError, HttpError } from "../Errors.js";
 import type { AnySchema, StatusErrorMap } from "../Options.js";
 import { decodeJson } from "./json.js";
+import { messageOf } from "./message.js";
+import { bodyFormat } from "./output.js";
 import { decodeStatusError, statusErrorsFor } from "./statusErrors.js";
 import { errorUrl } from "./url.js";
-
-const messageOf = (error: unknown): string =>
-	error instanceof Error ? error.message : String(error);
 
 /**
  * `undefined` for an empty or whitespace-only body, else the parsed JSON.
@@ -117,13 +118,81 @@ export function checkStatus(
 	});
 }
 
+/** Makes the `DecodeError`s of a 2xx response whose body is decoded. */
+export interface BodyFailures {
+	/** A `DecodeError` with this `issue` and `message`. */
+	readonly failure: (issue: unknown, message: string) => DecodeError;
+	/** The `DecodeError` of a body that can't be read. */
+	readonly unreadable: (error: HttpClientError.HttpClientError) => DecodeError;
+}
+
 /**
- * Decodes a 2xx response body with `output`.
+ * Makes the `DecodeError`s of `response`, which carry its method, URL and
+ * status. Used by `decodeOutput` and by streams.
+ */
+export const bodyFailures = (
+	response: HttpClientResponse.HttpClientResponse,
+): BodyFailures => {
+	const failure = (issue: unknown, message: string) =>
+		new DecodeError({
+			method: response.request.method,
+			url: errorUrl(response.request.url),
+			status: response.status,
+			issue,
+			message,
+		});
+	return {
+		failure,
+		unreadable: (error) =>
+			failure(
+				error,
+				`Failed to read the response body: ${messageOf(error.cause ?? error)}`,
+			),
+	};
+};
+
+/**
+ * Decodes `text` with an `output` made by `Fetch.text`: as it is with
+ * `Fetch.text()`, or trimmed with `Fetch.text(schema)`, which fails on an
+ * empty text, naming it `what` (such as `"The response body"`). `mismatch`
+ * makes the error for a text the schema doesn't accept. Shared by response
+ * bodies and stream values, so both follow the same rules.
+ */
+export const decodeText = (
+	output: AnySchema,
+	text: string,
+	failure: BodyFailures["failure"],
+	what: string,
+	mismatch: (error: Schema.SchemaError) => DecodeError,
+): Effect.Effect<unknown, DecodeError, unknown> => {
+	const decode = (value: string) =>
+		Effect.mapError(Schema.decodeUnknownEffect(output)(value), mismatch);
+	if (bodyFormat(output) !== "textValue") {
+		return decode(text);
+	}
+	const value = text.trim();
+	return value === ""
+		? Effect.fail(
+				failure(
+					new Error(`${what} is empty`),
+					`${what} is empty, but the output schema requires a value`,
+				),
+			)
+		: decode(value);
+};
+
+/**
+ * Decodes a 2xx response body with `output`, reading it as `output`'s
+ * format (see `bodyFormat`): JSON by default, or text or bytes for schemas
+ * made by `Fetch.text` and `Fetch.bytes`.
  *
- * An empty or whitespace-only body (204, 205, HEAD, …) is decoded as JSON
- * `null`, which `Schema.Void`, `Schema.Undefined` and `Schema.NullOr`
- * accept. A JSON `null` body is therefore indistinguishable from an empty
- * one.
+ * An empty or whitespace-only JSON body (204, 205, HEAD, …) is decoded as
+ * JSON `null`, which `Schema.Void`, `Schema.Undefined` and
+ * `Schema.NullOr` accept. A JSON `null` body is therefore
+ * indistinguishable from an empty one. Read as text by `Fetch.text()`, an
+ * empty body is `""`. Read by `Fetch.text(schema)`, the text is trimmed,
+ * and an empty one fails, as for JSON. Read as bytes, it's a `Uint8Array`
+ * of length 0, a copy of the body.
  *
  * Fails with a `DecodeError` whose `issue` is:
  *
@@ -135,36 +204,49 @@ export const decodeOutput = <O extends AnySchema>(
 	response: HttpClientResponse.HttpClientResponse,
 	output: O,
 ): Effect.Effect<O["Type"], DecodeError, O["DecodingServices"]> => {
-	const failure = (issue: unknown, message: string) =>
-		new DecodeError({
-			method: response.request.method,
-			url: errorUrl(response.request.url),
-			status: response.status,
-			issue,
-			message,
-		});
-	return Effect.gen(function* () {
-		const text = yield* Effect.mapError(response.text, (error) =>
-			failure(
-				error,
-				`Failed to read the response body: ${messageOf(error.cause ?? error)}`,
-			),
+	const { failure, unreadable } = bodyFailures(response);
+	const decodeWith = (value: unknown) =>
+		Effect.mapError(Schema.decodeUnknownEffect(output)(value), (error) =>
+			failure(error.issue, error.message),
 		);
-		const json = yield* Effect.try({
-			try: () => parseBody(text),
-			catch: (cause) =>
-				failure(
-					cause,
-					`The response body isn't valid JSON: ${messageOf(cause)}`,
-				),
-		});
-		return yield* Effect.mapError(decodeJson(output)(json ?? null), (error) =>
-			failure(
-				error.issue,
-				json === undefined
-					? `The response body is empty, but the output schema requires a value: ${error.message}`
-					: error.message,
-			),
-		);
-	});
+	switch (bodyFormat(output)) {
+		case "text":
+		case "textValue":
+			return Effect.flatMap(
+				Effect.mapError(response.text, unreadable),
+				(text) =>
+					decodeText(output, text, failure, "The response body", (error) =>
+						failure(error.issue, error.message),
+					),
+			);
+		case "bytes":
+			// A copy: the response keeps its own buffer, so changing or
+			// transferring the bytes doesn't change what it reads later.
+			return Effect.flatMap(
+				Effect.mapError(response.arrayBuffer, unreadable),
+				(buffer) => decodeWith(new Uint8Array(buffer.slice(0))),
+			);
+		case "json":
+			return Effect.gen(function* () {
+				const text = yield* Effect.mapError(response.text, unreadable);
+				const json = yield* Effect.try({
+					try: () => parseBody(text),
+					catch: (cause) =>
+						failure(
+							cause,
+							`The response body isn't valid JSON: ${messageOf(cause)}`,
+						),
+				});
+				return yield* Effect.mapError(
+					decodeJson(output)(json ?? null),
+					(error) =>
+						failure(
+							error.issue,
+							json === undefined
+								? `The response body is empty, but the output schema requires a value: ${error.message}`
+								: error.message,
+						),
+				);
+			});
+	}
 };

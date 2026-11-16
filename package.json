@@ -1,6 +1,6 @@
 {
 	"name": "@monarcode/effetch",
-	"version": "0.1.0-rc.2",
+	"version": "0.1.0-rc.3",
 	"description": "Typed, schema-driven HTTP calls on Effect v4's HttpClient: path params, object queries, decoded responses and plugins",
 	"keywords": [
 		"effect",
@@ -38,6 +38,10 @@
 		"./plugins": {
 			"types": "./dist/plugins/index.d.ts",
 			"default": "./dist/plugins/index.js"
+		},
+		"./test": {
+			"types": "./dist/test/index.d.ts",
+			"default": "./dist/test/index.js"
 		},
 		"./package.json": "./package.json"
 	},
