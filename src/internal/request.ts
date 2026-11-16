@@ -11,10 +11,12 @@ import type {
 	AnySchema,
 	QueryInput,
 	RequestOptions,
+	ResponseMode,
 	StatusErrorMap,
 } from "../Options.js";
 import type { Plugin } from "../Plugin.js";
 import { encodeBody } from "./body.js";
+import { acceptFor, bodyFormat } from "./output.js";
 import { interpolatePath } from "./path.js";
 import type { ApplyDefaults } from "./pipeline.js";
 import {
@@ -38,7 +40,8 @@ export type RuntimeOptions = Omit<
 		AnySchema,
 		ReadonlyArray<Plugin.Any>,
 		QueryInput,
-		StatusErrorMap | undefined
+		StatusErrorMap | undefined,
+		ResponseMode | undefined
 	>,
 	"plugins"
 > & { readonly plugins?: OverrideMap | undefined };
@@ -84,12 +87,18 @@ const buildRequest = (
 			options.output !== undefined &&
 			!Headers.has(request.headers, "accept")
 		) {
-			request = HttpClientRequest.acceptJson(request);
+			request = HttpClientRequest.accept(
+				request,
+				acceptFor(bodyFormat(options.output)),
+			);
 		}
 		return request;
 	});
 
-/** Checks the response's status, then decodes its body with `output`. */
+/**
+ * Checks the response's status, then decodes its body with `output`. With
+ * `responseMode: "decoded-and-response"`, gives the value and the response.
+ */
 const handle = (
 	state: RequesterState,
 	response: HttpClientResponse.HttpClientResponse,
@@ -101,9 +110,13 @@ const handle = (
 			options.error ?? state.errorSchema,
 			[options.statusErrors, state.statusErrors],
 		);
-		return options.output === undefined
-			? checked
-			: yield* decodeOutput(checked, options.output);
+		const value =
+			options.output === undefined
+				? checked
+				: yield* decodeOutput(checked, options.output);
+		return options.responseMode === "decoded-and-response"
+			? Object.freeze([value, checked])
+			: value;
 	});
 
 /**

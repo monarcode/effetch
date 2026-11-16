@@ -136,6 +136,43 @@ All notable changes to `@monarcode/effetch`, newest first.
     adds `TimeoutError`. New type: `RetryBudgetOptions`.
   - `retry` without a `budget` still returns `RetryPlugin`, with no errors.
 
+- `responseMode: "decoded-and-response"` makes a call succeed with the
+  decoded body and the response together, to read the status and headers,
+  such as a total count or an `ETag`:
+
+  ```ts
+  Effect.gen(function* () {
+    const [todos, response] = yield* api.get("/todos", {
+      output: Schema.Array(Todo),
+      responseMode: "decoded-and-response",
+    });
+  });
+  ```
+
+  - It's allowed on every method, on `client.endpoint` and `Fetch.endpoint`
+    definitions, and on each call of an endpoint, where the call's own mode
+    wins. `bind`, `bindAll` and `Fetch.Endpoints` keep a definition's mode.
+  - Without `output`, both items are the response.
+  - The default, `"decoded"`, gives the decoded body alone, as before.
+  - New type: `ResponseMode`. `Success`, `CallEffect`, `BaseOptions`,
+    `RequestOptions`, `NoBodyRequestOptions`, `Endpoint`,
+    `EndpointDefinition`, `EndpointOptions`, `UnboundEndpoint` and
+    `UnboundDefinition` gain a last type parameter for the mode, defaulted,
+    and endpoints and definitions a `responseMode` property. Code that
+    passes `client.bind`'s type arguments explicitly needs one more.
+  - A plugin's `onExit` sees the pair as the call's result.
+
+- `Fetch.text()` and `Fetch.bytes()` read a 2xx body as text or as a
+  `Uint8Array`, for `output`. `Fetch.text(schema)` reads a single value: it
+  trims the text and decodes it with a schema whose encoded side is a
+  string, such as `Schema.NumberFromString`.
+  - The call sends `Accept: text/*, */*;q=0.1` or `*/*`, unless one is set.
+  - An empty body is `""`, or a `Uint8Array` of length 0. With
+    `Fetch.text(schema)`, it fails, as for JSON.
+  - Errors are `DecodeError`, as for JSON. Error responses are still read
+    as JSON.
+  - New types: `TextSchema` and `BytesSchema`.
+
 ## 0.1.0-rc.2
 
 ### Added

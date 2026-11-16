@@ -2,7 +2,7 @@ import * as Headers from "effect/http/Headers";
 import * as HttpMethod from "effect/http/HttpMethod";
 import * as Schema from "effect/Schema";
 
-import type { AnySchema, StatusErrorMap } from "../Options.js";
+import type { AnySchema, ResponseMode, StatusErrorMap } from "../Options.js";
 import { mergeOverrides, type OverrideMap } from "./plugins.js";
 import type { Call, RuntimeOptions } from "./request.js";
 import { freezeStatusErrors, joinStatusErrors } from "./statusErrors.js";
@@ -16,6 +16,7 @@ export interface RuntimeDefinition {
 	readonly input?: AnySchema | undefined;
 	readonly headers?: Headers.Input | undefined;
 	readonly plugins?: OverrideMap | undefined;
+	readonly responseMode?: ResponseMode | undefined;
 }
 
 /** What an endpoint takes from its client's config: the error defaults. */
@@ -40,6 +41,8 @@ export interface RuntimeEndpoint {
 	};
 	/** The `input` schema, or `undefined` without one. */
 	readonly input: AnySchema | undefined;
+	/** The `responseMode`, or `undefined` without one. */
+	readonly responseMode: ResponseMode | undefined;
 }
 
 /** A definition made without a client, as seen at runtime: no plugins. */
@@ -55,6 +58,7 @@ export interface RuntimeUnboundEndpoint {
 	readonly statusErrors: StatusErrorMap | undefined;
 	readonly input: AnySchema | undefined;
 	readonly headers: Headers.Headers | undefined;
+	readonly responseMode: ResponseMode | undefined;
 }
 
 /** What a definition is bound with, as seen at runtime. */
@@ -129,6 +133,7 @@ export const makeEndpoint = (
 			input: definition.input,
 			headers: mergeHeaders(headers, options.headers),
 			plugins: mergeOverrides(definition.plugins, options.plugins),
+			responseMode: options.responseMode ?? definition.responseMode,
 		});
 	return Object.assign(endpoint, {
 		route,
@@ -138,6 +143,7 @@ export const makeEndpoint = (
 		error: definition.error ?? client.defaultError ?? Schema.Unknown,
 		statusErrors: joinStatusErrors([statusErrors, client.statusErrors]),
 		input: definition.input,
+		responseMode: definition.responseMode,
 	});
 };
 
@@ -162,6 +168,7 @@ export const makeUnboundEndpoint = (
 			definition.headers === undefined
 				? undefined
 				: Headers.fromInput(definition.headers),
+		responseMode: definition.responseMode,
 	});
 };
 
@@ -206,6 +213,7 @@ const makeEndpointFrom = (
 		input: unbound.input,
 		headers: mergeHeaders(unbound.headers, options.headers),
 		plugins: options.plugins,
+		responseMode: unbound.responseMode,
 	});
 
 /** A record of definitions, as `bindAll` takes it at runtime. */

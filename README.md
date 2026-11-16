@@ -504,24 +504,99 @@ export const archive = api.post("/todos/:id/archive", {
 > those values back to strings. `Schema.Finite` accepts every JSON number and
 > rejects the rest.
 
+#### Text and bytes
+
+`output` reads the body as JSON. For other bodies, wrap the schema:
+
+- `Fetch.text()` reads the body as a string, as it was sent.
+- `Fetch.text(schema)` reads a single value, such as a count or a status: it
+  trims the text, then decodes it with a schema whose encoded side is a
+  string, such as `Schema.NumberFromString`.
+- `Fetch.bytes()` reads the body as a `Uint8Array`, a copy of the body, for
+  images, PDFs and other binary bodies.
+
+The call sends a matching `Accept` header: `text/*, */*;q=0.1` for text, and
+`*/*` for bytes, unless you set one.
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+export const program = Effect.gen(function* () {
+  const csv = yield* api.get("/export.csv", { output: Fetch.text() });
+  const count = yield* api.get("/todos/count", {
+    output: Fetch.text(Schema.NumberFromString),
+  });
+  const pdf = yield* api.get("/invoices/:id", {
+    params: { id: 7 },
+    output: Fetch.bytes(),
+  });
+  // In a browser, Node, Bun or Deno. React Native's Blob doesn't take arrays.
+  return { csv, count, pdf: new Blob([pdf], { type: "application/pdf" }) };
+});
+```
+
+They work wherever `output` does, endpoints included.
+
+- An empty body is `""` for `Fetch.text()` and a `Uint8Array` of length 0 for
+  `Fetch.bytes()`. For `Fetch.text(schema)`, it fails with `DecodeError`, as
+  for JSON.
+- A body that can't be read, or doesn't match the schema, fails with
+  `DecodeError`.
+- Error responses are still read as JSON for `error` and `statusErrors`.
+- Pass the schema they return to `output` as it is. A schema built around it,
+  such as with `Schema.NullOr`, is read as JSON again.
+
+#### The body and the response
+
+To read the status or headers next to the decoded body, such as a total count
+or an `ETag`, set `responseMode: "decoded-and-response"`. The call succeeds
+with a pair:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+export const page = Effect.gen(function* () {
+  const [todos, response] = yield* api.get("/todos", {
+    query: { page: 1 },
+    output: Schema.Array(Todo),
+    responseMode: "decoded-and-response",
+  });
+  return { todos, total: Number(response.headers["x-total-count"]) };
+});
+```
+
+- It's allowed on calls, on `client.endpoint` and `Fetch.endpoint`
+  definitions, and on each call of an endpoint, where the call's own mode wins.
+- Without `output`, both items are the response.
+- The body has already been read: use the decoded value.
+- The default, `"decoded"`, gives the decoded body alone.
+
 ### All call options
 
-| Option                                                                    | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `params`                                                                  | Values for the path's `:params`. Required, with exactly those names, when the path has any; not allowed otherwise. Values are URI-encoded.                                                                                                                                                                                                                                                                                                           |
-| `query`                                                                   | An object of query parameters. Arrays repeat the key, and `null` and `undefined` are dropped.                                                                                                                                                                                                                                                                                                                                                        |
-| `headers`                                                                 | Headers for this call. They win over the client's, and over the body's `content-type`.                                                                                                                                                                                                                                                                                                                                                               |
-| `body`                                                                    | Sent by its type: `HttpBody`, string, `ArrayBuffer` and typed arrays, `Blob`/`File`, `FormData` and `URLSearchParams` as they are, anything else as JSON.                                                                                                                                                                                                                                                                                            |
-| `input`                                                                   | A schema that `body` is encoded with before it's sent as JSON. `body` is then typed by the schema.                                                                                                                                                                                                                                                                                                                                                   |
-| `output`                                                                  | A schema the 2xx JSON body is decoded with. The call then sends `Accept: application/json` (unless you set `accept`). Without it, the call succeeds with the raw `HttpClientResponse`.                                                                                                                                                                                                                                                               |
-| `error`                                                                   | A schema for the body of error responses, replacing the client's `defaultError`.                                                                                                                                                                                                                                                                                                                                                                     |
-| `plugins`                                                                 | Plugin                                                                                                                                                                                                                                                                                                                                                                                                                                               | What it does                                         | Per call |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `bearer({ token, scheme?, refresh? })`                                    | Sends `Authorization: Bearer <token>`. The token is a string, a function of the request (sync or async), or an Effect, read for every request. `null`, `undefined` and `""` send no header, and an existing `Authorization` header is kept. With `refresh`, a `401` gets a new token and the request is sent again, once. See [Refreshing a token](#refreshing-a-token).                                                                             | `false`                                              |
-| `logger({ level? })`                                                      | Logs one entry per call at Debug (or Info): `GET <url> 200 (35ms)`, or `failed` with the cause, with the call's [route](#knowing-the-route) as an annotation. Never logs headers or query strings.                                                                                                                                                                                                                                                   | `false`                                              |
-| `consoleLogger(options?)`                                                 | Prints each call to the console while you develop: a line with the route, status, duration and outcome, opening a group with the full URL, headers, bodies and error. Sensitive headers, query parameters and body keys are redacted. See [Console logging](#console-logging).                                                                                                                                                                       | `false`, its settings                                |
-| `retry({ times?, schedule?, methods?, statuses?, retryAfter?, budget? })` | Retries network errors and 408, 429, 500, 502, 503 and 504, 2 times by default, with jittered exponential backoff from 200ms. Only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) by default, so a `POST` is never sent twice. When retries run out, the last response is returned. `retryAfter` waits as `Retry-After` asks, and `budget` limits the whole call. See [Retry-After and a time limit](#retry-after-and-a-time-limit). | `false`, `{ times }`, and `{ budget }` with a budget |
-| `timeout({ duration })`                                                   | Fails with `TimeoutError` and aborts the request when the response headers don't arrive in time. Downloading the body isn't covered.                                                                                                                                                                                                                                                                                                                 | `false`, `{ duration }`                              |
+| Option         | What it does                                                                                                                                                                                                                                                                                                      |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `params`       | Values for the path's `:params`. Required, with exactly those names, when the path has any; not allowed otherwise. Values are URI-encoded.                                                                                                                                                                        |
+| `query`        | An object of query parameters. Arrays repeat the key, and `null` and `undefined` are dropped.                                                                                                                                                                                                                     |
+| `headers`      | Headers for this call. They win over the client's, and over the body's `content-type`.                                                                                                                                                                                                                            |
+| `body`         | Sent by its type: `HttpBody`, string, `ArrayBuffer` and typed arrays, `Blob`/`File`, `FormData` and `URLSearchParams` as they are, anything else as JSON.                                                                                                                                                         |
+| `input`        | A schema that `body` is encoded with before it's sent as JSON. `body` is then typed by the schema.                                                                                                                                                                                                                |
+| `output`       | A schema the 2xx body is decoded with: read as JSON, or as text with `Fetch.text()` and bytes with `Fetch.bytes()`. The call then sends a matching `Accept` header (unless you set `accept`). Without it, the call succeeds with the raw `HttpClientResponse`. See [Reading the response](#reading-the-response). |
+| `responseMode` | `"decoded-and-response"` makes the call succeed with `[value, response]`, to read the status and headers too. Defaults to `"decoded"`, the value alone.                                                                                                                                                           |
+| `error`        | A schema for the body of error responses, replacing the client's `defaultError`.                                                                                                                                                                                                                                  |
+| `statusErrors` | Your own errors for error responses, by status. See [Errors by status](#errors-by-status).                                                                                                                                                                                                                        |
+| `plugins`      | Plugin overrides for this call (see [Changing plugins for one call](#changing-plugins-for-one-call)).                                                                                                                                                                                                             |
 
 ### When the methods aren't enough
 
@@ -781,13 +856,13 @@ export const makeApi = Fetch.make({
 export const withEffectToken = bearer({ token: Effect.succeed("token") });
 ```
 
-| Plugin                                              | What it does                                                                                                                                                                                                                                                                                        | Per call                |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| `bearer({ token, scheme? })`                        | Sends `Authorization: Bearer <token>`. The token is a string, a function of the request (sync or async), or an Effect, read for every request. `null`, `undefined` and `""` send no header, and an existing `Authorization` header is kept.                                                         | `false`                 |
-| `logger({ level? })`                                | Logs one entry per call at Debug (or Info): `GET <url> 200 (35ms)`, or `failed` with the cause, with the call's [route](#knowing-the-route) as an annotation. Never logs headers or query strings.                                                                                                  | `false`                 |
-| `consoleLogger(options?)`                           | Prints each call to the console while you develop: a line with the route, status, duration and outcome, opening a group with the full URL, headers, bodies and error. Sensitive headers, query parameters and body keys are redacted. See [Console logging](#console-logging).                      | `false`, its settings   |
-| `retry({ times?, schedule?, methods?, statuses? })` | Retries network errors and 408, 429, 500, 502, 503 and 504, 2 times by default, with jittered exponential backoff from 200ms. Only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) by default, so a `POST` is never sent twice. When retries run out, the last response is returned. | `false`, `{ times }`    |
-| `timeout({ duration })`                             | Fails with `TimeoutError` and aborts the request when the response headers don't arrive in time. Downloading the body isn't covered.                                                                                                                                                                | `false`, `{ duration }` |
+| Plugin                                                                    | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                         | Per call                                             |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `bearer({ token, scheme?, refresh? })`                                    | Sends `Authorization: Bearer <token>`. The token is a string, a function of the request (sync or async), or an Effect, read for every request. `null`, `undefined` and `""` send no header, and an existing `Authorization` header is kept. With `refresh`, a `401` gets a new token and the request is sent again, once. See [Refreshing a token](#refreshing-a-token).                                                                             | `false`                                              |
+| `logger({ level? })`                                                      | Logs one entry per call at Debug (or Info): `GET <url> 200 (35ms)`, or `failed` with the cause, with the call's [route](#knowing-the-route) as an annotation. Never logs headers or query strings.                                                                                                                                                                                                                                                   | `false`                                              |
+| `consoleLogger(options?)`                                                 | Prints each call to the console while you develop: a line with the route, status, duration and outcome, opening a group with the full URL, headers, bodies and error. Sensitive headers, query parameters and body keys are redacted. See [Console logging](#console-logging).                                                                                                                                                                       | `false`, its settings                                |
+| `retry({ times?, schedule?, methods?, statuses?, retryAfter?, budget? })` | Retries network errors and 408, 429, 500, 502, 503 and 504, 2 times by default, with jittered exponential backoff from 200ms. Only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) by default, so a `POST` is never sent twice. When retries run out, the last response is returned. `retryAfter` waits as `Retry-After` asks, and `budget` limits the whole call. See [Retry-After and a time limit](#retry-after-and-a-time-limit). | `false`, `{ times }`, and `{ budget }` with a budget |
+| `timeout({ duration })`                                                   | Fails with `TimeoutError` and aborts the request when the response headers don't arrive in time. Downloading the body isn't covered.                                                                                                                                                                                                                                                                                                                 | `false`, `{ duration }`                              |
 
 A `bearer` token function that throws, or whose promise rejects, makes the
 call die. To fail with a typed error instead, pass an Effect: its error and
@@ -1863,6 +1938,8 @@ page's URL.
   `EndpointEntry`,
   `BoundEndpoint`, `BoundEndpoints`, `Endpoints`, `EndpointsClass`:
   [endpoints without a client](#defining-endpoints-without-a-client).
+- `text`, `bytes`, `TextSchema`, `BytesSchema`:
+  [text and bytes](#text-and-bytes).
 - `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,
   `FetchError`, `isFetchError`: [errors](#handling-errors).
 - `plugin`, `Plugin` (and the `Plugin.*` helper types), `PluginContext`,
@@ -1871,7 +1948,8 @@ page's URL.
 - Option and result types, for wrapping the client in your own functions:
   `RequestOptions`, `NoBodyRequestOptions`, `BaseOptions`, `BodyOptions`,
   `ParamsOption`, `QueryInput`, `QueryOf`, `QueryValue`, `AnySchema`,
-  `Args`, `Success`, `CallError`, `CallServices`, `CallEffect`,
+  `Args`, `Success`, `ResponseMode`, `CallError`, `CallServices`,
+  `CallEffect`,
   `NoBodyMethod`, `BodyMethod`, `RequestMethod`, `PathParamNames`,
   `PathParams`, `PathParamValue`. `CallEffect` types a function that
   returns a call; to take a call as an argument, accept any
@@ -1879,12 +1957,14 @@ page's URL.
 
 `@monarcode/effetch/plugins`:
 
-- `bearer`, `BearerOptions`, `BearerPlugin`, `TokenSource`, `TokenValue`.
+- `bearer`, `BearerOptions`, `BearerPlugin`, `TokenSource`, `TokenValue`,
+  `RefreshSource`.
 - `logger`, `LoggerOptions`, `LoggerPlugin`.
 - `consoleLogger`, `ConsoleLoggerOptions`, `ConsoleLoggerSettings`,
   `ConsoleLoggerPlugin`, `ConsoleLoggerDetail`, `ConsoleLoggerRedact`,
   `ConsoleLoggerCall`, `ConsoleLoggerColor`.
-- `retry`, `RetryOptions`, `RetryPlugin`.
+- `retry`, `RetryOptions`, `RetryPlugin`, `RetryBudgetOptions`,
+  `RetryBudgetPlugin`.
 - `timeout`, `TimeoutOptions`, `TimeoutPlugin`, `TimeoutError`.
 
 Every export is documented, with an example, in the type declarations your

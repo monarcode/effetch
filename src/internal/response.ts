@@ -1,10 +1,13 @@
 import * as Effect from "effect/Effect";
+import type * as HttpClientError from "effect/http/HttpClientError";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 import { DecodeError, HttpError } from "../Errors.js";
 import type { AnySchema, StatusErrorMap } from "../Options.js";
 import { decodeJson } from "./json.js";
+import { bodyFormat } from "./output.js";
 import { decodeStatusError, statusErrorsFor } from "./statusErrors.js";
 import { errorUrl } from "./url.js";
 
@@ -118,12 +121,17 @@ export function checkStatus(
 }
 
 /**
- * Decodes a 2xx response body with `output`.
+ * Decodes a 2xx response body with `output`, reading it as `output`'s
+ * format (see `bodyFormat`): JSON by default, or text or bytes for schemas
+ * made by `Fetch.text` and `Fetch.bytes`.
  *
- * An empty or whitespace-only body (204, 205, HEAD, …) is decoded as JSON
- * `null`, which `Schema.Void`, `Schema.Undefined` and `Schema.NullOr`
- * accept. A JSON `null` body is therefore indistinguishable from an empty
- * one.
+ * An empty or whitespace-only JSON body (204, 205, HEAD, …) is decoded as
+ * JSON `null`, which `Schema.Void`, `Schema.Undefined` and
+ * `Schema.NullOr` accept. A JSON `null` body is therefore
+ * indistinguishable from an empty one. Read as text by `Fetch.text()`, an
+ * empty body is `""`. Read by `Fetch.text(schema)`, the text is trimmed,
+ * and an empty one fails, as for JSON. Read as bytes, it's a `Uint8Array`
+ * of length 0, a copy of the body.
  *
  * Fails with a `DecodeError` whose `issue` is:
  *
@@ -143,28 +151,64 @@ export const decodeOutput = <O extends AnySchema>(
 			issue,
 			message,
 		});
-	return Effect.gen(function* () {
-		const text = yield* Effect.mapError(response.text, (error) =>
-			failure(
-				error,
-				`Failed to read the response body: ${messageOf(error.cause ?? error)}`,
-			),
+	const unreadable = (error: HttpClientError.HttpClientError) =>
+		failure(
+			error,
+			`Failed to read the response body: ${messageOf(error.cause ?? error)}`,
 		);
-		const json = yield* Effect.try({
-			try: () => parseBody(text),
-			catch: (cause) =>
-				failure(
-					cause,
-					`The response body isn't valid JSON: ${messageOf(cause)}`,
-				),
-		});
-		return yield* Effect.mapError(decodeJson(output)(json ?? null), (error) =>
-			failure(
-				error.issue,
-				json === undefined
-					? `The response body is empty, but the output schema requires a value: ${error.message}`
-					: error.message,
-			),
+	const decodeWith = (value: unknown) =>
+		Effect.mapError(Schema.decodeUnknownEffect(output)(value), (error) =>
+			failure(error.issue, error.message),
 		);
-	});
+	switch (bodyFormat(output)) {
+		case "text":
+			return Effect.flatMap(
+				Effect.mapError(response.text, unreadable),
+				decodeWith,
+			);
+		case "textValue":
+			return Effect.flatMap(
+				Effect.mapError(response.text, unreadable),
+				(text) => {
+					const value = text.trim();
+					return value === ""
+						? Effect.fail(
+								failure(
+									new Error("Empty body"),
+									"The response body is empty, but the output schema requires a value",
+								),
+							)
+						: decodeWith(value);
+				},
+			);
+		case "bytes":
+			// A copy: the response keeps its own buffer, so changing or
+			// transferring the bytes doesn't change what it reads later.
+			return Effect.flatMap(
+				Effect.mapError(response.arrayBuffer, unreadable),
+				(buffer) => decodeWith(new Uint8Array(buffer.slice(0))),
+			);
+		case "json":
+			return Effect.gen(function* () {
+				const text = yield* Effect.mapError(response.text, unreadable);
+				const json = yield* Effect.try({
+					try: () => parseBody(text),
+					catch: (cause) =>
+						failure(
+							cause,
+							`The response body isn't valid JSON: ${messageOf(cause)}`,
+						),
+				});
+				return yield* Effect.mapError(
+					decodeJson(output)(json ?? null),
+					(error) =>
+						failure(
+							error.issue,
+							json === undefined
+								? `The response body is empty, but the output schema requires a value: ${error.message}`
+								: error.message,
+						),
+				);
+			});
+	}
 };

@@ -13,6 +13,7 @@ import type {
 	ParamsOption,
 	QueryInput,
 	QueryOf,
+	ResponseMode,
 	StatusError,
 	StatusErrorMap,
 	StatusErrorSchema,
@@ -107,7 +108,8 @@ type NoBodyRoute<R extends string> = [RouteMethod<R>] extends [
  * What an endpoint is defined with, besides its route. Everything is
  * optional.
  *
- * - `output`: decodes the 2xx JSON body. Without it, the endpoint succeeds
+ * - `output`: decodes the 2xx body, read as JSON, or as text or bytes with
+ *   `Fetch.text()` and `Fetch.bytes()`. Without it, the endpoint succeeds
  *   with the raw `HttpClientResponse`.
  * - `error`: decodes non-2xx bodies into `HttpError.body`, replacing the
  *   client's `defaultError`.
@@ -122,12 +124,15 @@ type NoBodyRoute<R extends string> = [RouteMethod<R>] extends [
  * - `plugins`: per-plugin overrides for every call, as in a call's
  *   `plugins` option. A call's own override for a plugin wins, and when
  *   both give options, they're merged.
+ * - `responseMode`: what every call succeeds with (see
+ *   {@link ResponseMode}). A call's own `responseMode` wins.
  *
  * - `R`: the route, for the method and the path.
  * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`O` and `I`
  *   are `undefined` when absent).
  * - `Ps`: the client's plugins.
  * - `SE`: the `statusErrors` map, or `undefined` without one.
+ * - `M`: the `responseMode`, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -160,8 +165,9 @@ export interface EndpointDefinition<
 	I extends AnySchema | undefined,
 	Ps extends ReadonlyArray<Plugin.Any>,
 	SE extends StatusErrorMap | undefined = undefined,
+	M extends ResponseMode | undefined = undefined,
 > {
-	/** Decodes the 2xx JSON body. Without it, calls return the raw response. */
+	/** Decodes the 2xx body. Without it, calls return the raw response. */
 	readonly output?: O;
 	/** Decodes non-2xx bodies into `HttpError.body`. Overrides the client's. */
 	readonly error?: EB | undefined;
@@ -176,6 +182,8 @@ export interface EndpointDefinition<
 	readonly headers?: Headers.Input | undefined;
 	/** Plugin overrides for every call. A call's own override wins. */
 	readonly plugins?: Plugin.Overrides<Ps> | undefined;
+	/** What every call succeeds with. A call's own `responseMode` wins. */
+	readonly responseMode?: M;
 }
 
 /**
@@ -209,10 +217,13 @@ export type EndpointBody<R extends string, I extends AnySchema | undefined> =
 /**
  * The options of one endpoint call: `params` for the route's path (see
  * {@link ParamsOption}), `body` (see {@link EndpointBody}), `query`,
- * `headers` and `plugins`. The schemas are fixed by the endpoint.
+ * `headers`, `plugins` and `responseMode`. The schemas are fixed by the
+ * endpoint.
  *
  * - `Q`: the type of `query`, checked with {@link QueryOf}. Defaults to
  *   {@link QueryInput}.
+ * - `M`: the call's {@link ResponseMode}, which wins over the endpoint's,
+ *   or `undefined` without one.
  *
  * @example
  * ```ts
@@ -232,11 +243,13 @@ export type EndpointOptions<
 	I extends AnySchema | undefined,
 	Ps extends ReadonlyArray<Plugin.Any>,
 	Q extends QueryOf<Q> = QueryInput,
+	M extends ResponseMode | undefined = undefined,
 > = ParamsOption<RoutePath<R>> &
 	EndpointBody<R, I> & {
 		readonly query?: Q | undefined;
 		readonly headers?: Headers.Input | undefined;
 		readonly plugins?: Plugin.Overrides<Ps> | undefined;
+		readonly responseMode?: M;
 	};
 
 /**
@@ -283,6 +296,8 @@ type Requirements<
  * - `Ps`: the client's plugins.
  * - `SE`: the `statusErrors` maps of the endpoint and the client, as a
  *   union, or `undefined` without any.
+ * - `M`: the endpoint's {@link ResponseMode}, or `undefined` without one.
+ *   A call's own `responseMode` wins.
  *
  * @example
  * ```ts
@@ -308,11 +323,16 @@ export interface Endpoint<
 	I extends AnySchema | undefined,
 	Ps extends ReadonlyArray<Plugin.Any>,
 	SE extends StatusErrorMap | undefined = undefined,
+	M extends ResponseMode | undefined = undefined,
 > {
-	<Q extends QueryOf<Q> = QueryInput>(
-		...args: EndpointArgs<R, I, EndpointOptions<R, I, Ps, Q>>
+	<
+		Q extends QueryOf<Q> = QueryInput,
+		CM extends ResponseMode | undefined = undefined,
+	>(
+		...args: EndpointArgs<R, I, EndpointOptions<R, I, Ps, Q, CM>>
 	): Effect.Effect<
-		Success<O>,
+		// The call's mode, else the endpoint's.
+		Success<O, NoInfer<CM extends undefined ? M : CM>>,
 		// CallError and CallServices, written out (see CallEffect)
 		| NetworkError
 		| HttpError.With<EB["Type"]>
@@ -347,6 +367,8 @@ export interface Endpoint<
 	};
 	/** The schema the body is encoded with, or `undefined` without `input`. */
 	readonly input: I;
+	/** What calls succeed with, or `undefined` for the decoded body alone. */
+	readonly responseMode: M;
 }
 
 /**
@@ -382,17 +404,19 @@ export interface EndpointMethod<
 		EB extends AnySchema = DefaultEB,
 		I extends AnySchema | undefined = undefined,
 		SE extends StatusErrorMap | undefined = undefined,
+		M extends ResponseMode | undefined = undefined,
 	>(
 		route: ValidRoute<R>,
-		definition?: EndpointDefinition<R, O, EB, I, Ps, SE>,
-	): Endpoint<R, O, EB, I, Ps, SE | ClientSE>;
+		definition?: EndpointDefinition<R, O, EB, I, Ps, SE, M>,
+	): Endpoint<R, O, EB, I, Ps, SE | ClientSE, M>;
 }
 
 /**
  * What {@link endpoint} defines an endpoint with, besides its route: an
  * {@link EndpointDefinition} without `plugins`. Everything is optional.
  *
- * - `output`: decodes the 2xx JSON body. Without it, the endpoint succeeds
+ * - `output`: decodes the 2xx body, read as JSON, or as text or bytes with
+ *   `Fetch.text()` and `Fetch.bytes()`. Without it, the endpoint succeeds
  *   with the raw `HttpClientResponse`.
  * - `error`: decodes non-2xx bodies into `HttpError.body`. Without it, the
  *   endpoint uses the `defaultError` of the client it's bound to.
@@ -405,6 +429,8 @@ export interface EndpointMethod<
  * - `headers`: sent with every call, over the client's headers. Headers
  *   given when binding, then a call's own, win over them. Unlike the
  *   client's headers, these can set `content-type`.
+ * - `responseMode`: what every call succeeds with (see
+ *   {@link ResponseMode}). A call's own `responseMode` wins.
  *
  * Plugin overrides are given when binding, in {@link BindOptions}: a
  * definition doesn't know which plugins a client has.
@@ -413,6 +439,7 @@ export interface EndpointMethod<
  * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`undefined`
  *   when absent).
  * - `SE`: the `statusErrors` map, or `undefined` without one.
+ * - `M`: the `responseMode`, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -442,8 +469,9 @@ export interface UnboundDefinition<
 	EB extends AnySchema | undefined,
 	I extends AnySchema | undefined,
 	SE extends StatusErrorMap | undefined = undefined,
+	M extends ResponseMode | undefined = undefined,
 > {
-	/** Decodes the 2xx JSON body. Without it, calls return the raw response. */
+	/** Decodes the 2xx body. Without it, calls return the raw response. */
 	readonly output?: O;
 	/** Decodes non-2xx bodies into `HttpError.body`. Without it, the client's `defaultError` does. */
 	readonly error?: EB;
@@ -456,6 +484,8 @@ export interface UnboundDefinition<
 	readonly input?: NoBodyRoute<R> extends true ? undefined : I;
 	/** Headers for every call, over the client's. Binding and call headers win. */
 	readonly headers?: Headers.Input | undefined;
+	/** What every call succeeds with. A call's own `responseMode` wins. */
+	readonly responseMode?: M;
 }
 
 /**
@@ -473,6 +503,7 @@ export interface UnboundDefinition<
  *   when absent; without `error`, the bound endpoint uses the client's
  *   `defaultError`).
  * - `SE`: the `statusErrors` map, or `undefined` without one.
+ * - `M`: the `responseMode`, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -497,6 +528,7 @@ export interface UnboundEndpoint<
 	EB extends AnySchema | undefined,
 	I extends AnySchema | undefined,
 	SE extends StatusErrorMap | undefined = undefined,
+	M extends ResponseMode | undefined = undefined,
 > {
 	/** The route the endpoint was defined with, such as `"GET /users/:id"`. */
 	readonly route: R;
@@ -520,6 +552,8 @@ export interface UnboundEndpoint<
 	readonly input: I;
 	/** The headers sent with every call, or `undefined` without any. */
 	readonly headers: Headers.Headers | undefined;
+	/** What calls succeed with, or `undefined` for the decoded body alone. */
+	readonly responseMode: M;
 }
 
 /**
@@ -587,8 +621,11 @@ export interface BindMethod<
 		EB extends AnySchema | undefined,
 		I extends AnySchema | undefined,
 		SE extends StatusErrorMap | undefined,
+		// No default: with one, a definition written inline in the call
+		// loses its mode's literal type.
+		M extends ResponseMode | undefined,
 	>(
-		definition: UnboundEndpoint<R, O, EB, I, SE>,
+		definition: UnboundEndpoint<R, O, EB, I, SE, M>,
 		options?: BindOptions<Ps>,
 	): Endpoint<
 		R,
@@ -596,7 +633,8 @@ export interface BindMethod<
 		EB extends AnySchema ? EB : DefaultEB,
 		I,
 		Ps,
-		SE | ClientSE
+		SE | ClientSE,
+		M
 	>;
 }
 
@@ -617,7 +655,14 @@ export interface BindMethod<
 // `any`: `UnboundEndpoint` is invariant in its schemas, so only `any`
 // accepts every definition.
 // oxlint-disable-next-line no-explicit-any
-export type AnyUnboundEndpoint = UnboundEndpoint<string, any, any, any, any>;
+export type AnyUnboundEndpoint = UnboundEndpoint<
+	string,
+	any,
+	any,
+	any,
+	any,
+	any
+>;
 
 /**
  * How `client.bindAll` and `Fetch.Endpoints` check one entry of a record of
@@ -710,14 +755,22 @@ export type BoundEndpoint<
 	ClientSE extends StatusErrorMap | undefined = undefined,
 > = D extends readonly [infer U, unknown]
 	? BoundEndpoint<U, Ps, DefaultEB, ClientSE>
-	: D extends UnboundEndpoint<infer R, infer O, infer EB, infer I, infer SE>
+	: D extends UnboundEndpoint<
+				infer R,
+				infer O,
+				infer EB,
+				infer I,
+				infer SE,
+				infer M
+		  >
 		? Endpoint<
 				R,
 				O,
 				EB extends AnySchema ? EB : DefaultEB,
 				I,
 				Ps,
-				SE | ClientSE
+				SE | ClientSE,
+				M
 			>
 		: never;
 
@@ -852,10 +905,11 @@ export function endpoint<
 	EB extends AnySchema | undefined = undefined,
 	I extends AnySchema | undefined = undefined,
 	SE extends StatusErrorMap | undefined = undefined,
+	M extends ResponseMode | undefined = undefined,
 >(
 	route: ValidRoute<R>,
-	definition?: UnboundDefinition<R, O, EB, I, SE>,
-): UnboundEndpoint<R, O, EB, I, SE>;
+	definition?: UnboundDefinition<R, O, EB, I, SE, M>,
+): UnboundEndpoint<R, O, EB, I, SE, M>;
 export function endpoint(
 	route: string,
 	definition?: RuntimeUnboundDefinition,

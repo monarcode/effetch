@@ -73,6 +73,7 @@ describe("Fetch.Endpoints", () => {
 					typeof listTodos.output,
 					undefined,
 					undefined,
+					undefined,
 					undefined
 				>
 			>

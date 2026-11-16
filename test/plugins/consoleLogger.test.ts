@@ -463,6 +463,34 @@ describe("consoleLogger", () => {
 	);
 
 	it.effect(
+		"reads the body with responseMode only when the call decoded it",
+		() =>
+			Effect.gen(function* () {
+				const out = captureConsole();
+				const { api } = yield* logged([
+					reply.text("streamed"),
+					reply.text("plain"),
+				]);
+				const [response, same] = yield* out.capture(
+					api.get("/raw", { responseMode: "decoded-and-response" }),
+				);
+				expect(same).toBe(response);
+				expect(yield* response.text).toBe("streamed");
+				const [text] = yield* out.capture(
+					api.get("/text", {
+						output: Fetch.text(),
+						responseMode: "decoded-and-response",
+					}),
+				);
+				expect(text).toBe("plain");
+				expect(out.details("response body")).toEqual([
+					"<not read: the call returns the response>",
+					"plain",
+				]);
+			}),
+	);
+
+	it.effect(
 		"shows the response a plugin failed on, with the plugin's error",
 		() =>
 			Effect.gen(function* () {

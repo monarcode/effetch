@@ -296,9 +296,13 @@ export declare namespace Plugin {
 
 	/**
 	 * The `onExit` hook: runs once per call, when it's over, with the call's
-	 * `Exit`. On success that holds the call's result (the decoded `output`,
-	 * or the response for a call without one); otherwise the cause of its
-	 * failure, defect or interruption. It sees the final outcome,
+	 * `Exit`. On success that holds the call's result: the decoded `output`,
+	 * or the response for a call without one, or, with
+	 * `responseMode: "decoded-and-response"`, a pair of that and the
+	 * response. Otherwise it holds the cause of its failure, defect or
+	 * interruption. To tell whether the body was read, compare the result,
+	 * or its first item, with `ctx.response`: a call returns the response
+	 * itself only when it didn't decode it. It sees the final outcome,
 	 * `statusErrors` and decoding included, which suits logging and metrics.
 	 *
 	 * It can't fail or change the outcome: if it dies, the defect is logged

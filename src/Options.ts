@@ -278,6 +278,41 @@ export type ParamsOption<P extends string> = string extends P
 		: { readonly params: PathParams<P> };
 
 /**
+ * What a call succeeds with, besides the decoded body:
+ *
+ * - `"decoded"` (the default): the decoded body, or the raw response
+ *   without an `output` schema.
+ * - `"decoded-and-response"`: a pair of the decoded body and the
+ *   response, to read its status and headers too. Without an `output`
+ *   schema, the first item is the response as well.
+ *
+ * The response's body has already been read: use the decoded value.
+ *
+ * @example
+ * ```ts
+ * import * as Effect from "effect/Effect";
+ * import * as Schema from "effect/Schema";
+ * import * as Fetch from "@monarcode/effetch";
+ *
+ * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+ *
+ * const mode: Fetch.ResponseMode = "decoded-and-response";
+ *
+ * const page = (api: Fetch.Client) =>
+ *   Effect.gen(function* () {
+ *     const [todos, response] = yield* api.get("/todos", {
+ *       output: Schema.Array(Todo),
+ *       responseMode: mode,
+ *     });
+ *     return { todos, total: Number(response.headers["x-total-count"]) };
+ *   });
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type ResponseMode = "decoded" | "decoded-and-response";
+
+/**
  * Options shared by every method.
  *
  * - `O`: the `output` schema, or `undefined` for the raw response.
@@ -286,6 +321,7 @@ export type ParamsOption<P extends string> = string extends P
  * - `Q`: the type of `query`, checked with {@link QueryOf}. Defaults to
  *   {@link QueryInput}.
  * - `SE`: the call's `statusErrors` map, or `undefined` without one.
+ * - `M`: the call's {@link ResponseMode}, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -309,23 +345,33 @@ export interface BaseOptions<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	Q extends QueryOf<Q> = QueryInput,
 	SE extends StatusErrorMap | undefined = undefined,
+	M extends ResponseMode | undefined = undefined,
 > {
 	/** Query parameters. Arrays repeat the key; `null`/`undefined` are dropped. */
 	readonly query?: Q | undefined;
 	/** Headers for this call, merged over the client's headers. */
 	readonly headers?: Headers.Input | undefined;
 	/**
-	 * Decodes the 2xx JSON body with this schema. Without it, the call
-	 * succeeds with the raw `HttpClientResponse`.
+	 * Decodes the 2xx body with this schema. Without it, the call succeeds
+	 * with the raw `HttpClientResponse`.
 	 *
-	 * With an `output`, the request carries `Accept: application/json`,
-	 * unless an `accept` header is set on the call or the client.
+	 * The body is read as JSON, or as text with `Fetch.text()` and as bytes
+	 * with `Fetch.bytes()`. The request carries a matching `Accept` header,
+	 * such as `application/json`, unless an `accept` header is set on the
+	 * call or the client.
 	 *
-	 * An empty body (204, HEAD, …) is decoded as JSON `null`: use
+	 * An empty JSON body (204, HEAD, …) is decoded as `null`: use
 	 * `Schema.Void` for endpoints that return nothing. Non-2xx responses,
 	 * 3xx included, fail with an `HttpError` before this runs.
 	 */
 	readonly output?: O;
+	/**
+	 * `"decoded-and-response"` makes the call succeed with a pair of the
+	 * decoded body and the response, for its status and headers. Defaults
+	 * to `"decoded"`: the decoded body alone. See {@link ResponseMode}.
+	 */
+	// No `| undefined`, as for `statusErrors`: `M` already allows it.
+	readonly responseMode?: M;
 	/** Decodes non-2xx bodies into `HttpError.body`. Overrides the client's. */
 	readonly error?: EB | undefined;
 	/**
@@ -402,8 +448,9 @@ export type NoBodyRequestOptions<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	Q extends QueryOf<Q> = QueryInput,
 	SE extends StatusErrorMap | undefined = undefined,
+	M extends ResponseMode | undefined = undefined,
 > = ParamsOption<P> &
-	BaseOptions<O, EB, Ps, Q, SE> & {
+	BaseOptions<O, EB, Ps, Q, SE, M> & {
 		readonly body?: undefined;
 		readonly input?: undefined;
 	};
@@ -433,7 +480,8 @@ export type RequestOptions<
 	Ps extends ReadonlyArray<Plugin.Any>,
 	Q extends QueryOf<Q> = QueryInput,
 	SE extends StatusErrorMap | undefined = undefined,
-> = ParamsOption<P> & BaseOptions<O, EB, Ps, Q, SE> & BodyOptions<I>;
+	M extends ResponseMode | undefined = undefined,
+> = ParamsOption<P> & BaseOptions<O, EB, Ps, Q, SE, M> & BodyOptions<I>;
 
 /**
  * The rest arguments after the path: the options object `T` is required
@@ -459,6 +507,10 @@ export type Args<P extends string, T> = [PathParamNames<P>] extends [never]
  * What a call succeeds with: the `output` schema's type, or the raw
  * `HttpClientResponse` without one. A conditional `output` gives the union.
  *
+ * With `M` set to `"decoded-and-response"` (see {@link ResponseMode}), it's
+ * a pair of that and the response. `M` defaults to `undefined`, the
+ * decoded body alone.
+ *
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
@@ -466,13 +518,28 @@ export type Args<P extends string, T> = [PathParamNames<P>] extends [never]
  *
  * type Todo = Fetch.Success<Schema.Struct<{ id: Schema.Finite }>>;
  * //   ^? { readonly id: number }
+ * type WithResponse = Fetch.Success<
+ *   Schema.Struct<{ id: Schema.Finite }>,
+ *   "decoded-and-response"
+ * >;
+ * //   ^? readonly [value: { readonly id: number }, response: HttpClientResponse]
  * ```
  *
  * @since 0.1.0
  */
-export type Success<O extends AnySchema | undefined> = O extends AnySchema
-	? O["Type"]
-	: HttpClientResponse.HttpClientResponse;
+export type Success<
+	O extends AnySchema | undefined,
+	M extends ResponseMode | undefined = undefined,
+> = M extends "decoded-and-response"
+	? readonly [
+			value: O extends AnySchema
+				? O["Type"]
+				: HttpClientResponse.HttpClientResponse,
+			response: HttpClientResponse.HttpClientResponse,
+		]
+	: O extends AnySchema
+		? O["Type"]
+		: HttpClientResponse.HttpClientResponse;
 
 /**
  * What a call can fail with: `NetworkError`, `HttpError` (with `body`
@@ -554,6 +621,8 @@ export type CallServices<
  * - `Ps`: the client's plugins.
  * - `SE`: the `statusErrors` maps of the call, the endpoint and the client,
  *   as a union. `undefined` (the default) when there are none.
+ * - `M`: the {@link ResponseMode}, or `undefined` (the default) for the
+ *   decoded body alone.
  *
  * Use it to type functions that return a call. To take a call as an
  * argument, accept any `Effect.Effect<A, E, R>`: TypeScript can't infer
@@ -581,8 +650,9 @@ export type CallEffect<
 	I extends AnySchema | undefined,
 	Ps extends ReadonlyArray<Plugin.Any>,
 	SE extends StatusErrorMap | undefined = undefined,
+	M extends ResponseMode | undefined = undefined,
 > = Effect.Effect<
-	Success<O>,
+	Success<O, M>,
 	// CallError and CallServices, written out: through the aliases, editors
 	// print `CallError<…>` rather than the members. The method and endpoint
 	// signatures spell them out the same way.
@@ -629,11 +699,12 @@ export interface NoBodyMethod<
 		EB extends AnySchema = DefaultEB,
 		Q extends QueryOf<Q> = QueryInput,
 		SE extends StatusErrorMap | undefined = undefined,
+		M extends ResponseMode | undefined = undefined,
 	>(
 		path: P,
-		...args: Args<P, NoBodyRequestOptions<P, O, EB, Ps, Q, SE>>
+		...args: Args<P, NoBodyRequestOptions<P, O, EB, Ps, Q, SE, M>>
 	): Effect.Effect<
-		Success<O>,
+		Success<O, NoInfer<M>>,
 		// CallError and CallServices, written out (see CallEffect)
 		| NetworkError
 		| HttpError.With<EB["Type"]>
@@ -686,11 +757,12 @@ export interface BodyMethod<
 		I extends AnySchema = Schema.Unknown,
 		Q extends QueryOf<Q> = QueryInput,
 		SE extends StatusErrorMap | undefined = undefined,
+		M extends ResponseMode | undefined = undefined,
 	>(
 		path: P,
-		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q, SE>>
+		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q, SE, M>>
 	): Effect.Effect<
-		Success<O>,
+		Success<O, NoInfer<M>>,
 		// CallError and CallServices, written out (see CallEffect)
 		| NetworkError
 		| HttpError.With<EB["Type"]>
@@ -744,12 +816,13 @@ export interface RequestMethod<
 		I extends AnySchema = Schema.Unknown,
 		Q extends QueryOf<Q> = QueryInput,
 		SE extends StatusErrorMap | undefined = undefined,
+		M extends ResponseMode | undefined = undefined,
 	>(
 		method: HttpMethod.HttpMethod,
 		path: P,
-		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q, SE>>
+		...args: Args<P, RequestOptions<P, O, EB, I, Ps, Q, SE, M>>
 	): Effect.Effect<
-		Success<O>,
+		Success<O, NoInfer<M>>,
 		// CallError and CallServices, written out (see CallEffect)
 		| NetworkError
 		| HttpError.With<EB["Type"]>

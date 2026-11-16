@@ -816,6 +816,17 @@ const contentLengthOf = (
 };
 
 /**
+ * Whether a call's success `value` is `response` with its body unread: a
+ * call without `output` returns it, alone or, with
+ * `responseMode: "decoded-and-response"`, as both items of the pair.
+ */
+const returnsUnread = (
+	value: unknown,
+	response: HttpClientResponse.HttpClientResponse,
+): boolean =>
+	value === response || (Array.isArray(value) && value[0] === response);
+
+/**
  * Reads the response body to print it. The body is only read when it's
  * text and the call didn't return the response itself (a call without
  * `output`, whose caller may stream it). Effect caches it, so effetch
@@ -836,7 +847,7 @@ const readResponseBody = (
 	) {
 		return Effect.succeed({ shown: undefined, bytes: undefined });
 	}
-	if (Exit.isSuccess(exit) && exit.value === response) {
+	if (Exit.isSuccess(exit) && returnsUnread(exit.value, response)) {
 		return Effect.succeed({
 			shown: "<not read: the call returns the response>",
 			bytes: undefined,

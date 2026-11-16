@@ -47,12 +47,15 @@ export type {
 	QueryValue,
 	RequestMethod,
 	RequestOptions,
+	ResponseMode,
 	StatusError,
 	StatusErrorMap,
 	StatusErrorSchema,
 	StatusErrorServices,
 	Success,
 } from "./Options.js";
+export { bytes, text } from "./Output.js";
+export type { BytesSchema, TextSchema } from "./Output.js";
 export type { PathParamNames, PathParams, PathParamValue } from "./Path.js";
 export { Endpoints } from "./Endpoints.js";
 export type { EndpointsClass } from "./Endpoints.js";
