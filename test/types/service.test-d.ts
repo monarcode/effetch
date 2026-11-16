@@ -13,6 +13,7 @@ import * as Schema from "effect/Schema";
 import { describe, expectTypeOf, it } from "vitest";
 
 import * as Fetch from "../../src/index.js";
+import { retry, timeout } from "../../src/plugins/index.js";
 
 const ApiError = Schema.Struct({ code: Schema.String });
 class NotFound extends Schema.TaggedError<NotFound>()("NotFound", {}) {}
@@ -182,5 +183,27 @@ describe("isService", () => {
 		expectTypeOf(check).toBeFunction();
 		expectTypeOf(Api).toExtend<Fetch.ServiceClass.Any>();
 		expectTypeOf(Bare).toExtend<Fetch.ServiceClass.Any>();
+	});
+});
+
+describe("a client from another", () => {
+	it("keeps the client's type when the config is spread", () => {
+		class Gone extends Schema.TaggedError<Gone>()("Gone", {
+			message: Schema.String,
+		}) {}
+		class V1 extends Fetch.Service<V1>()("types/service/V1", {
+			baseUrl: "https://api.test/v1",
+			defaultError: Schema.Struct({ code: Schema.String }),
+			statusErrors: { 410: Gone },
+			plugins: [retry(), timeout({ duration: "5 seconds" })],
+		}) {}
+		class V2 extends Fetch.Service<V2>()("types/service/V2", {
+			...V1.config,
+			baseUrl: "https://api.test/v2",
+		}) {}
+		expectTypeOf<Effect.Success<typeof V2>>().toEqualTypeOf<
+			Effect.Success<typeof V1>
+		>();
+		expectTypeOf<Layer.Success<typeof V2.layer>>().toEqualTypeOf<V2>();
 	});
 });

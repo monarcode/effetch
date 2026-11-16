@@ -322,7 +322,8 @@ describe("api.sse", () => {
 				"api.sse: responseMode can't be used with a stream, which gives the body's values",
 			);
 			const withBytes = yield* defectOf(
-				collect(api.ndjson("/rows", { output: Fetch.bytes() })),
+				// Rejected by the types too.
+				collect(api.ndjson("/rows", { output: Fetch.bytes() as never })),
 			);
 			expect(withBytes).toContain(
 				"api.ndjson: Fetch.bytes() can't decode a stream's values",
@@ -636,13 +637,16 @@ describe("stream endpoints", () => {
 		expect(() =>
 			Fetch.endpoint("GET /x", {
 				stream: "sse",
-				responseMode: "decoded-and-response",
+				responseMode: "decoded-and-response" as never,
 			}),
 		).toThrow(
 			"The endpoint GET /x: responseMode can't be used with a stream",
 		);
 		expect(() =>
-			Fetch.endpoint("GET /x", { stream: "ndjson", output: Fetch.bytes() }),
+			Fetch.endpoint("GET /x", {
+				stream: "ndjson",
+				output: Fetch.bytes() as never,
+			}),
 		).toThrow("The endpoint GET /x: Fetch.bytes() can't decode");
 	});
 
@@ -878,6 +882,40 @@ describe("Fetch.paginate", () => {
 				);
 			}).pipe(Effect.provide(linked));
 			expect(items).toEqual([[{ id: 1 }], [{ id: 2 }]]);
+		}),
+	);
+
+	it.effect("keeps the endpoint's responseMode", () =>
+		Effect.gen(function* () {
+			const listPairs = Fetch.endpoint("GET /pairs", {
+				output: Schema.Array(Todo),
+				responseMode: "decoded-and-response",
+			});
+			const seen: Array<unknown> = [];
+			const pages = yield* Effect.gen(function* () {
+				const api = yield* Fetch.make({ baseUrl: base });
+				return yield* collect(
+					Fetch.paginate(api.bind(listPairs), {
+						start: 1,
+						// Not allowed by the types; ignored if given anyway.
+						request: () => ({ responseMode: "decoded" }) as never,
+						next: (page, _, response) => {
+							seen.push(response.status);
+							return Option.none();
+						},
+					}),
+				);
+			}).pipe(
+				Effect.provide(
+					FetchTest.layer([
+						FetchTest.respond(listPairs, () =>
+							Effect.succeed([{ id: 1 }, { id: 2 }]),
+						),
+					]),
+				),
+			);
+			expect(pages).toEqual([[{ id: 1 }, { id: 2 }]]);
+			expect(seen).toEqual([200]);
 		}),
 	);
 

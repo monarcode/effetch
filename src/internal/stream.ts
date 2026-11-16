@@ -11,7 +11,7 @@ import { decodeJson } from "./json.js";
 import { messageOf } from "./message.js";
 import { bodyFormat } from "./output.js";
 import type { RuntimeOptions } from "./request.js";
-import { type BodyFailures, bodyFailures } from "./response.js";
+import { type BodyFailures, bodyFailures, decodeText } from "./response.js";
 
 /** The `Accept` header a stream sends, unless one is set. */
 export const streamAccept = (format: StreamFormat): string =>
@@ -68,31 +68,11 @@ const decodeValue = (
 			error.issue,
 			`${what} doesn't match the output schema: ${error.message}`,
 		);
-	switch (bodyFormat(output)) {
-		case "text":
-			return Effect.mapError(
-				Schema.decodeUnknownEffect(output)(text),
-				mismatch,
-			);
-		case "textValue": {
-			const value = text.trim();
-			return value === ""
-				? Effect.fail(
-						failure(
-							new Error("Empty value"),
-							`${what} is empty, but the output schema requires a value`,
-						),
-					)
-				: Effect.mapError(
-						Schema.decodeUnknownEffect(output)(value),
-						mismatch,
-					);
-		}
-		default:
-			return Effect.flatMap(parseJson(text, failure, what), (json) =>
+	return bodyFormat(output) === "json"
+		? Effect.flatMap(parseJson(text, failure, what), (json) =>
 				Effect.mapError(decodeJson(output)(json), mismatch),
-			);
-	}
+			)
+		: decodeText(output, text, failure, what, mismatch);
 };
 
 /** `text` parsed as JSON, or a `DecodeError` naming `what`. */

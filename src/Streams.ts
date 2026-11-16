@@ -15,6 +15,7 @@ import type {
 	StatusErrorMap,
 	StatusErrorServices,
 } from "./Options.js";
+import type { BytesSchema } from "./Output.js";
 import type { Plugin } from "./Plugin.js";
 
 /**
@@ -37,7 +38,8 @@ import type { Plugin } from "./Plugin.js";
 export type StreamFormat = "sse" | "ndjson";
 
 /**
- * One Server-Sent Event, as `api.sse` and SSE endpoints give it.
+ * One Server-Sent Event, as `api.sse` and SSE endpoints give it (see
+ * {@link StreamElement}).
  *
  * - `event`: the event's name, `"message"` when the server sends none.
  * - `id`: the last event ID the server sent, which carries over to the
@@ -112,7 +114,7 @@ export type StreamElement<
  *
  * - `method`: the request's method. Defaults to `"GET"`. Streaming APIs
  *   that take a request body, such as those of language models, use
- *   `"POST"`. A `GET` or `HEAD` request takes no `body` or `input`.
+ *   `"POST"`. `GET`, `HEAD`, `OPTIONS` and `TRACE` take no `body` or `input`.
  * - `output`: decodes each value (see {@link StreamElement}). `Fetch.text()`
  *   gives each value's text; `Fetch.bytes()` can't be used.
  * - `params`, `query`, `headers`, `body`, `input`, `error`, `statusErrors`
@@ -148,11 +150,11 @@ export type StreamOptions<
 	M extends HttpMethod.HttpMethod = HttpMethod.HttpMethod,
 > = ParamsOption<P> &
 	Omit<BaseOptions<O, EB, Ps, Q, SE>, "responseMode"> &
-	([M] extends ["GET" | "HEAD"]
+	([M] extends [HttpMethod.HttpMethod.NoBody]
 		? {
-				/** A `GET` or `HEAD` request has no body. */
+				/** This method takes no body. */
 				readonly body?: undefined;
-				/** A `GET` or `HEAD` request has no body. */
+				/** This method takes no body. */
 				readonly input?: undefined;
 			}
 		: BodyOptions<I>) & {
@@ -160,11 +162,17 @@ export type StreamOptions<
 		readonly method?: M | undefined;
 		/** Can't be used with a stream. */
 		readonly responseMode?: undefined;
-	};
+	} & ([O] extends [BytesSchema]
+		? {
+				/** `Fetch.bytes()` can't decode a stream's values. */
+				readonly output?: never;
+			}
+		: {});
 
 /**
  * The signature of `api.sse` and `api.ndjson`: sends a request, and gives
- * its response body as a `Stream` of values in format `St`.
+ * its response body as a `Stream` of values in format `St`, each a
+ * {@link StreamElement}. It takes {@link StreamOptions}.
  *
  * - `St`: the {@link StreamFormat}.
  * - `Ps`: the client's plugins.

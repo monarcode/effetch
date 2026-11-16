@@ -38,7 +38,8 @@ export type CaughtStatus<S extends number | ReadonlyArray<number>> =
  * - It works on any Effect whose errors include `HttpError`: calls,
  *   endpoints, and Effects built on them.
  *
- * Use `statusErrors` instead when a status means the same domain error
+ * For a `404` that means "not found", {@link optional} gives an `Option`
+ * instead. Use `statusErrors` when a status means the same domain error
  * for every caller. A status that `statusErrors` maps never reaches
  * `catchStatus`: the call fails with the mapped error, not an
  * `HttpError`.
@@ -100,7 +101,7 @@ export const catchStatus: {
  * one call: the call succeeds with an `Option` of its value. Other errors,
  * `HttpError`s with other statuses included, pass through.
  *
- * It's `catchStatus(404, …)` for the common case of a resource that may not
+ * It's {@link catchStatus}`(404, …)` for the common case of a resource that may not
  * exist. As there, a `404` that `statusErrors` maps fails with the mapped
  * error, and doesn't give `Option.none()`.
  *

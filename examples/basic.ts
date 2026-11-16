@@ -47,11 +47,11 @@ export const program = Effect.gen(function* () {
 
 	return todos.length;
 }).pipe(
+	// A 404 is handled on its own; any other error status is caught below.
+	Fetch.catchStatus(404, () => Effect.succeed(0)),
 	Effect.catchTags({
 		HttpError: (error) =>
-			error.status === 404
-				? Effect.succeed(0)
-				: Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
+			Effect.fail(error.body?.message ?? `HTTP ${error.status}`),
 		NetworkError: () => Effect.fail("You appear to be offline"),
 		DecodeError: (error) =>
 			Effect.fail(`Unexpected response: ${error.message}`),

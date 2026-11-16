@@ -2,7 +2,8 @@
  * A typed fake backend for tests: an `HttpClient` layer that answers
  * requests with handlers made from your endpoints, and records what it
  * received. Start with `FetchTest.layer`, `FetchTest.respond` and
- * `FetchTest.fail`.
+ * `FetchTest.fail`. Handlers answer stream endpoints too, with a list of
+ * events or values.
  *
  * @example
  * ```ts

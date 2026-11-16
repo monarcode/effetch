@@ -39,6 +39,8 @@ export type TextSchema = Schema.Top & { readonly Encoded: string };
  *   with a `DecodeError`, as for JSON.
  * - It works wherever `output` does: on calls, `client.endpoint` and
  *   `Fetch.endpoint`. `error` and `statusErrors` still read JSON.
+ * - In a stream (`api.sse`, `api.ndjson` or a `stream` endpoint), it
+ *   gives each event's data, or each line, as text.
  * - Pass the schema it returns to `output` as it is, or with more checks
  *   or annotations. A schema built around it, such as with
  *   `Schema.NullOr` or `Schema.decodeTo`, is read as JSON again.
@@ -139,8 +141,9 @@ const Bytes = Schema.instanceOf(globalThis.Uint8Array<ArrayBuffer>, {
  *   the response reads later.
  * - A body that can't be read fails the call with a `DecodeError`, as for
  *   JSON.
- * - It works wherever `output` does: on calls, `client.endpoint` and
- *   `Fetch.endpoint`. `error` and `statusErrors` still read JSON.
+ * - It works wherever `output` does, except in a stream (`api.sse`,
+ *   `api.ndjson` or a `stream` endpoint), which can't take it. `error`
+ *   and `statusErrors` still read JSON.
  * - Pass the schema it returns to `output` as it is. A schema built around
  *   it is read as JSON again.
  *

@@ -206,6 +206,9 @@ const afterHeader = (
  * `timeout` and `bearer`, so each attempt gets its own time limit and a
  * fresh token.
  *
+ * For a stream (`api.sse`, `api.ndjson` or a `stream` endpoint), it
+ * retries getting the response, not a body that breaks off later.
+ *
  * With `retryAfter`, a retried response that says how long to wait
  * (`Retry-After: 120`, or an HTTP date) is retried after that long,
  * capped, rather than after the schedule's delay.
@@ -273,6 +276,26 @@ export function retry(
  * @since 0.1.0
  */
 export function retry(options: RetryBudgetOptions): RetryBudgetPlugin;
+/**
+ * Retries a call that failed with a `NetworkError` or got a retryable
+ * status, as the first signature does. It's repeated last so that
+ * `ReturnType<typeof retry>` is {@link RetryPlugin}, as it was before
+ * `budget`.
+ *
+ * @example
+ * ```ts
+ * import { retry } from "@monarcode/effetch/plugins";
+ *
+ * type Retry = ReturnType<typeof retry>;
+ * //   ^? RetryPlugin
+ * export const plugin: Retry = retry();
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function retry(
+	options?: RetryOptions & { readonly budget?: undefined },
+): RetryPlugin;
 export function retry(
 	options: RetryOptions & {
 		readonly budget?: Duration.Input | undefined;

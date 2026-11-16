@@ -152,6 +152,36 @@ export const bodyFailures = (
 };
 
 /**
+ * Decodes `text` with an `output` made by `Fetch.text`: as it is with
+ * `Fetch.text()`, or trimmed with `Fetch.text(schema)`, which fails on an
+ * empty text, naming it `what` (such as `"The response body"`). `mismatch`
+ * makes the error for a text the schema doesn't accept. Shared by response
+ * bodies and stream values, so both follow the same rules.
+ */
+export const decodeText = (
+	output: AnySchema,
+	text: string,
+	failure: BodyFailures["failure"],
+	what: string,
+	mismatch: (error: Schema.SchemaError) => DecodeError,
+): Effect.Effect<unknown, DecodeError, unknown> => {
+	const decode = (value: string) =>
+		Effect.mapError(Schema.decodeUnknownEffect(output)(value), mismatch);
+	if (bodyFormat(output) !== "textValue") {
+		return decode(text);
+	}
+	const value = text.trim();
+	return value === ""
+		? Effect.fail(
+				failure(
+					new Error(`${what} is empty`),
+					`${what} is empty, but the output schema requires a value`,
+				),
+			)
+		: decode(value);
+};
+
+/**
  * Decodes a 2xx response body with `output`, reading it as `output`'s
  * format (see `bodyFormat`): JSON by default, or text or bytes for schemas
  * made by `Fetch.text` and `Fetch.bytes`.
@@ -181,24 +211,13 @@ export const decodeOutput = <O extends AnySchema>(
 		);
 	switch (bodyFormat(output)) {
 		case "text":
-			return Effect.flatMap(
-				Effect.mapError(response.text, unreadable),
-				decodeWith,
-			);
 		case "textValue":
 			return Effect.flatMap(
 				Effect.mapError(response.text, unreadable),
-				(text) => {
-					const value = text.trim();
-					return value === ""
-						? Effect.fail(
-								failure(
-									new Error("Empty body"),
-									"The response body is empty, but the output schema requires a value",
-								),
-							)
-						: decodeWith(value);
-				},
+				(text) =>
+					decodeText(output, text, failure, "The response body", (error) =>
+						failure(error.issue, error.message),
+					),
 			);
 		case "bytes":
 			// A copy: the response keeps its own buffer, so changing or

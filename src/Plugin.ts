@@ -107,6 +107,10 @@ export interface PluginContext<Opts> {
  *   until the status was checked and the body decoded. Retries made by a
  *   plugin's `wrap` are included.
  *
+ * For a stream (`api.sse`, `api.ndjson` or a `stream` endpoint), the call
+ * ends when the response's headers arrive: `onExit` runs then, and doesn't
+ * see the body being read, or a `DecodeError` while it's read.
+ *
  * `route` is always set, as `onExit` doesn't run for requests sent through
  * `client.httpClient`.
  *
@@ -152,8 +156,8 @@ export interface PluginExitContext<Opts> extends PluginContext<Opts> {
  * - `onError` observes any failure of the call (after status check and
  *   decoding) and can't change the outcome.
  * - `onExit` observes the end of every call, success included, with its
- *   outcome, its response and how long it took. It can't change the
- *   outcome either.
+ *   outcome, its response and how long it took (see
+ *   {@link PluginExitContext}). It can't change the outcome either.
  * - `wrap` wraps the rest of the chain, for retries, timeouts and the like.
  *   It can add errors (`E`) but can't remove the ones from further in.
  *

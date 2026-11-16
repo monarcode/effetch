@@ -21,6 +21,7 @@ import type {
 	StatusErrorServices,
 	Success,
 } from "./Options.js";
+import type { BytesSchema } from "./Output.js";
 import type { Plugin } from "./Plugin.js";
 import type { StreamElement, StreamFormat } from "./Streams.js";
 
@@ -99,6 +100,22 @@ export type RouteMethod<R extends string> =
 export type RoutePath<R extends string> =
 	R extends `${HttpMethod.HttpMethod} ${infer P}` ? P : never;
 
+/**
+ * What a definition with `stream` can't have, as defining it throws: a
+ * `responseMode`, or a `Fetch.bytes()` output.
+ */
+type StreamDefinitionCheck<O, St> = [St] extends [StreamFormat]
+	? {
+			/** A stream gives the body's values: it can't take a `responseMode`. */
+			readonly responseMode?: undefined;
+		} & ([O] extends [BytesSchema]
+			? {
+					/** `Fetch.bytes()` can't decode a stream's values. */
+					readonly output?: never;
+				}
+			: {})
+	: {};
+
 /** True when route `R`'s method never carries a body (Effect's `NoBody`). */
 type NoBodyRoute<R extends string> = [RouteMethod<R>] extends [
 	HttpMethod.HttpMethod.NoBody,
@@ -130,6 +147,8 @@ type NoBodyRoute<R extends string> = [RouteMethod<R>] extends [
  *   {@link ResponseMode}). A call's own `responseMode` wins.
  * - `query`: a schema for the query parameters (see {@link QuerySchema}).
  *   Each call's `query` is then typed by it, and encoded with it.
+ * - `stream`: `"sse"` or `"ndjson"` makes every call return a `Stream` of
+ *   the body's values (see {@link StreamFormat}).
  *
  * - `R`: the route, for the method and the path.
  * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`O` and `I`
@@ -138,6 +157,7 @@ type NoBodyRoute<R extends string> = [RouteMethod<R>] extends [
  * - `SE`: the `statusErrors` map, or `undefined` without one.
  * - `M`: the `responseMode`, or `undefined` without one.
  * - `QS`: the `query` schema, or `undefined` without one.
+ * - `St`: the `stream` format, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -198,8 +218,10 @@ export interface EndpointDefinition<
 	readonly query?: QS;
 	/**
 	 * Makes every call a `Stream` of the response body's values, as
-	 * `api.sse` or `api.ndjson` gives (see {@link StreamFormat}), and
-	 * `output` decode each value. Can't be used with `responseMode`.
+	 * `api.sse` or `api.ndjson` gives them (see {@link StreamFormat} and
+	 * {@link StreamElement}), with `output` decoding each value. Can't be
+	 * used with `responseMode` or a `Fetch.bytes()` output: defining such
+	 * an endpoint throws.
 	 *
 	 * @stability unstable: SSE is parsed with Effect's `encoding/Sse`,
 	 * which Effect marks unstable.
@@ -393,12 +415,14 @@ export type EndpointUrlArgs<
 /**
  * An endpoint made by `client.endpoint` or `client.bind`: a function that
  * sends its request with the options of one call, and returns the same
- * Effect as the equivalent client method.
+ * Effect as the equivalent client method. With `stream`, it returns a
+ * `Stream` of the body's values instead, as `api.sse` and `api.ndjson`
+ * do. To page through a list endpoint, pass it to `Fetch.paginate`.
  *
  * It also carries its `route`, `method` and `path`, for things like log
  * labels and cache keys, and its `output`, `error`, `statusErrors` and
  * `input` schemas, for things like decoding cached data or building test
- * fixtures.
+ * fixtures. `url(options)` gives the URL a call would send to.
  *
  * - `R`: the route, such as `"GET /users/:id"`.
  * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`O` and `I`
@@ -409,6 +433,7 @@ export type EndpointUrlArgs<
  * - `M`: the endpoint's {@link ResponseMode}, or `undefined` without one.
  *   A call's own `responseMode` wins.
  * - `QS`: the endpoint's `query` schema, or `undefined` without one.
+ * - `St`: the endpoint's {@link StreamFormat}, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -564,7 +589,8 @@ export interface EndpointMethod<
 		St extends StreamFormat | undefined = undefined,
 	>(
 		route: ValidRoute<R>,
-		definition?: EndpointDefinition<R, O, EB, I, Ps, SE, M, QS, St>,
+		definition?: EndpointDefinition<R, O, EB, I, Ps, SE, M, QS, St> &
+			StreamDefinitionCheck<O, St>,
 	): Endpoint<R, O, EB, I, Ps, SE | ClientSE, M, QS, St>;
 }
 
@@ -590,6 +616,8 @@ export interface EndpointMethod<
  *   {@link ResponseMode}). A call's own `responseMode` wins.
  * - `query`: a schema for the query parameters (see {@link QuerySchema}).
  *   Each call's `query` is then typed by it, and encoded with it.
+ * - `stream`: `"sse"` or `"ndjson"` makes every call return a `Stream` of
+ *   the body's values (see {@link StreamFormat}).
  *
  * Plugin overrides are given when binding, in {@link BindOptions}: a
  * definition doesn't know which plugins a client has.
@@ -600,6 +628,7 @@ export interface EndpointMethod<
  * - `SE`: the `statusErrors` map, or `undefined` without one.
  * - `M`: the `responseMode`, or `undefined` without one.
  * - `QS`: the `query` schema, or `undefined` without one.
+ * - `St`: the `stream` format, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -655,8 +684,10 @@ export interface UnboundDefinition<
 	readonly query?: QS;
 	/**
 	 * Makes every call a `Stream` of the response body's values, as
-	 * `api.sse` or `api.ndjson` gives (see {@link StreamFormat}), and
-	 * `output` decode each value. Can't be used with `responseMode`.
+	 * `api.sse` or `api.ndjson` gives them (see {@link StreamFormat} and
+	 * {@link StreamElement}), with `output` decoding each value. Can't be
+	 * used with `responseMode` or a `Fetch.bytes()` output: defining such
+	 * an endpoint throws.
 	 *
 	 * @stability unstable: SSE is parsed with Effect's `encoding/Sse`,
 	 * which Effect marks unstable.
@@ -681,6 +712,7 @@ export interface UnboundDefinition<
  * - `SE`: the `statusErrors` map, or `undefined` without one.
  * - `M`: the `responseMode`, or `undefined` without one.
  * - `QS`: the `query` schema, or `undefined` without one.
+ * - `St`: the `stream` format, or `undefined` without one.
  *
  * @example
  * ```ts
@@ -1076,6 +1108,10 @@ export interface BindAllMethod<
  * - With a `query` schema (see {@link QuerySchema}), each call's `query` is
  *   typed and encoded by it, and required when the schema has required
  *   fields.
+ * - With `stream: "sse"` or `stream: "ndjson"`, each call of the bound
+ *   endpoint returns a `Stream` of the body's values. A `stream` that
+ *   isn't one of those, or that comes with `responseMode` or a
+ *   `Fetch.bytes()` output, throws here.
  * - Plugin overrides are given when binding: a definition doesn't know
  *   which plugins a client has.
  * - `definition.url(options)` builds the URL a call would go to, without
@@ -1086,7 +1122,9 @@ export interface BindAllMethod<
  * `client.endpoint` does the same in one step.
  *
  * To bind several definitions at once, use `client.bindAll`. To share a
- * module's endpoints as a service, use `Fetch.Endpoints`.
+ * module's endpoints as a service, use `Fetch.Endpoints`. To test code
+ * that calls them, answer them with `FetchTest.respond` from
+ * `@monarcode/effetch/test`.
  *
  * @example
  * ```ts
@@ -1136,7 +1174,8 @@ export function endpoint<
 	St extends StreamFormat | undefined = undefined,
 >(
 	route: ValidRoute<R>,
-	definition?: UnboundDefinition<R, O, EB, I, SE, M, QS, St>,
+	definition?: UnboundDefinition<R, O, EB, I, SE, M, QS, St> &
+		StreamDefinitionCheck<O, St>,
 ): UnboundEndpoint<R, O, EB, I, SE, M, QS, St>;
 // `unknown`: the typed `url` takes no arguments when the query schema needs
 // services, which the runtime `url` can't be checked against.

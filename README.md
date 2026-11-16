@@ -39,6 +39,7 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
   - [At a glance](#at-a-glance)
   - [What you get](#what-you-get)
   - [Where it fits](#where-it-fits)
+  - [Coming from axios or ky](#coming-from-axios-or-ky)
 - [Getting started](#getting-started)
   - [Install](#install)
   - [Your first call](#your-first-call)
@@ -177,11 +178,18 @@ also:
   API's error body with another. The schemas' types become the call's types.
 - **Errors you can catch by name.** Three tagged errors, `NetworkError`,
   `HttpError` and `DecodeError`, plus any your plugins add, all in the type.
+  Turn statuses into your own errors, such as a `404` into `TodoNotFound`,
+  with `statusErrors`.
 - **Plugins for the repetitive parts.** Auth, retries, timeouts and logging
   are built in, and your own take a few lines. Any call can turn a plugin off
   or adjust it, and TypeScript checks the names and options.
 - **Endpoints.** Save a route like `"GET /users/:id"` with its schemas once,
-  then call it like a function wherever you need it.
+  then call it like a function wherever you need it. Share a module's
+  endpoints as a service with `Fetch.Endpoints`.
+- **Streams and pages.** Read Server-Sent Events and newline-delimited JSON
+  as an Effect `Stream`, and page through a list with `Fetch.paginate`.
+- **Tests without a network.** `FetchTest` makes a typed fake backend from
+  your endpoints, so tests run the real client with its plugins.
 - **Runs anywhere.** There's no platform-specific code: it targets browsers,
   React Native, Node 20+, Bun and Deno.
 
@@ -194,6 +202,29 @@ also:
 - Use **`HttpClient`** directly for what effetch doesn't cover, such as
   WebSockets or uploads with progress. Every effetch client gives you its
   own when you need it.
+
+### Coming from axios or ky
+
+The following table maps what you know from axios and ky to effetch:
+
+| axios or ky                                                   | effetch                                                                                                                                   |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `axios.create`, `ky.create`                                   | `Fetch.make`, or [`Fetch.Service`](#sharing-it-across-your-app) to share the client as a service                                          |
+| `ky.extend`, a client per API version                         | A second `Fetch.Service` from `{ ...Api.config, baseUrl }` (see [A client from another](#a-client-from-another))                          |
+| `baseURL`, `prefixUrl`                                        | `baseUrl`, a string or an Effect such as a `Config`                                                                                       |
+| `params`, `searchParams`                                      | `query`, a plain object, or typed by an endpoint's [`query` schema](#typed-query-parameters)                                              |
+| Interceptors, `hooks.beforeRequest` and `hooks.afterResponse` | A [plugin](#writing-plugins)'s `onRequest` and `onResponse`                                                                               |
+| `hooks.beforeError`                                           | `Effect.mapError` on the call. A plugin's `onError` sees errors but can't change them                                                     |
+| `retry`, `timeout`                                            | The [`retry` and `timeout` plugins](#built-in-plugins), which a call can turn off or adjust                                               |
+| ky's `totalTimeout`                                           | `retry({ budget })`, or `Effect.timeout` around a call                                                                                    |
+| `AbortController`, `signal`                                   | Interruption: `Fiber.interrupt`, `Effect.race`, `Effect.timeout`. An interrupted call aborts its request                                  |
+| `validateStatus`, `throwHttpErrors: false`                    | `Effect.catchTag("HttpError", …)`, [`statusErrors`](#errors-by-status), or [`Fetch.catchStatus`](#catching-a-status) and `Fetch.optional` |
+| `error.response.data`, ky's `HTTPError` body                  | `HttpError.body`, decoded with `defaultError` or the call's `error` schema                                                                |
+| `ky.get(url).json<T>()`, `axios.get<T>(url)`                  | `api.get(path, { output: Schema })`: the body is checked, not cast                                                                        |
+| `responseType: "text"` or `"arraybuffer"`                     | `output: Fetch.text()` or `Fetch.bytes()` (see [Text and bytes](#text-and-bytes))                                                         |
+| Reading the status and headers with the data                  | `responseMode: "decoded-and-response"` (see [The body and the response](#the-body-and-the-response))                                      |
+| `responseType: "stream"`, `onDownloadProgress` for events     | [`api.sse` and `api.ndjson`](#streaming-responses)                                                                                        |
+| The `fetch` option or an `adapter` in tests                   | [`FetchTest`](#testing), or any `HttpClient` layer                                                                                        |
 
 ## Getting started
 
@@ -364,6 +395,34 @@ Two more things worth knowing:
 
 Give each client its own id: two classes with the same id are the same
 service.
+
+#### A client from another
+
+For the same client with a different base URL, such as a second API
+version, or with one more header, spread the first class's `config` into a
+second class. It keeps the plugins, `defaultError` and `statusErrors`, so
+its client has the same type:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { retry } from "@monarcode/effetch/plugins";
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com/v1",
+  defaultError: Schema.Struct({ code: Schema.String }),
+  plugins: [retry()],
+}) {}
+
+export class ApiV2 extends Fetch.Service<ApiV2>()("ApiV2", {
+  ...Api.config,
+  baseUrl: "https://api.example.com/v2",
+}) {}
+```
+
+`Api.config.headers` is replaced, not merged, when you set `headers`: spread
+it too, as in `headers: { ...Api.config.headers, "x-client": "web" }`.
 
 #### When the config isn't known up front
 
@@ -932,6 +991,17 @@ export const withEffectToken = bearer({ token: Effect.succeed("token") });
 A `bearer` token function that throws, or whose promise rejects, makes the
 call die. To fail with a typed error instead, pass an Effect: its error and
 services become the client's, and `make` asks for the services.
+
+Time limits apply per attempt or to the whole call:
+
+- **Per attempt:** `timeout`, placed after `retry` as above. Each attempt
+  gets the full duration, and a timed-out attempt isn't retried.
+- **For the whole call:** `retry({ budget })`, every attempt and wait
+  included. For one call, or on a client without `retry`, wrap the call in
+  `Effect.timeout`.
+
+See [Retry-After and a time limit](#retry-after-and-a-time-limit) for both
+together.
 
 ### Refreshing a token
 
@@ -2016,10 +2086,11 @@ const listItems = Fetch.endpoint("GET /items", {
   responseMode: "decoded-and-response",
 });
 
+// The cursor is percent-encoded in the URL, and `query` encodes it again.
 const nextCursor = (link: string | undefined) =>
   Option.fromNullishOr(
     /[?&]cursor=([^&>]+)[^>]*>;\s*rel="next"/.exec(link ?? "")?.[1],
-  );
+  ).pipe(Option.flatMap(Option.liftThrowable(decodeURIComponent)));
 
 export const allItems = (api: Fetch.Client) =>
   Fetch.paginate(api.bind(listItems), {
@@ -2466,6 +2537,9 @@ text or bytes.
   `https://api.test/v1/todos/1`, whatever the client's `baseUrl`. To match
   the whole URL instead, pass the `baseUrl` to the layer:
   `FetchTest.layer(handlers, { baseUrl: "https://api.test/v1" })`.
+- **The root route,** `GET /`, matches the path `/` alone, since every path
+  with a trailing slash ends with it. Under a `baseUrl` with a path, pass
+  that `baseUrl` to the layer.
 - **The best match wins.** When several routes match, the one with the most
   segments wins, then the one with the most literal segments, so
   `GET /todos/count` wins over `GET /todos/:id`. After that, the one listed
@@ -2582,10 +2656,12 @@ page's URL.
 
 - A path parameter is a whole segment: `/files/:name.json` has one parameter
   called `name.json`.
-- No optional path parameters yet.
+- Path parameters can't be optional. Define one endpoint per path, or pass
+  the value in `query`.
 - Paths shouldn't contain `?` or `#`. Pass query parameters with `query`.
-- `timeout` and the logged duration cover the time until the response
-  headers arrive, not downloading the body.
+- `timeout`, and the duration `logger` logs, cover the time until the
+  response headers arrive, not downloading the body. `consoleLogger`'s
+  duration, and an `onExit` hook's `durationMs`, include decoding the body.
 - Two plugins with the same name are only caught when the client is made.
 - Streams don't reconnect: `api.sse` ignores `retry:` lines and the
   `Last-Event-ID` header. Repeat the call, with the last `id` in a header,
@@ -2618,6 +2694,8 @@ page's URL.
   [text and bytes](#text-and-bytes).
 - `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,
   `FetchError`, `isFetchError`: [errors](#handling-errors).
+- `StatusError`, `StatusErrorMap`, `StatusErrorSchema`,
+  `StatusErrorServices`: [errors by status](#errors-by-status).
 - `catchStatus`, `optional`, `CaughtStatus`:
   [catching a status](#catching-a-status).
 - `SseEvent`, `StreamElement`, `StreamFormat`, `StreamMethod`,
@@ -2680,6 +2758,8 @@ they always match the current API:
   plugins.
 - [`status-errors.ts`](examples/status-errors.ts): your own errors by status,
   for every call, per endpoint and for one call.
+- [`streams.ts`](examples/streams.ts): Server-Sent Events, newline-delimited
+  JSON, and a list paged through by its `Link` header.
 - [`testing.ts`](examples/testing.ts): tests for the `app/` todos module,
   against a fake backend made from its endpoints.
 - [`app/`](examples/app): a feature-sliced app, with clients as shared

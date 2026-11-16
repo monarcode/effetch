@@ -49,16 +49,18 @@ export class NetworkError extends Schema.TaggedError<NetworkError>()(
  *   parameters stay out of logs.
  * - `headers` are the response headers. They're Effect `Headers`, so
  *   sensitive ones (`set-cookie`, `authorization`, …) print as
- *   `<redacted>` when the error is logged or serialised.
+ *   `<redacted>` when the error is logged or serialized.
  * - `text` is always the raw response body (`""` if it couldn't be read).
- * - `body` is the body decoded with the call's `error` schema (or the client's
- *   `defaultError`),
- *   or `undefined` if it didn't match. Without an `error` schema, `body` is
- *   the parsed JSON when `text` is valid JSON, else `undefined`. An empty
- *   body is always `undefined`. Reading `body` never fails the call.
+ * - `body` is the body decoded with the call's `error` schema (or the
+ *   client's `defaultError`), or `undefined` if it didn't match. Without an
+ *   `error` schema, `body` is the parsed JSON when `text` is valid JSON,
+ *   else `undefined`. An empty body is always `undefined`. Reading `body`
+ *   never fails the call.
  *
  * Use {@link HttpError.With} for the type of an `HttpError` whose `body` was
- * decoded with a known schema.
+ * decoded with a known schema. To handle some statuses at a call, use
+ * `Fetch.catchStatus` or `Fetch.optional`; to turn a status into your own
+ * error for every call, use `statusErrors`.
  *
  * @example
  * ```ts
@@ -137,7 +139,14 @@ export declare namespace HttpError {
  * - the `HttpClientError` when the body couldn't be read.
  *
  * An empty body (204, HEAD, …) is decoded as JSON `null`, so it only
- * passes schemas that accept nothing, such as `Schema.Void`.
+ * passes schemas that accept nothing, such as `Schema.Void`. With
+ * `Fetch.text(schema)`, an empty body fails too.
+ *
+ * A stream (`api.sse`, `api.ndjson` or a `stream` endpoint) fails with a
+ * `DecodeError` while it's read: when an event's data or a line doesn't
+ * decode (the message names it, as in `Line 3 doesn't match the output
+ * schema`), when the body breaks off, and, for `api.sse`, when the
+ * response's `Content-Type` isn't `text/event-stream`.
  *
  * `url` is the request URL without its query string.
  *

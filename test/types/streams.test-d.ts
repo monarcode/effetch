@@ -106,8 +106,17 @@ describe("api.sse and api.ndjson", () => {
 		expectTypeOf<ElementOf<typeof posted>>().toEqualTypeOf<
 			Fetch.SseEvent<string>
 		>();
+		// @ts-expect-error: an OPTIONS request has no body, as for endpoints
+		api.sse("/chat", { method: "OPTIONS", body: "x" });
 		api.ndjson("/rows", { method: "PUT", body: "x" });
 		api.sse("/events", { method: "GET" });
+	});
+
+	it("reject Fetch.bytes()", () => {
+		// @ts-expect-error: Fetch.bytes() can't decode a stream's values
+		api.sse("/events", { output: Fetch.bytes() });
+		// @ts-expect-error: Fetch.bytes() can't decode a stream's values
+		api.ndjson("/rows", { output: Fetch.bytes() });
 	});
 
 	it("reject what can't be streamed", () => {
@@ -205,6 +214,26 @@ describe("stream endpoints", () => {
 		api.bind(rows)({ responseMode: "decoded-and-response" });
 	});
 
+	it("reject what defining them would throw on", () => {
+		Fetch.endpoint("GET /a", {
+			stream: "sse",
+			// @ts-expect-error: a stream can't take a responseMode
+			responseMode: "decoded-and-response",
+		});
+		// @ts-expect-error: Fetch.bytes() can't decode a stream's values
+		Fetch.endpoint("GET /b", { stream: "ndjson", output: Fetch.bytes() });
+		// @ts-expect-error: a stream can't take a responseMode
+		api.endpoint("GET /c", { stream: "ndjson", responseMode: "decoded" });
+		// @ts-expect-error: Fetch.bytes() can't decode a stream's values
+		api.endpoint("GET /d", { stream: "sse", output: Fetch.bytes() });
+		// Without stream, both are fine.
+		Fetch.endpoint("GET /e", {
+			output: Fetch.bytes(),
+			responseMode: "decoded-and-response",
+		});
+		api.endpoint("GET /f", { stream: "sse", output: Fetch.text() });
+	});
+
 	it("are AnyUnboundEndpoints", () => {
 		expectTypeOf(events).toExtend<Fetch.AnyUnboundEndpoint>();
 		expectTypeOf(rows).toExtend<Fetch.AnyUnboundEndpoint>();
@@ -280,6 +309,15 @@ describe("Fetch.paginate", () => {
 			start: 1,
 			// @ts-expect-error: page must be a number
 			request: () => ({ params: { org: "acme" }, query: { page: "1" } }),
+			next: () => Option.none(),
+		});
+	});
+
+	it("leaves responseMode to the endpoint", () => {
+		Fetch.paginate(api.bind(listByCursor), {
+			start: 1,
+			// @ts-expect-error: the endpoint's responseMode decides what a page is
+			request: () => ({ responseMode: "decoded" }),
 			next: () => Option.none(),
 		});
 	});

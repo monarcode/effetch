@@ -523,13 +523,20 @@ const readBody = (request: HttpClientRequest.HttpClientRequest): unknown => {
 
 /** How a query schema's encoded side takes lists, by key. */
 interface ListKeys {
-	/** The declared keys, `list` when they take only lists. */
-	readonly fields: ReadonlyMap<
-		string,
-		{ readonly list: boolean; readonly optional: boolean }
-	>;
+	/**
+	 * The declared keys: `list` when they take only lists, `someList` when
+	 * a union member takes only lists for them.
+	 */
+	readonly fields: ReadonlyMap<string, ListField>;
 	/** `true` when other keys take only lists (a record of lists). */
 	readonly others: boolean;
+}
+
+/** How one key takes lists (see `ListKeys`). */
+interface ListField {
+	readonly list: boolean;
+	readonly someList: boolean;
+	readonly optional: boolean;
 }
 
 const noListKeys: ListKeys = { fields: new Map(), others: false };
@@ -554,14 +561,13 @@ const takesOnlyLists = (ast: SchemaAST.AST): boolean =>
  */
 const listKeysOfAst = (ast: SchemaAST.AST): ListKeys => {
 	if (SchemaAST.isObjects(ast)) {
-		const fields = new Map<
-			string,
-			{ readonly list: boolean; readonly optional: boolean }
-		>();
+		const fields = new Map<string, ListField>();
 		for (const property of ast.propertySignatures) {
 			if (typeof property.name === "string") {
+				const list = takesOnlyLists(property.type);
 				fields.set(property.name, {
-					list: takesOnlyLists(property.type),
+					list,
+					someList: list,
 					optional: SchemaAST.isOptional(property.type),
 				});
 			}
@@ -578,10 +584,7 @@ const listKeysOfAst = (ast: SchemaAST.AST): ListKeys => {
 		const names = new Set(
 			members.flatMap((member) => [...member.fields.keys()]),
 		);
-		const fields = new Map<
-			string,
-			{ readonly list: boolean; readonly optional: boolean }
-		>();
+		const fields = new Map<string, ListField>();
 		for (const name of names) {
 			const declared = members.flatMap((member) => {
 				const field = member.fields.get(name);
@@ -589,6 +592,7 @@ const listKeysOfAst = (ast: SchemaAST.AST): ListKeys => {
 			});
 			fields.set(name, {
 				list: declared.every((field) => field.list),
+				someList: declared.some((field) => field.someList),
 				optional:
 					declared.length < members.length ||
 					declared.some((field) => field.optional),
@@ -614,6 +618,10 @@ const listKeysOf = (schema: QuerySchema): ListKeys => {
  * the URL loses: a list of one item is a single value there, and an empty
  * list isn't there at all. A required list that's missing is decoded as
  * empty, as the URL can't tell `[]` from `undefined`.
+ *
+ * In a union, a key that takes a list in one member and a single value in
+ * another is tried as sent, then, if that doesn't decode, with a single
+ * value as a list.
  */
 const decodeQuery = (
 	schema: QuerySchema,
@@ -633,7 +641,21 @@ const decodeQuery = (
 			input[name] = [];
 		}
 	}
-	return Schema.decodeUnknownEffect(codecOf(schema))(input).pipe(
+	const decode = Schema.decodeUnknownEffect(codecOf(schema));
+	const asLists: Record<string, unknown> = { ...input };
+	let maybeLists = false;
+	for (const [name, value] of Object.entries(input)) {
+		if (typeof value === "string" && fields.get(name)?.someList === true) {
+			asLists[name] = [value];
+			maybeLists = true;
+		}
+	}
+	return decode(input).pipe(
+		Effect.catch((error) =>
+			maybeLists
+				? Effect.mapError(decode(asLists), () => error)
+				: Effect.fail(error),
+		),
 		Effect.catch((error) =>
 			defect(
 				`the query sent to ${route} doesn't match its query schema: ${error.message}`,
@@ -984,7 +1006,9 @@ const baseOf = (baseUrl: string): Base => {
  * - An absolute route matches the whole URL.
  * - With a `base`, the path must be the base's path, then the route's.
  * - Without one, the route matches the end of the path, so it works under
- *   any `baseUrl`.
+ *   any `baseUrl`. The root route, `/`, which every path with a trailing
+ *   slash ends with, matches the path `/` alone: under a `baseUrl` with a
+ *   path, give the layer that `baseUrl`.
  */
 const matchPattern = (
 	pattern: Pattern,
@@ -1016,7 +1040,9 @@ const matchPattern = (
 			segments.slice(base.segments.length),
 		);
 	}
-	return segments.length < pattern.segments.length
+	const root = pattern.segments.length === 1 && pattern.segments[0] === "";
+	return segments.length < pattern.segments.length ||
+		(root && segments.length !== 1)
 		? undefined
 		: matchSegments(
 				pattern.segments,

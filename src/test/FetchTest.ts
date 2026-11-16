@@ -696,6 +696,11 @@ export const reply = (
  * Without `output`, the value is sent by its runtime type (see
  * {@link reply}), and `undefined` sends no body.
  *
+ * For a stream endpoint (one with `stream`), the handler succeeds with a
+ * list instead: {@link TestEvent}s for `"sse"`, or values for `"ndjson"`
+ * (see {@link RespondResult}). They're sent as one body, each value
+ * encoded with `output`.
+ *
  * The status is `200`, or `204` without a body, unless `options.status`
  * sets one. To answer with another status or an error, return a
  * {@link reply}.
@@ -743,7 +748,9 @@ export const respond = <const EP extends TestEndpoint, R = never>(
 
 /**
  * Makes a handler that answers every request to `endpoint` with the error
- * status `status`, for {@link layer}.
+ * status `status`, for {@link layer}. To answer some requests with an
+ * error and others with data, return a {@link reply} from
+ * {@link respond} instead.
  *
  * `body` is encoded as JSON with the first schema that encodes it: the
  * endpoint's `statusErrors` schemas for `status`, then its `error` schema.

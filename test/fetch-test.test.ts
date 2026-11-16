@@ -1123,6 +1123,63 @@ describe("FetchTest", () => {
 			}),
 		);
 
+		it.effect(
+			"tries a single value as a list when a union member takes one",
+			() =>
+				Effect.gen(function* () {
+					const ByKind = Schema.Union([
+						Schema.Struct({
+							kind: Schema.Literal("many"),
+							ids: Schema.Array(Schema.Finite),
+						}),
+						Schema.Struct({
+							kind: Schema.Literal("one"),
+							ids: Schema.Finite,
+						}),
+					]);
+					const byKind = Fetch.endpoint("GET /by-kind", { query: ByKind });
+					const seen: Array<unknown> = [];
+					const backend = FetchTest.layer([
+						FetchTest.respond(byKind, ({ query }) => {
+							seen.push(query);
+							return Effect.succeed(FetchTest.reply(204));
+						}),
+					]);
+					yield* run(
+						(api) =>
+							Effect.all([
+								api.bind(byKind)({ query: { kind: "many", ids: [1] } }),
+								api.bind(byKind)({ query: { kind: "one", ids: 2 } }),
+								api.bind(byKind)({
+									query: { kind: "many", ids: [3, 4] },
+								}),
+							]),
+						backend,
+					);
+					expect(seen).toEqual([
+						{ kind: "many", ids: [1] },
+						{ kind: "one", ids: 2 },
+						{ kind: "many", ids: [3, 4] },
+					]);
+				}),
+		);
+
+		it.effect("matches the root route on the root path alone", () =>
+			Effect.gen(function* () {
+				const root = Fetch.endpoint("GET /", { output: Fetch.text() });
+				const backend = FetchTest.layer([
+					FetchTest.respond(root, () => Effect.succeed("root")),
+				]);
+				expect(yield* run((api) => api.bind(root)(), backend)).toBe("root");
+				const message = yield* defectOf(
+					run((api) => api.get("/anything/else/"), backend),
+				);
+				expect(message).toContain(
+					"FetchTest: no handler for GET https://api.test/anything/else/",
+				);
+			}),
+		);
+
 		it.effect("normalizes the baseUrl option and absolute routes", () =>
 			Effect.gen(function* () {
 				const upload = Fetch.endpoint(

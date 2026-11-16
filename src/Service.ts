@@ -178,6 +178,13 @@ const snapshot = <
  * less than `Api.layer`, but not more, and can't add an error: to add
  * requirements, build a separate layer from `Api.layer` instead.
  *
+ * To declare a related client, such as one for another version of the
+ * API, spread `Api.config` into a second class and change what differs:
+ * `{ ...Api.config, baseUrl: "https://api.example.com/v2" }`. The new
+ * client keeps the plugins, `defaultError` and `statusErrors`, and their
+ * types. To share endpoints bound to the client as a service, use
+ * `Fetch.Endpoints`.
+ *
  * @example
  * ```ts
  * import * as Effect from "effect/Effect";

@@ -86,9 +86,13 @@ export type TimeoutPlugin = Plugin<
  * the response headers don't arrive within `duration`.
  *
  * It covers the plugins after it in the list, but not reading the body: a
- * large response that starts in time isn't cut off while it downloads.
- * Put it after `retry` so each attempt gets the full duration. A timed-out
- * attempt isn't retried.
+ * large response, or a stream from `api.sse` or `api.ndjson`, that starts
+ * in time isn't cut off while it downloads.
+ *
+ * Put it after `retry` so each attempt gets the full duration: the limit
+ * is then per attempt, and a timed-out attempt isn't retried. For a limit
+ * on the whole call, every attempt and wait included, use
+ * `retry({ budget })`, or `Effect.timeout` around one call.
  *
  * @example
  * ```ts

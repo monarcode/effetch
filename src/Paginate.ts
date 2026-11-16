@@ -76,12 +76,18 @@ export type PageRequest<EP extends PageEndpoint> = EP extends {
 			EndpointQuery<EP["query"]> & {
 				/** Headers for this page's call. */
 				readonly headers?: Headers.Input | undefined;
+				/**
+				 * Not allowed: the endpoint's `responseMode` decides what each
+				 * page is.
+				 */
+				readonly responseMode?: undefined;
 			}
 	: never;
 
 /**
  * One page of endpoint `EP`: its `output`'s type, or the raw response
- * without `output`.
+ * without `output`. It's what {@link paginate}'s stream gives, and what
+ * {@link PaginateOptions}' `next` gets.
  *
  * @example
  * ```ts
@@ -185,9 +191,11 @@ type ServicesOf<EP> = EP extends (
 	: never;
 
 /**
- * Pages through a list, as a `Stream` of pages: it calls `endpoint` for
- * the first page, then for the next one while `next` gives a state, and
- * stops after the page for which it gives `Option.none()`. Each page is
+ * Pages through a list, as a `Stream` of pages: it calls `endpoint` (a
+ * {@link PageEndpoint}) for the first page, then for the next one while
+ * `next` gives a state, and stops after the page for which it gives
+ * `Option.none()`. See {@link PaginateOptions} for `start`, `request` and
+ * `next`. Each page is
  * one value of the stream, so a page that is a list stays a list:
  * `Stream.flattenIterable` gives its items instead.
  *
@@ -252,7 +260,10 @@ export const paginate = <const EP extends PageEndpoint, S>(
 	const both = endpoint.responseMode === "decoded-and-response";
 	return Stream.paginate(options.start, (state: S) =>
 		Effect.map(
-			Effect.suspend(() => call(options.request(state))),
+			// The endpoint's mode, even if `request` gives another.
+			Effect.suspend(() =>
+				call({ ...options.request(state), responseMode: undefined }),
+			),
 			(result) => {
 				const [page, response] = both
 					? (result as readonly [unknown, unknown])

@@ -72,7 +72,8 @@ const streamCall = (
  *   the client's one of the same name. `content-type` and `content-length`
  *   are ignored here: they come from each request's body (set
  *   `content-type` on a call to override it). When a call has an `output`
- *   schema, effetch sends `Accept: application/json` unless an `accept`
+ *   schema, effetch sends an `Accept` header that matches it
+ *   (`application/json`, or text for `Fetch.text()`), unless an `accept`
  *   header is set here or on the call.
  * - `defaultError`: the schema for non-2xx response bodies of calls that
  *   don't pass their own `error` option. A call's `error` replaces it.
@@ -173,8 +174,9 @@ export interface Client<
 	 * `statusErrors` and no `onError` hooks.
 	 *
 	 * Transport failures are `NetworkError`s, next to the plugins' own
-	 * errors. Use it for anything the methods don't cover, such as
-	 * streaming a response.
+	 * errors. Use it for what the methods don't cover, such as a response
+	 * you read yourself. For a streamed body, use {@link Client.sse} or
+	 * {@link Client.ndjson}.
 	 *
 	 * @example
 	 * ```ts
@@ -221,8 +223,9 @@ export interface Client<
 	readonly statusErrors: SE;
 
 	/**
-	 * Sends a request with any HTTP method. The other methods are shorthand
-	 * for this one.
+	 * Sends a request with any HTTP method, for a method only known at
+	 * runtime. The other methods are shorthand for this one. A `GET` or
+	 * `HEAD` request can't have a body: passing one dies.
 	 *
 	 * @example
 	 * ```ts
@@ -475,6 +478,9 @@ export interface Client<
 	 *   `HEAD`, `OPTIONS` and `TRACE` endpoints take no body.
 	 * - A call's `headers` and `plugins` are merged over the endpoint's, and
 	 *   win. The schemas can't be changed per call.
+	 * - With `stream: "sse"` or `stream: "ndjson"`, each call returns a
+	 *   `Stream` of the body's values, as {@link Client.sse} and
+	 *   {@link Client.ndjson} do.
 	 *
 	 * Defining an endpoint does nothing on its own: each call sends a
 	 * request. A route that isn't valid (which the types prevent) throws.
@@ -537,8 +543,8 @@ export interface Client<
 	 * several clients: each endpoint sends to its own client's `baseUrl`,
 	 * with its plugins.
 	 *
-	 * To bind a record of definitions at once, use `client.bindAll`. To
-	 * share them as a service, use `Fetch.Endpoints`.
+	 * To bind a record of definitions at once, use {@link Client.bindAll}.
+	 * To share them as a service, use `Fetch.Endpoints`.
 	 *
 	 * @example
 	 * ```ts
@@ -578,7 +584,7 @@ export interface Client<
 
 	/**
 	 * Binds a record of endpoint definitions at once: each entry is bound as
-	 * `client.bind` binds it, and keeps its name. An entry is a definition
+	 * {@link Client.bind} binds it, and keeps its name. An entry is a definition
 	 * made with `Fetch.endpoint`, or a `[definition, options]` pair, where
 	 * `options` are the options (`BindOptions`) `client.bind` takes.
 	 *
@@ -634,7 +640,8 @@ export interface Client<
  * Calls fail with `NetworkError` when no response arrives, `HttpError` for
  * a non-2xx status, `DecodeError` when `output` doesn't match, with the
  * plugins' own errors, and with your own errors where `statusErrors` turn a
- * status into one.
+ * status into one. `Fetch.catchStatus` and `Fetch.optional` handle a
+ * status at the call.
  *
  * Invalid input is a defect, not a typed error, because it's a mistake in
  * the calling code: two plugins with the same name, a missing path param,

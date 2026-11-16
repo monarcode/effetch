@@ -219,6 +219,59 @@ describe("query schemas, edge cases", () => {
 	);
 });
 
+describe("Schema.Redacted query fields", () => {
+	it.effect.skipIf(!supportsRedactedQuery)(
+		"stay redacted by key, whatever their encoding",
+		() =>
+			Effect.gen(function* () {
+				const seen: Array<HttpClientRequest.HttpClientRequest> = [];
+				const capture = Fetch.plugin({
+					name: "capture",
+					onRequest: (request) =>
+						Effect.sync(() => {
+							seen.push(request);
+							return request;
+						}),
+				});
+				const { mock, api } = yield* setup(
+					[reply.json([]), reply.json([])],
+					{
+						plugins: [capture],
+					},
+				);
+				const get = api.endpoint("GET /x", {
+					query: Schema.Struct({
+						when: Schema.Redacted(Schema.Date),
+						page: Schema.String,
+					}),
+				});
+				// `page` equals the secret's encoding, and isn't secret.
+				yield* get({
+					query: {
+						when: Redacted.make(new Date(0)),
+						page: "1970-01-01T00:00:00.000Z",
+					},
+				});
+				const params = seen[0]?.urlParams.params ?? [];
+				expect(Redacted.isRedacted(params[0]?.[1])).toBe(true);
+				expect(params[1]?.[1]).toBe("1970-01-01T00:00:00.000Z");
+				// A renamed secret field: the renamed fields are hidden.
+				const renamed = api.endpoint("GET /y", {
+					query: Schema.Struct({
+						apiKey: Schema.Redacted(Schema.Trim),
+						q: Schema.String,
+					}).pipe(Schema.encodeKeys({ apiKey: "api_key" })),
+				});
+				yield* renamed({ query: { apiKey: Redacted.make("k1"), q: "k1" } });
+				const second = seen[1]?.urlParams.params ?? [];
+				expect(second.map(([key]) => key)).toEqual(["api_key", "q"]);
+				expect(Redacted.isRedacted(second[0]?.[1])).toBe(true);
+				expect(second[1]?.[1]).toBe("k1");
+				expect(mock.requests[1]?.url).toBe(`${base}/y?api_key=k1&q=k1`);
+			}),
+	);
+});
+
 describe("endpoint.url", () => {
 	const getFile = Fetch.endpoint("GET /files/:name", {
 		query: Schema.Struct({

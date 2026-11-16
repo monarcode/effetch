@@ -122,6 +122,11 @@ describe("logger, consoleLogger, retry and timeout", () => {
 		expectTypeOf(retry({ budget: undefined })).toEqualTypeOf<RetryPlugin>();
 		const maybe: { readonly budget?: number } = {};
 		expectTypeOf(retry(maybe)).toEqualTypeOf<RetryBudgetPlugin>();
+		// As before `budget`: a client typed with it gains no TimeoutError.
+		expectTypeOf<ReturnType<typeof retry>>().toEqualTypeOf<RetryPlugin>();
+		expectTypeOf<
+			Fetch.Plugin.Errors<[ReturnType<typeof retry>]>
+		>().toBeNever();
 		const widened = { times: 3, budget: "30 seconds" as string };
 		// @ts-expect-error a string that may not be a duration
 		retry(widened);

@@ -154,7 +154,7 @@ export type AnySchema = Schema.Constraint;
  * while other 400s don't.
  *
  * A response that no schema decodes, or whose body is empty or isn't JSON,
- * fails with the `HttpError` it fails with today. Entries for 2xx statuses
+ * fails with an `HttpError`, as it would without the map. Entries for 2xx statuses
  * never apply: a 2xx is decoded with `output`, and neither do keys that
  * aren't statuses. A `Schema.Union` is decoded as it is, without a `_tag`
  * added: list its members instead.
@@ -334,6 +334,10 @@ export type ParamsOption<P extends string> = string extends P
  *   schema, the first item is the response as well.
  *
  * The response's body has already been read: use the decoded value.
+ * Streams (`api.sse`, `api.ndjson` and `stream` endpoints) give the body's
+ * values and can't take a `responseMode`. On a paged endpoint,
+ * `"decoded-and-response"` gives `Fetch.paginate`'s `next` each page's
+ * response.
  *
  * @example
  * ```ts
@@ -447,7 +451,7 @@ export interface BaseOptions<
  * `ArrayBuffer` and typed arrays, `Blob`/`File`, `FormData` and
  * `URLSearchParams` as-is, anything else as JSON.
  *
- * A body that doesn't match `input`, or can't be serialised as JSON, is a
+ * A body that doesn't match `input`, or can't be serialized as JSON, is a
  * defect (the call dies), not a typed failure.
  *
  * @example

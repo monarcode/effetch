@@ -11,6 +11,7 @@ Complete programs using effetch. They're typechecked with the package
 | [`endpoints.ts`](endpoints.ts)         | The same app as `builtins.ts` with endpoints: one client, its endpoints as the service's methods.                              |
 | [`backends.ts`](backends.ts)           | Two backends in one file: one client each, shared plugins, and each backend's errors caught next to its calls.                 |
 | [`status-errors.ts`](status-errors.ts) | Your own errors by status: client-wide, per endpoint, a 400 told apart by its `code`, a renamed field, a one-off call.         |
+| [`streams.ts`](streams.ts)             | Streams and pages: a job's progress as SSE, an NDJSON export, an answer that ends with `[DONE]`, and a list paged by `Link`.   |
 | [`testing.ts`](testing.ts)             | Tests for the `app/` todos module against `FetchTest`: a fake backend from its endpoints, errors by status, and what was sent. |
 | [`app/`](app)                          | A feature-sliced app: clients as shared infrastructure, each module defining its own endpoints next to its schemas.            |
 

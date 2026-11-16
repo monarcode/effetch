@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 
 import type { QueryInput, QuerySchema } from "../Options.js";
 import { messageOf } from "./message.js";
-import { isRecord } from "./object.js";
+import { hasOwn, isRecord } from "./object.js";
 
 /** One query value as `UrlParams` holds it. */
 type Param = UrlParams.UrlParams["params"][number][1];
@@ -109,22 +109,31 @@ const redactedIsSent = (): boolean =>
 			UrlParams.make([["k", Redacted.make("v") as never]]),
 		) === "k=v");
 
+/** `true` for a `Redacted` value, or an array with one. */
+const hasRedacted = (value: unknown): boolean =>
+	Array.isArray(value)
+		? value.some((item) => Redacted.isRedacted(item))
+		: Redacted.isRedacted(value);
+
 /**
- * The revealed values of the `Redacted` fields of `query`, and of the
- * `Redacted` items of its array fields, as strings.
+ * Wraps an encoded field's value in `Redacted` where the field's value in
+ * `query` was one: the whole value, or the array items at the same index.
+ * With `all`, every item is wrapped.
  */
-const secretsOf = (query: unknown): ReadonlySet<string> => {
-	const secrets = new Set<string>();
-	if (typeof query === "object" && query !== null) {
-		for (const value of Object.values(query)) {
-			for (const item of Array.isArray(value) ? value : [value]) {
-				if (Redacted.isRedacted(item)) {
-					secrets.add(String(Redacted.value(item)));
-				}
-			}
-		}
+const hideField = (encoded: unknown, original: unknown, all: boolean) => {
+	const hide = (value: unknown) =>
+		typeof value === "string" ? Redacted.make(value) : value;
+	if (!Array.isArray(encoded)) {
+		return hide(encoded);
 	}
-	return secrets;
+	const items = Array.isArray(original) ? original : [];
+	return encoded.map((item, index) =>
+		all ||
+		items.length !== encoded.length ||
+		Redacted.isRedacted(items[index])
+			? hide(item)
+			: item,
+	);
 };
 
 /**
@@ -135,19 +144,30 @@ const secretsOf = (query: unknown): ReadonlySet<string> => {
  *
  * The schema reveals `Schema.Redacted` fields. Where Effect keeps a
  * `Redacted` query value redacted in its logs and traces (4.1 and later),
- * an encoded value equal to one of `query`'s revealed secrets is wrapped
- * in `Redacted` again, so it stays out of them, as a `Redacted` value in a
- * plain query does.
+ * the encoded value of a field that was `Redacted` in `query` is wrapped in
+ * `Redacted` again, so it stays out of them, as a `Redacted` value in a
+ * plain query does. That's by key, whatever the encoding does to the
+ * value. When `Schema.encodeKeys` renamed such a field, every renamed
+ * field is wrapped: hiding a value that wasn't secret only hides it from
+ * logs, and it's still sent.
  */
 const toQuery = (encoded: unknown, query: unknown): QueryInput | Error => {
 	if (!isRecord(encoded)) {
 		return invalidQuery("the query schema doesn't encode to an object");
 	}
-	const secrets = redactedIsSent() ? secretsOf(query) : new Set<string>();
-	const hide = (value: unknown): unknown =>
-		typeof value === "string" && secrets.has(value)
-			? Redacted.make(value)
-			: value;
+	const original: Readonly<Record<string, unknown>> =
+		redactedIsSent() && isRecord(query) ? query : {};
+	const secret = new Set(
+		Object.keys(original).filter((key) => hasRedacted(original[key])),
+	);
+	// A secret field that was renamed: its new key isn't in `query`.
+	const renamed = [...secret].some((key) => !hasOwn(encoded, key));
+	const hidden = (key: string, value: unknown): unknown =>
+		secret.has(key)
+			? hideField(value, original[key], false)
+			: renamed && !hasOwn(original, key)
+				? hideField(value, undefined, true)
+				: value;
 	const result: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(encoded)) {
 		if (Array.isArray(value)) {
@@ -157,9 +177,9 @@ const toQuery = (encoded: unknown, query: unknown): QueryInput | Error => {
 					`"${key}" encodes to ${Array.isArray(nested) ? "an array" : "an object"} inside an array, which can't be a query parameter`,
 				);
 			}
-			result[key] = secrets.size === 0 ? value : value.map(hide);
+			result[key] = hidden(key, value);
 		} else if (isScalar(value) || isEmpty(value)) {
-			result[key] = hide(value);
+			result[key] = hidden(key, value);
 		} else {
 			return invalidQuery(
 				`"${key}" encodes to an object, which can't be a query parameter`,

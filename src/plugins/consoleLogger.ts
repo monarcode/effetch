@@ -829,7 +829,8 @@ const returnsUnread = (
 /**
  * Reads the response body to print it. The body is only read when it's
  * text and the call didn't return the response itself (a call without
- * `output`, whose caller may stream it). Effect caches it, so effetch
+ * `output`, whose caller may stream it, or a stream from `api.sse` or
+ * `api.ndjson`). Effect caches it, so effetch
  * reading it before, or the caller after, is unaffected.
  */
 const readResponseBody = (
@@ -1225,7 +1226,9 @@ const resolveColor = (color: ConsoleLoggerColor): Config["color"] =>
  * A response body is read only when it's text (JSON, `text/*` other than
  * event streams, XML or a form) of at most 1 MB (or 4 × `maxBodyLength`),
  * and never when the call returns the response itself, which its caller
- * may stream, or was interrupted. Effect caches the body, so reading it
+ * may stream, or was interrupted. For `api.sse`, `api.ndjson` and stream
+ * endpoints, the entry is printed when the headers arrive, without the
+ * body. Effect caches the body, so reading it
  * doesn't affect decoding.
  *
  * It runs from the `onExit` hook, so it sees the whole call wherever it
