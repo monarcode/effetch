@@ -3,15 +3,16 @@
 Complete programs using effetch. They're typechecked with the package
 (`pnpm run typecheck`), so they always match the current API.
 
-| Example                                | What it shows                                                                                                          |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| [`basic.ts`](basic.ts)                 | A client in a service, the methods (`get`, `post`, `patch`, `del`) and handling each error.                            |
-| [`builtins.ts`](builtins.ts)           | The built-in plugins (`logger`, `consoleLogger`, `retry`, `timeout`, `bearer`) and per-call overrides.                 |
-| [`plugins.ts`](plugins.ts)             | Writing plugins: auth with a service, a header with options, a `wrap` with its own error, error reporting.             |
-| [`endpoints.ts`](endpoints.ts)         | The same app as `builtins.ts` with endpoints: one client, its endpoints as the service's methods.                      |
-| [`backends.ts`](backends.ts)           | Two backends in one file: one client each, shared plugins, and each backend's errors caught next to its calls.         |
-| [`status-errors.ts`](status-errors.ts) | Your own errors by status: client-wide, per endpoint, a 400 told apart by its `code`, a renamed field, a one-off call. |
-| [`app/`](app)                          | A feature-sliced app: clients as shared infrastructure, each module defining its own endpoints next to its schemas.    |
+| Example                                | What it shows                                                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [`basic.ts`](basic.ts)                 | A client in a service, the methods (`get`, `post`, `patch`, `del`) and handling each error.                                    |
+| [`builtins.ts`](builtins.ts)           | The built-in plugins (`logger`, `consoleLogger`, `retry`, `timeout`, `bearer`) and per-call overrides.                         |
+| [`plugins.ts`](plugins.ts)             | Writing plugins: auth with a service, a header with options, a `wrap` with its own error, error reporting.                     |
+| [`endpoints.ts`](endpoints.ts)         | The same app as `builtins.ts` with endpoints: one client, its endpoints as the service's methods.                              |
+| [`backends.ts`](backends.ts)           | Two backends in one file: one client each, shared plugins, and each backend's errors caught next to its calls.                 |
+| [`status-errors.ts`](status-errors.ts) | Your own errors by status: client-wide, per endpoint, a 400 told apart by its `code`, a renamed field, a one-off call.         |
+| [`testing.ts`](testing.ts)             | Tests for the `app/` todos module against `FetchTest`: a fake backend from its endpoints, errors by status, and what was sent. |
+| [`app/`](app)                          | A feature-sliced app: clients as shared infrastructure, each module defining its own endpoints next to its schemas.            |
 
 `endpoints.ts` and `backends.ts` keep everything in one file, which suits a
 small app. `app/` is a layout for an app with many endpoints and modules.

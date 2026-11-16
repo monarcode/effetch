@@ -87,6 +87,11 @@ const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
   - [A feature-sliced app](#a-feature-sliced-app)
   - [Several backends](#several-backends)
 - [Testing](#testing)
+  - [A fake backend from your endpoints](#a-fake-backend-from-your-endpoints)
+  - [Errors and other statuses](#errors-and-other-statuses)
+  - [Checking what was sent](#checking-what-was-sent)
+  - [How requests are matched](#how-requests-are-matched)
+  - [A hand-written HttpClient](#a-hand-written-httpclient)
 - [Platform notes](#platform-notes)
   - [Browsers](#browsers)
   - [React Native](#react-native)
@@ -1971,8 +1976,231 @@ client of the backend it talks to, and one `HttpClient` layer serves them all.
 ## Testing
 
 effetch never touches the network itself: it sends every request through the
-`HttpClient` you provide. In tests, provide a fake one, and check what was
-sent:
+`HttpClient` you provide. In tests, `@monarcode/effetch/test` gives you a fake
+one, made from your endpoints, so your code runs as it does in production:
+the real client, with its plugins, `defaultError` and `statusErrors`.
+
+### A fake backend from your endpoints
+
+`FetchTest.layer` takes a list of handlers, one per route, and is an
+`HttpClient` layer. Provide it where `FetchHttpClient.layer` goes:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+const Todo = Schema.Struct({
+  id: Schema.Finite,
+  title: Schema.String,
+  due: Schema.Date,
+});
+const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
+
+class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+  message: Schema.String,
+}) {}
+
+const getTodo = Fetch.endpoint("GET /todos/:id", {
+  output: Todo,
+  statusErrors: { 404: TodoNotFound },
+});
+const createTodo = Fetch.endpoint("POST /todos", {
+  input: NewTodo,
+  output: Todo,
+});
+const listTodos = Fetch.endpoint("GET /todos", { output: Schema.Array(Todo) });
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.test",
+}) {}
+
+const Backend = FetchTest.layer([
+  FetchTest.respond(getTodo, ({ params }) =>
+    // params are strings, as they are in the URL
+    Effect.succeed({
+      id: Number(params.id),
+      title: "Write docs",
+      due: new Date(0),
+    }),
+  ),
+  FetchTest.respond(createTodo, ({ body }) =>
+    Effect.succeed({ id: 2, ...body }),
+  ),
+  FetchTest.fail(listTodos, 503),
+]);
+
+export const test = Effect.gen(function* () {
+  const api = yield* Api;
+  const todo = yield* api.bind(getTodo)({ params: { id: 1 } });
+  // todo.due is a Date again: it went over the wire as a string
+  return todo;
+}).pipe(Effect.provide(Api.layer.pipe(Layer.provide(Backend))));
+```
+
+What a handler gets and returns is typed by its endpoint, and checked as a
+real backend would check it:
+
+- **`params`** has the route's params, as strings.
+- **`body`** is decoded with the endpoint's `input` schema, so `body.due` is a
+  `Date` here.
+- **`query`** is decoded with the endpoint's
+  [query schema](#typed-query-parameters), if it has one, and is the raw
+  query, as strings, otherwise.
+- **The result** has `output`'s type, and is encoded with `output` before
+  it's sent, so a `Date` goes over the wire as a string, as in production.
+  With [`Fetch.text()` or `Fetch.bytes()`](#text-and-bytes), it's sent as
+  text or bytes.
+
+A body, query or result that doesn't match its schema is a defect that names
+the route: it's a bug in the code under test, or in the test. Handlers work
+the same for definitions made with `Fetch.endpoint`, endpoints made with
+`client.endpoint` or `client.bind`, and a `Fetch.Endpoints` class's
+`definitions`.
+
+`FetchTest` doesn't depend on a test runner: a test is an Effect, so run it
+with `it.effect` from `@effect/vitest`, or with `Effect.runPromise` in Jest,
+Bun or Deno.
+
+### Errors and other statuses
+
+To answer every request to an endpoint with an error, use `FetchTest.fail`,
+with a status and an optional body. The body is encoded with the endpoint's
+`statusErrors` schema for that status, then its `error` schema, so the client
+decodes it back into your domain error:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+  message: Schema.String,
+}) {}
+
+const getTodo = Fetch.endpoint("GET /todos/:id", {
+  statusErrors: { 404: TodoNotFound },
+});
+
+export const Backend = FetchTest.layer([
+  // The call fails with a TodoNotFound.
+  FetchTest.fail(getTodo, 404, new TodoNotFound({ message: "No todo 9" })),
+]);
+```
+
+A handler answers with another status by returning `FetchTest.reply(status,
+body)`, such as a `404` for one id and the todo for the others. A reply's body
+is sent as it is, as a call's `body` without `input` is: no body, a string
+as text, bytes as bytes, a `Blob`, `FormData` or `URLSearchParams` as it is,
+and anything else as JSON. For a `2xx` with a typed body, such as a `201`, pass
+`{ status: 201 }` as `respond`'s third argument instead:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
+const createTodo = Fetch.endpoint("POST /todos", {
+  input: Schema.Struct({ title: Schema.String }),
+  output: Todo,
+});
+
+export const Backend = FetchTest.layer([
+  FetchTest.respond(getTodo, ({ params }) =>
+    Effect.succeed(
+      params.id === "1"
+        ? { id: 1, title: "Write docs" }
+        : FetchTest.reply(404, { message: `No todo ${params.id}` }),
+    ),
+  ),
+  FetchTest.respond(
+    createTodo,
+    ({ body }) => Effect.succeed({ id: 2, ...body }),
+    {
+      status: 201,
+      headers: { location: "/todos/2" },
+    },
+  ),
+]);
+```
+
+### Checking what was sent
+
+The layer also provides `FetchTest.Recorder`, which keeps every request it
+received, with a new record each time the layer is built.
+`FetchTest.requests` reads it. Under a client's layer, `Layer.provide` would
+hide it, so use `Layer.provideMerge`:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+import * as Fetch from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.test",
+}) {}
+
+const deleteTodo = Fetch.endpoint("DELETE /todos/:id");
+
+const Backend = FetchTest.layer([
+  FetchTest.respond(deleteTodo, () => Effect.void),
+]);
+
+export const test = Effect.gen(function* () {
+  const api = yield* Api;
+  yield* api.bind(deleteTodo)({ params: { id: 1 } });
+  const [sent] = yield* FetchTest.requests;
+  // sent.method: "DELETE", sent.url: "https://api.test/todos/1",
+  // sent.route: "DELETE /todos/:id", sent.params: { id: "1" }
+  return sent;
+}).pipe(Effect.provide(Api.layer.pipe(Layer.provideMerge(Backend))));
+```
+
+Each recorded request has its `method`, `url`, the `route` and `params` it
+matched, its raw `query`, its `headers`, and its `body`, read back as JSON,
+text or bytes.
+
+### How requests are matched
+
+- **Method and path.** A route matches a request with the same method, whose
+  path ends with the route's path. So `GET /todos/:id` answers
+  `https://api.test/v1/todos/1`, whatever the client's `baseUrl`. To match
+  the whole URL instead, pass the `baseUrl` to the layer:
+  `FetchTest.layer(handlers, { baseUrl: "https://api.test/v1" })`.
+- **The best match wins.** When several routes match, the one with the most
+  segments wins, then the one with the most literal segments, so
+  `GET /todos/count` wins over `GET /todos/:id`. After that, the one listed
+  first wins.
+- **Absolute routes** such as `POST https://uploads.example.com/files` match
+  that URL only.
+- **No match is a defect,** whose message lists the backend's routes, and the
+  ones that match the path with another method:
+
+  ```text
+  FetchTest: no handler for POST https://api.test/todos/1.
+  GET /todos/:id matches its path, but not its method.
+  The handlers are:
+    - GET /todos/:id
+  ```
+
+A handler can use services, such as a clock or a store of fake data. The
+layer then needs them, and runs its handlers with the services it was built
+with, and those of the call they answer, which win when both have one.
+
+### A hand-written HttpClient
+
+For what a fake backend doesn't do, such as a network failure or a slow
+response, provide an `HttpClient` of your own:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -2117,6 +2345,17 @@ page's URL.
   `RetryBudgetPlugin`.
 - `timeout`, `TimeoutOptions`, `TimeoutPlugin`, `TimeoutError`.
 
+`@monarcode/effetch/test`, as the `FetchTest` namespace
+([testing](#testing)):
+
+- `layer`, `LayerOptions`, `Handler`, `HandlerServices`.
+- `respond`, `RespondRequest`, `RespondResult`, `RespondOptions`,
+  `RespondServices`, `RouteParams`, `RequestBody`, `RequestQuery`,
+  `QueryParams`, `TestEndpoint`.
+- `reply`, `Reply`, `ReplyOptions`.
+- `fail`, `FailBody`, `FailServices`.
+- `requests`, `Recorder`, `SentRequest`.
+
 Every export is documented, with an example, in the type declarations your
 editor shows.
 
@@ -2137,6 +2376,8 @@ they always match the current API:
   plugins.
 - [`status-errors.ts`](examples/status-errors.ts): your own errors by status,
   for every call, per endpoint and for one call.
+- [`testing.ts`](examples/testing.ts): tests for the `app/` todos module,
+  against a fake backend made from its endpoints.
 - [`app/`](examples/app): a feature-sliced app, with clients as shared
   infrastructure and each module defining its own endpoints.
 

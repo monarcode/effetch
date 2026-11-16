@@ -5,9 +5,11 @@ import path from "node:path";
 import ts from "typescript";
 
 const root = path.resolve(import.meta.dirname, "..");
-const entries = ["src/index.ts", "src/plugins/index.ts"].map((file) =>
-	path.join(root, file),
-);
+const entries = [
+	"src/index.ts",
+	"src/plugins/index.ts",
+	"src/test/index.ts",
+].map((file) => path.join(root, file));
 const markdown = ["README.md"]
 	.map((file) => path.join(root, file))
 	.filter((file) => existsSync(file));
@@ -28,6 +30,7 @@ const parsed = ts.getParsedCommandLineOfConfigFile(
 );
 const options = { ...parsed.options, noEmit: true, plugins: [] };
 const problems = [];
+let exportCount = 0;
 
 const program = ts.createProgram(entries, options);
 const checker = program.getTypeChecker();
@@ -89,7 +92,40 @@ const isImplementation = (node) =>
 	node.body !== undefined &&
 	checker.getSymbolAtLocation(node.name)?.declarations?.length > 1;
 
-const checkDeclaration = (name, node) => {
+/**
+ * Checks each export of a module re-exported as a namespace
+ * (`export * as FetchTest from "./FetchTest.js"`), as `FetchTest.member`.
+ */
+const checkNamespace = (name, sourceFile) => {
+	const moduleSymbol = checker.getSymbolAtLocation(sourceFile);
+	for (const exported of checker.getExportsOfModule(moduleSymbol)) {
+		exportCount += 1;
+		const symbol =
+			exported.flags & ts.SymbolFlags.Alias
+				? checker.getAliasedSymbol(exported)
+				: exported;
+		for (const declaration of symbol.declarations ?? []) {
+			checkDeclaration(
+				`${name}.${exported.name}`,
+				declaration,
+				exported.declarations?.[0],
+			);
+		}
+	}
+};
+
+const checkDeclaration = (name, node, alias) => {
+	if (ts.isSourceFile(node)) {
+		// The docs are on the `export * as Name from "…"` itself.
+		const exportDeclaration = alias?.parent;
+		if (exportDeclaration === undefined) {
+			problems.push(`${name} needs a documented \`export * as\``);
+		} else {
+			requireFull(name, exportDeclaration);
+		}
+		checkNamespace(name, node);
+		return;
+	}
 	if (isImplementation(node)) {
 		return;
 	}
@@ -113,7 +149,6 @@ const checkDeclaration = (name, node) => {
 	}
 };
 
-let exportCount = 0;
 for (const entry of entries) {
 	const moduleSymbol = checker.getSymbolAtLocation(
 		program.getSourceFile(entry),
@@ -125,7 +160,11 @@ for (const entry of entries) {
 				? checker.getAliasedSymbol(exported)
 				: exported;
 		for (const declaration of symbol.declarations ?? []) {
-			checkDeclaration(exported.name, declaration);
+			checkDeclaration(
+				exported.name,
+				declaration,
+				exported.declarations?.[0],
+			);
 		}
 	}
 }

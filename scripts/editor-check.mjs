@@ -10,6 +10,7 @@ import * as Schema from "effect/Schema";
 
 import * as Fetch from "@monarcode/effetch";
 import { bearer, type TimeoutPlugin } from "@monarcode/effetch/plugins";
+import { FetchTest } from "@monarcode/effetch/test";
 
 export const make = Fetch./*make*/make({
 	plugins: [/*bearer*/bearer({ token: "token" })],
@@ -111,6 +112,13 @@ export const /*serviceCall*/serviceCall = Effect.gen(function* () {
 	const client = yield* Api;
 	return yield* client.get("/todos/:id", { params: { id: 1 }, output: Todo });
 });
+export const namespace = /*fetchTestNamespace*/FetchTest;
+export const /*backend*/backend = FetchTest./*fetchTestLayer*/layer([
+	FetchTest./*respond*/respond(getTodoDefinition, ({ params }) =>
+		Effect.succeed({ id: Number(params./*handlerParams*/id), title: "x" }),
+	),
+	FetchTest./*fail*/fail(definedMapped, 404, new TodoNotFound({ message: "x" })),
+]);
 `;
 
 const config = ts.getParsedCommandLineOfConfigFile(
@@ -173,6 +181,21 @@ for (const [marker, file, docs] of [
 	["config", "Service.d.ts", "The config the class was declared with"],
 	["endpointsClass", "Endpoints.d.ts", "Declares a module's endpoints"],
 	["bindAll", "Client.d.ts", "Binds a record of endpoint definitions"],
+	[
+		"fetchTestLayer",
+		path.join("test", "FetchTest.d.ts"),
+		"Makes a fake backend",
+	],
+	[
+		"respond",
+		path.join("test", "FetchTest.d.ts"),
+		"Makes a handler that answers",
+	],
+	[
+		"fail",
+		path.join("test", "FetchTest.d.ts"),
+		"Makes a handler that answers every request",
+	],
 ]) {
 	const definitions = service.getDefinitionAtPosition(probe, at(marker)) ?? [];
 	const targets = definitions.map((definition) =>
@@ -265,6 +288,36 @@ const boundParams = (
 expect(
 	boundParams.includes("id"),
 	`params of a bound "GET /todos/:id" endpoint don't complete id: ${boundParams.slice(0, 10).join(", ")}`,
+);
+
+const handlerParams = (
+	service.getCompletionsAtPosition(probe, at("handlerParams"), undefined)
+		?.entries ?? []
+).map((entry) => entry.name);
+expect(
+	handlerParams.includes("id"),
+	`params of a FetchTest.respond handler don't complete id: ${handlerParams.slice(0, 10).join(", ")}`,
+);
+
+const namespaceDocs = ts.displayPartsToString(
+	service.getQuickInfoAtPosition(probe, at("fetchTestNamespace"))
+		?.documentation,
+);
+expect(
+	namespaceDocs.includes("A typed fake backend for tests"),
+	`Hover on FetchTest doesn't show its docs: ${JSON.stringify(namespaceDocs.slice(0, 80))}`,
+);
+
+const backendHover = ts
+	.displayPartsToString(
+		service.getQuickInfoAtPosition(probe, at("backend"))?.displayParts,
+	)
+	.replace(/\s+/g, " ");
+expect(
+	backendHover.includes(
+		"Layer<HttpClient | FetchTest.Recorder, never, never>",
+	) || backendHover.includes("Layer<HttpClient | Recorder, never, never>"),
+	`Hover on a FetchTest layer doesn't show what it provides: ${backendHover}`,
 );
 
 const endpointHover = ts.displayPartsToString(

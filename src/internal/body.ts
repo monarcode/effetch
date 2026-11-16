@@ -34,7 +34,7 @@ const orDieInvalid = <A, R>(
  * React Native's polyfills have no tag, but they are the global
  * constructors, so `instanceof` covers them.
  */
-const isGlobalInstance = (value: unknown, name: string): boolean => {
+export const isGlobalInstance = (value: unknown, name: string): boolean => {
 	const constructor = (globalThis as Record<string, unknown>)[name];
 	return (
 		(typeof constructor === "function" && value instanceof constructor) ||
@@ -42,10 +42,10 @@ const isGlobalInstance = (value: unknown, name: string): boolean => {
 	);
 };
 
-const isBlob = (value: unknown): value is Blob =>
+export const isBlob = (value: unknown): value is Blob =>
 	isGlobalInstance(value, "Blob") || isGlobalInstance(value, "File");
 
-const toBytes = (value: ArrayBuffer | ArrayBufferView): Uint8Array =>
+export const toBytes = (value: ArrayBuffer | ArrayBufferView): Uint8Array =>
 	ArrayBuffer.isView(value)
 		? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
 		: new Uint8Array(value);

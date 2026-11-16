@@ -64,7 +64,7 @@ const messageOf = (error: unknown): string =>
  * a field's schema has no string encoding, such as
  * `Schema.instanceOf(Uint8Array)`.
  */
-const codecOf = (schema: QuerySchema): QueryCodec => {
+export const codecOf = (schema: QuerySchema): QueryCodec => {
 	let codec = codecs.get(schema);
 	if (codec === undefined) {
 		try {

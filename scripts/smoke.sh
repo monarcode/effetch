@@ -31,7 +31,9 @@ for required in \
 	package/dist/index.js \
 	package/dist/index.d.ts \
 	package/dist/plugins/index.js \
-	package/dist/plugins/index.d.ts; do
+	package/dist/plugins/index.d.ts \
+	package/dist/test/index.js \
+	package/dist/test/index.d.ts; do
 	if ! grep -qx "$required" <<<"$contents"; then
 		echo "✗ Missing from tarball: $required" >&2
 		exit 1
@@ -75,6 +77,7 @@ import {
 	TimeoutError,
 	timeout,
 } from "@monarcode/effetch/plugins";
+import { FetchTest } from "@monarcode/effetch/test";
 
 const orgId: string = "acme";
 type OrgUser = `/orgs/${typeof orgId}/users/:id`;
@@ -391,6 +394,48 @@ const viaEndpoints: string | { readonly id: number } =
 	await Effect.runPromise(endpointsProgram);
 if (viaEndpoints !== "No todo 9") {
 	throw new Error(`Unexpected Fetch.Endpoints result: ${JSON.stringify(viaEndpoints)}`);
+}
+
+// A typed fake backend from the endpoints, under the service classes.
+const Dated = Schema.Struct({ id: Schema.Finite, due: Schema.Date });
+const getDated = Fetch.endpoint("GET /dated/:id", { output: Dated });
+const Backend = FetchTest.layer([
+	FetchTest.respond(getDated, ({ params }) =>
+		Effect.succeed({ id: Number(params.id), due: new Date(0) }),
+	),
+	FetchTest.fail(TodoApi.definitions.missing[0], 404, new TodoNotFound({ message: "No todo 9" })),
+]);
+if (Object.keys(FetchTest).sort().join() !== "Recorder,fail,layer,reply,requests,respond") {
+	throw new Error(`Unexpected FetchTest exports: ${Object.keys(FetchTest).join()}`);
+}
+
+const fakeProgram = Effect.gen(function* () {
+	const api = yield* Api;
+	const todos = yield* TodoApi;
+	const dated = yield* api.bind(getDated)({ params: { id: 4 } });
+	const missing = yield* todos.missing({ params: { id: 9 } }).pipe(
+		Effect.catchTag("TodoNotFound", (error) => Effect.succeed(error.message)),
+	);
+	const sent = yield* FetchTest.requests;
+	return { dated, missing, urls: sent.map((request) => request.url) };
+}).pipe(
+	Effect.provide(
+		TodoApi.layer.pipe(
+			Layer.provideMerge(Api.layer),
+			Layer.provideMerge(Backend),
+		),
+	),
+);
+
+const viaFake = await Effect.runPromise(fakeProgram);
+const fakeDated: { readonly id: number; readonly due: Date } = viaFake.dated;
+if (
+	fakeDated.id !== 4 ||
+	!(fakeDated.due instanceof Date) ||
+	viaFake.missing !== "No todo 9" ||
+	viaFake.urls.join() !== "https://api.test/dated/4,https://api.test/todos/9"
+) {
+	throw new Error(`Unexpected FetchTest result: ${JSON.stringify(viaFake)}`);
 }
 
 console.log("smoke: ok");

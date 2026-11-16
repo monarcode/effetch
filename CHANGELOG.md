@@ -6,6 +6,65 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ### Added
 
+- `@monarcode/effetch/test` is a new entry point, with `FetchTest`: a typed
+  fake backend made from your endpoints, to test code that calls them
+  without a network or a hand-written `HttpClient`. Before:
+
+  ```ts
+  const TestHttpClient = Layer.succeed(
+    HttpClient.HttpClient,
+    HttpClient.make((request, url) =>
+      url.pathname === "/todos/1"
+        ? Effect.succeed(
+            HttpClientResponse.fromWeb(
+              request,
+              Response.json({
+                id: 1,
+                title: "Write docs",
+                due: "1970-01-01T00:00:00.000Z",
+              }),
+            ),
+          )
+        : Effect.die(new Error(`Unexpected ${request.method} ${url.href}`)),
+    ),
+  );
+  ```
+
+  After:
+
+  ```ts
+  import { FetchTest } from "@monarcode/effetch/test";
+
+  const Backend = FetchTest.layer([
+    FetchTest.respond(getTodo, ({ params }) =>
+      Effect.succeed({
+        id: Number(params.id),
+        title: "Write docs",
+        due: new Date(0),
+      }),
+    ),
+    FetchTest.fail(listTodos, 503),
+  ]);
+  ```
+
+  - `FetchTest.layer(handlers, options?)` is an `HttpClient` layer. Provide
+    it where `FetchHttpClient.layer` goes, under the real client.
+  - `FetchTest.respond(endpoint, handler, options?)` answers an endpoint's
+    requests. The handler's `params`, `query` and `body` are typed by the
+    endpoint, and decoded with its `input` and query schemas. Its result
+    is typed by `output`, and encoded with it, so a `Date` goes over the
+    wire as a string.
+  - `FetchTest.reply(status, body?, options?)` answers with any status, as
+    it is. `FetchTest.fail(endpoint, status, body?)` answers with an error,
+    its body encoded with the endpoint's `statusErrors` or `error` schema,
+    so the client decodes it into your domain error.
+  - `FetchTest.requests` gives what the backend received. It needs
+    `FetchTest.Recorder`, which the layer provides.
+  - A route matches the end of a request's path, under any `baseUrl`, or
+    the whole URL with `{ baseUrl }`. A request no route matches is a
+    defect that lists the routes.
+  - It doesn't depend on a test runner.
+
 - `Fetch.Endpoints` declares a module's endpoints as a service, in one
   class, with its layer. It takes the service's id, the client's service
   and a record of definitions made with `Fetch.endpoint`. Before:
