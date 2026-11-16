@@ -1,4 +1,3 @@
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -11,7 +10,7 @@ import * as Fetch from "@monarcode/effetch";
 // below.
 const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
 
-// The app's own errors. The backend never sends a `_tag`: effetch adds it
+// The app's own errors. The backend never sends a `_tag`: Effetch adds it
 // before decoding, so plain `Schema.TaggedError` classes work.
 
 /** A 401 from any endpoint: the session is over. */
@@ -63,64 +62,77 @@ const Todo = Schema.Struct({
 
 const Report = Schema.Struct({ url: Schema.String });
 
-const makeApi = Effect.gen(function* () {
-	const api = yield* Fetch.make({
-		baseUrl: "https://api.example.com",
-		defaultError: ApiError,
-		// What these statuses mean from any endpoint. The backend sends
-		// `retry_after_seconds`; `encodeKeys` reads it into `retryAfter`.
-		statusErrors: {
-			401: SessionExpired,
-			429: RateLimited.pipe(
-				Schema.encodeKeys({ retryAfter: "retry_after_seconds" }),
-			),
-		},
-	});
-	return {
-		getTodo: api.endpoint("GET /todos/:id", {
-			output: Todo,
-			statusErrors: { 404: TodoNotFound },
-		}),
-		assign: api.endpoint("POST /todos/:id/assignees", {
-			input: Schema.Struct({ userId: Schema.String }),
-			output: Todo,
-			// A list is tried in order: the first that decodes the body wins.
-			statusErrors: {
-				404: TodoNotFound,
-				400: [UnknownUser, AlreadyAssigned],
-			},
-		}),
-		// A one-off call, with a map of its own.
-		report: (id: number) =>
-			api.get("/reports/:id", {
-				params: { id },
-				output: Report,
-				statusErrors: { 409: ReportNotReady },
-			}),
-	};
+// --- For every call: the client's map ---
+
+export class Api extends Fetch.Service<Api>()("examples/status-errors/Api", {
+	baseUrl: "https://api.example.com",
+	defaultError: ApiError,
+	// What these statuses mean from any endpoint. The backend sends
+	// `retry_after_seconds`; `encodeKeys` reads it into `retryAfter`.
+	statusErrors: {
+		401: SessionExpired,
+		429: RateLimited.pipe(
+			Schema.encodeKeys({ retryAfter: "retry_after_seconds" }),
+		),
+	},
+}) {}
+
+// --- For every call to an endpoint: the endpoint's map ---
+
+export const getTodo = Fetch.endpoint("GET /todos/:id", {
+	output: Todo,
+	statusErrors: { 404: TodoNotFound },
 });
 
-export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
-	"Api",
+export const assign = Fetch.endpoint("POST /todos/:id/assignees", {
+	input: Schema.Struct({ userId: Schema.String }),
+	output: Todo,
+	// A list is tried in order: the first that decodes the body wins.
+	statusErrors: {
+		404: TodoNotFound,
+		400: [UnknownUser, AlreadyAssigned],
+	},
+});
+
+export class TodoApi extends Fetch.Endpoints<TodoApi>()(
+	"examples/status-errors/TodoApi",
+	Api,
+	{ get: getTodo, assign },
 ) {}
 
-export const ApiLive = Layer.effect(Api)(makeApi).pipe(
+// `provideMerge` keeps `Api` available too, for `report`'s one-off call.
+export const AppLayer = TodoApi.layer.pipe(
+	Layer.provideMerge(Api.layer),
 	Layer.provide(FetchHttpClient.layer),
 );
+
+// --- For one call: the call's map ---
+
+export const report = (id: number) =>
+	Effect.gen(function* () {
+		const api = yield* Api;
+		return yield* api.get("/reports/:id", {
+			params: { id },
+			output: Report,
+			statusErrors: { 409: ReportNotReady },
+		});
+	});
+
+// --- Using them ---
 
 // A missing todo is `undefined`; every other error stays in the type, for
 // the caller to handle.
 export const findTodo = (id: number) =>
 	Effect.gen(function* () {
-		const { getTodo } = yield* Api;
-		return yield* getTodo({ params: { id } });
+		const todos = yield* TodoApi;
+		return yield* todos.get({ params: { id } });
 	}).pipe(Effect.catchTag("TodoNotFound", () => Effect.undefined));
 
 // Each error comes with its own fields: `assignee` is typed and decoded.
 export const assignTo = (id: number, userId: string) =>
 	Effect.gen(function* () {
-		const { assign } = yield* Api;
-		return yield* assign({ params: { id }, body: { userId } });
+		const todos = yield* TodoApi;
+		return yield* todos.assign({ params: { id }, body: { userId } });
 	}).pipe(
 		Effect.catchTags({
 			AlreadyAssigned: (error) =>
@@ -135,7 +147,6 @@ export const program = Effect.gen(function* () {
 		return "No todo 1";
 	}
 	yield* assignTo(todo.id, "u_ada");
-	const { report } = yield* Api;
 	const { url } = yield* report(todo.id).pipe(
 		Effect.retry({
 			while: (error) => error._tag === "ReportNotReady",
@@ -160,4 +171,4 @@ export const program = Effect.gen(function* () {
 	}),
 );
 
-export const main = program.pipe(Effect.provide(ApiLive));
+export const main = program.pipe(Effect.provide(AppLayer));

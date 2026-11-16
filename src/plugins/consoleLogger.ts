@@ -505,7 +505,7 @@ const messageOf = (error: unknown): string =>
 
 /**
  * A short description of `error` for the summary line: its tag or name,
- * and its message without the `"<method> <url>: "` that effetch's own
+ * and its message without the `"<method> <url>: "` that Effetch's own
  * errors start with. An `HttpError` is its tag alone, as the line shows
  * the status, and a `NetworkError` shows its cause's message.
  */
@@ -830,7 +830,7 @@ const returnsUnread = (
  * Reads the response body to print it. The body is only read when it's
  * text and the call didn't return the response itself (a call without
  * `output`, whose caller may stream it, or a stream from `api.sse` or
- * `api.ndjson`). Effect caches it, so effetch
+ * `api.ndjson`). Effect caches it, so Effetch
  * reading it before, or the caller after, is unaffected.
  */
 const readResponseBody = (
@@ -1247,7 +1247,7 @@ const resolveColor = (color: ConsoleLoggerColor): Config["color"] =>
  *
  * declare const isDevelopment: boolean;
  *
- * const makeApi = Fetch.make({
+ * class Api extends Fetch.Service<Api>()("Api", {
  *   baseUrl: "https://api.example.com",
  *   plugins: [
  *     consoleLogger({
@@ -1256,7 +1256,7 @@ const resolveColor = (color: ConsoleLoggerColor): Config["color"] =>
  *       redact: { body: ["otp"] },
  *     }),
  *   ],
- * });
+ * }) {}
  *
  * // Per call:
  * // api.get("/export", { plugins: { consoleLogger: { detail: "summary" } } })

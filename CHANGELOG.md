@@ -13,6 +13,8 @@ All notable changes to `@monarcode/effetch`, newest first.
   that let TypeScript infer them, the usual way, are unchanged. The two
   can't have defaults: with one, a definition written inline in the call
   loses its literal types.
+- The message logged when a plugin's `onError` or `onExit` hook fails starts
+  with `Effetch:` rather than `effetch:`.
 
 ### Added
 
@@ -377,15 +379,21 @@ All notable changes to `@monarcode/effetch`, newest first.
   `client.bind`, `client.bindAll` and `client.endpoint` as the other ways to
   bind them. Long lists of edge cases are folded into "Details" blocks.
 - The README adds badges for bundle size (without `effect`), types,
-  provenance and license, and for the runtimes effetch targets.
+  provenance and license, and for the runtimes Effetch targets.
 - The README has new sections: "Providing the client", "Coming from axios or
-  ky", which maps their options and hooks to effetch; "A client from
+  ky", which maps their options and hooks to Effetch; "A client from
   another"; "Streaming responses"; "Pagination"; and "Stream endpoints in
   tests". "Built-in plugins" says how to limit each attempt or the whole
   call, and the configuration table lists `statusErrors`.
 - `examples/streams.ts` shows Server-Sent Events, newline-delimited JSON, an
   answer that ends with `[DONE]`, and a list paged by its `Link` header.
   `examples/basic.ts` handles its `404` with `Fetch.catchStatus`.
+- `examples/endpoints.ts`, `examples/status-errors.ts` and
+  `examples/backends.ts` declare their clients with `Fetch.Service` and their
+  endpoints with `Fetch.Endpoints`, and the JSDoc examples declare clients
+  with `Fetch.Service`. `Fetch.make`'s JSDoc says when to use it instead.
+- The docs call the package Effetch. `effetch` stays the npm and repository
+  name.
 
 ## 0.1.0-rc.2
 
@@ -401,7 +409,7 @@ All notable changes to `@monarcode/effetch`, newest first.
   call), `client.endpoint` and `Fetch.endpoint` (every call of the
   endpoint) and a call's options. The call's schemas are tried first, then
   the endpoint's, then the client's.
-  - Backends don't send a `_tag`, so effetch adds the schema's literal
+  - Backends don't send a `_tag`, so Effetch adds the schema's literal
     `_tag` to the body before decoding. `Schema.encodeKeys` renames fields.
   - A response that no schema decodes, or with an empty or non-JSON body,
     fails with the `HttpError` it fails with today, which stays in the
@@ -498,7 +506,7 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 - A `Redacted` query value is sent as its value. From Effect 4.1,
   `QueryValue` (Effect's `UrlParams.Coercible`) accepts `Redacted`, but
-  effetch converted it with `String()`, so `{ token: Redacted.make(key) }`
+  Effetch converted it with `String()`, so `{ token: Redacted.make(key) }`
   sent `token=<redacted>`.
 
 ## 0.1.0-rc.0
@@ -535,7 +543,7 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ### Documentation
 
-- The README is reorganized as a guide that reads top to bottom: why effetch
+- The README is reorganized as a guide that reads top to bottom: why Effetch
   (with a side-by-side with `HttpClient`), getting started, then clients,
   calls, errors, plugins and writing them, endpoints, structuring an app and
   testing, with a two-level table of contents.
@@ -577,7 +585,7 @@ package since 0.1.0-alpha.0.
 
 ## 0.1.0-alpha.0
 
-First preview of effetch: typed, schema-driven HTTP calls on Effect v4's
+First preview of Effetch: typed, schema-driven HTTP calls on Effect v4's
 `HttpClient`.
 
 ### Added

@@ -7,10 +7,12 @@ import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import type * as Stream from "effect/Stream";
 
 import { describe, expectTypeOf, it } from "vitest";
 
 import * as Fetch from "../../src/index.js";
+import { FetchTest } from "../../src/test/index.js";
 
 const ApiError = Schema.Struct({ code: Schema.String });
 const OtherError = Schema.Struct({ reason: Schema.String });
@@ -243,5 +245,124 @@ describe("client.bindAll", () => {
 		expectTypeOf(api.bindAll).toEqualTypeOf<
 			Fetch.BindAllMethod<ApiPs, typeof ApiError, ApiSE>
 		>();
+	});
+});
+
+describe("inline definitions", () => {
+	// An inline `Fetch.endpoint(…)` inside a pair used to take its unset
+	// `stream` and `responseMode` from the surrounding type, so it was typed
+	// as a stream endpoint.
+	class InlineApi extends Fetch.Endpoints<InlineApi>()("InlineApi", Api, {
+		create: [
+			Fetch.endpoint("POST /todos", { input: NewTodo, output: Todo }),
+			{ plugins: { bearer: false } },
+		],
+		list: Fetch.endpoint("GET /todos", { output: Schema.Array(Todo) }),
+		events: [
+			Fetch.endpoint("GET /events", { output: Todo, stream: "sse" }),
+			{ plugins: { bearer: false } },
+		],
+		page: [
+			Fetch.endpoint("GET /page", {
+				output: Todo,
+				responseMode: "decoded-and-response",
+			}),
+			{},
+		],
+	}) {}
+
+	it("types a pair's inline definition as a hoisted one", () => {
+		const createInline = Fetch.endpoint("POST /todos", {
+			input: NewTodo,
+			output: Todo,
+		});
+		const program = Effect.gen(function* () {
+			const inline = yield* InlineApi;
+			expectTypeOf(inline.create).toEqualTypeOf(
+				api.bind(createInline, { plugins: { bearer: false } }),
+			);
+			expectTypeOf(inline.list).toEqualTypeOf(
+				api.bind(
+					Fetch.endpoint("GET /todos", { output: Schema.Array(Todo) }),
+				),
+			);
+		});
+		void program;
+	});
+
+	it("keeps a given stream format and response mode", () => {
+		const events = Fetch.endpoint("GET /events", {
+			output: Todo,
+			stream: "sse",
+		});
+		const page = Fetch.endpoint("GET /page", {
+			output: Todo,
+			responseMode: "decoded-and-response",
+		});
+		const program = Effect.gen(function* () {
+			const inline = yield* InlineApi;
+			expectTypeOf(inline.events).toEqualTypeOf(
+				api.bind(events, { plugins: { bearer: false } }),
+			);
+			expectTypeOf(inline.page).toEqualTypeOf(api.bind(page, {}));
+		});
+		void program;
+	});
+
+	it("types every other definition shape as a hoisted one", () => {
+		class Shapes extends Fetch.Endpoints<Shapes>()("Shapes", Api, {
+			bare: [Fetch.endpoint("DELETE /todos/:id"), {}],
+			typed: [
+				Fetch.endpoint("GET /todos/:id", {
+					query: Schema.Struct({ full: Schema.optional(Schema.Boolean) }),
+					output: Todo,
+					error: OtherError,
+					statusErrors: { 404: NotFound },
+				}),
+				{ plugins: { bearer: false } },
+			],
+		}) {}
+		const bare = Fetch.endpoint("DELETE /todos/:id");
+		const typed = Fetch.endpoint("GET /todos/:id", {
+			query: Schema.Struct({ full: Schema.optional(Schema.Boolean) }),
+			output: Todo,
+			error: OtherError,
+			statusErrors: { 404: NotFound },
+		});
+		const program = Effect.gen(function* () {
+			const shapes = yield* Shapes;
+			expectTypeOf(shapes.bare).toEqualTypeOf(api.bind(bare, {}));
+			expectTypeOf(shapes.typed).toEqualTypeOf(
+				api.bind(typed, { plugins: { bearer: false } }),
+			);
+		});
+		void program;
+	});
+
+	it("does the same with client.bindAll", () => {
+		const all = api.bindAll({
+			create: [
+				Fetch.endpoint("POST /todos", { input: NewTodo, output: Todo }),
+				{ plugins: { bearer: false } },
+			],
+		});
+		const create = Fetch.endpoint("POST /todos", {
+			input: NewTodo,
+			output: Todo,
+		});
+		expectTypeOf(all.create).toEqualTypeOf(
+			api.bind(create, { plugins: { bearer: false } }),
+		);
+	});
+
+	it("takes nothing from a type the endpoint is checked against", () => {
+		const fromEndpoint = {
+			get: Fetch.endpoint("GET /todos/:id", { output: Todo }),
+		} satisfies Record<string, Fetch.AnyUnboundEndpoint>;
+		expectTypeOf(fromEndpoint.get.stream).toEqualTypeOf<undefined>();
+		const fromClient = {
+			get: api.endpoint("GET /todos/:id", { output: Todo }),
+		} satisfies Record<string, FetchTest.TestEndpoint>;
+		expectTypeOf(fromClient.get.stream).toEqualTypeOf<undefined>();
 	});
 });

@@ -1,5 +1,4 @@
 import * as Config from "effect/Config";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -9,7 +8,7 @@ import * as Fetch from "@monarcode/effetch";
 import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
 
 // Two backends, each with its own base URL, error shape and plugins: one
-// client per backend, each in its own service.
+// client per backend, and each backend's endpoints as their own service.
 
 const User = Schema.Struct({ id: Schema.String, name: Schema.String });
 
@@ -46,27 +45,31 @@ const reportErrors = (backend: string) =>
 			Effect.logWarning(`${backend} ${ctx.route} failed`, error),
 	});
 
-const makeUsersApi = Effect.gen(function* () {
-	const client = yield* Fetch.make({
+// --- The users backend ---
+
+export class UsersClient extends Fetch.Service<UsersClient>()(
+	"examples/backends/UsersClient",
+	{
 		baseUrl: Config.String("USERS_API_URL"),
 		defaultError: UsersError,
 		plugins: [logger(), reportErrors("users"), retry(), auth],
-	});
-	return {
-		// The client itself, for calls that aren't endpoints.
-		client,
-		me: client.endpoint("GET /me", { output: User }),
-		getUser: client.endpoint("GET /users/:id", { output: User }),
-	};
-});
+	},
+) {}
 
-export class UsersApi extends Context.Service<
-	UsersApi,
-	Effect.Success<typeof makeUsersApi>
->()("UsersApi") {}
+export class UsersApi extends Fetch.Endpoints<UsersApi>()(
+	"examples/backends/UsersApi",
+	UsersClient,
+	{
+		me: Fetch.endpoint("GET /me", { output: User }),
+		getUser: Fetch.endpoint("GET /users/:id", { output: User }),
+	},
+) {}
 
-const makeWalletApi = Effect.gen(function* () {
-	const client = yield* Fetch.make({
+// --- The wallet backend ---
+
+export class WalletClient extends Fetch.Service<WalletClient>()(
+	"examples/backends/WalletClient",
+	{
 		baseUrl: Config.String("WALLET_API_URL"),
 		defaultError: WalletError,
 		plugins: [
@@ -75,30 +78,34 @@ const makeWalletApi = Effect.gen(function* () {
 			timeout({ duration: "10 seconds" }),
 			auth,
 		],
-	});
-	return {
-		client,
-		balance: client.endpoint("GET /wallets/:userId/balance", {
+	},
+) {}
+
+export class WalletApi extends Fetch.Endpoints<WalletApi>()(
+	"examples/backends/WalletApi",
+	WalletClient,
+	{
+		balance: Fetch.endpoint("GET /wallets/:userId/balance", {
 			output: Balance,
 		}),
-		transfer: client.endpoint("POST /transfers", {
-			input: Transfer,
-			output: Receipt,
-			plugins: { timeout: { duration: "30 seconds" } },
-		}),
-	};
-});
+		transfer: [
+			Fetch.endpoint("POST /transfers", {
+				input: Transfer,
+				output: Receipt,
+			}),
+			{ plugins: { timeout: { duration: "30 seconds" } } },
+		],
+	},
+) {}
 
-export class WalletApi extends Context.Service<
-	WalletApi,
-	Effect.Success<typeof makeWalletApi>
->()("WalletApi") {}
+// The endpoints, on top of both clients, on top of one HttpClient.
+// `provideMerge` keeps the clients available, for one-off calls.
+export const AppLayer = Layer.mergeAll(UsersApi.layer, WalletApi.layer).pipe(
+	Layer.provideMerge(Layer.mergeAll(UsersClient.layer, WalletClient.layer)),
+	Layer.provide(FetchHttpClient.layer),
+);
 
-// One HttpClient for both.
-export const ApisLive = Layer.mergeAll(
-	Layer.effect(UsersApi)(makeUsersApi),
-	Layer.effect(WalletApi)(makeWalletApi),
-).pipe(Layer.provide(FetchHttpClient.layer));
+// --- Using them ---
 
 // Each backend's errors are caught next to its calls, where `HttpError.body`
 // has that backend's error shape.
@@ -126,8 +133,8 @@ const sendHalf = (userId: string, to: string) =>
 // endpoint.
 const recordActivity = (userId: string, receiptId: string) =>
 	Effect.gen(function* () {
-		const users = yield* UsersApi;
-		yield* users.client.post("/users/:id/activity", {
+		const users = yield* UsersClient;
+		yield* users.post("/users/:id/activity", {
 			params: { id: userId },
 			body: { type: "transfer", receipt: receiptId },
 		});
@@ -151,4 +158,4 @@ export const program = (to: string) =>
 		}),
 	);
 
-export const main = (to: string) => program(to).pipe(Effect.provide(ApisLive));
+export const main = (to: string) => program(to).pipe(Effect.provide(AppLayer));

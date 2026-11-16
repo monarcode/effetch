@@ -1,7 +1,7 @@
 <h1>
   <img
     src="https://github.com/monarcode/effetch/raw/main/banner.png"
-    alt="effetch: schema-driven HTTP calls on Effect v4's HttpClient, typed end to end"
+    alt="Effetch: schema-driven HTTP calls on Effect v4's HttpClient, typed end to end"
     width="100%"
   />
 </h1>
@@ -24,7 +24,7 @@
 **Typed HTTP calls for [Effect](https://effect.website), without the
 boilerplate.**
 
-You give effetch a path and a schema. It fills in the path, builds the
+You give Effetch a path and a schema. It fills in the path, builds the
 query, sends the request, checks the status and decodes the response. What
 you get back is an Effect that's typed end to end, errors included, so
 TypeScript tells you what a call returns and every way it can fail.
@@ -50,14 +50,14 @@ export const getTodo = (id: number) =>
 //        NetworkError | DecodeError | HttpError.With<unknown>, Api>
 ```
 
-> **Release candidate.** effetch is close to its first stable release
+> **Release candidate.** Effetch is close to its first stable release
 > (`0.1.0-rc.N`). The API is settled: release candidates add small, opt-in
 > features and fixes, and the [changelog](./CHANGELOG.md) lists anything
 > that needs a change in your code.
 
 ## Contents
 
-- [Why effetch](#why-effetch)
+- [Why Effetch](#why-effetch)
   - [At a glance](#at-a-glance)
   - [What you get](#what-you-get)
   - [Where it fits](#where-it-fits)
@@ -139,7 +139,7 @@ export const getTodo = (id: number) =>
 - [Development](#development)
 - [License](#license)
 
-## Why effetch
+## Why Effetch
 
 Effect gives you two ways to call an HTTP API, and they sit at opposite
 ends:
@@ -151,13 +151,13 @@ ends:
 
 Most apps sit in between. They call a backend they don't control, such as
 their company's REST API or a third-party service, one call at a time.
-effetch is made for that. It's a thin layer over `HttpClient` that gives each
+Effetch is made for that. It's a thin layer over `HttpClient` that gives each
 call the types and error handling of a contract, without you having to write
 one.
 
 ### At a glance
 
-Here's the same call written with `HttpClient` alone, and with effetch:
+Here's the same call written with `HttpClient` alone, and with Effetch:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -183,12 +183,12 @@ export const getTodoByHand = (id: number) =>
     return yield* HttpIncomingMessage.schemaBodyJson(Todo)(ok);
   });
 
-// With effetch
+// With Effetch
 export const getTodo = (id: number) =>
   api.get("/todos/:id", { params: { id }, output: Todo });
 ```
 
-Both send the same request and decode the same response. The effetch version
+Both send the same request and decode the same response. The Effetch version
 also:
 
 - checks at compile time that every call passes an `id`;
@@ -226,16 +226,16 @@ also:
 
 ### Where it fits
 
-- Use **effetch** to call REST and JSON APIs that you don't own, or don't
+- Use **Effetch** to call REST and JSON APIs that you don't own, or don't
   share code with.
 - Use Effect's **`HttpApi`** when you own both the server and the client,
   and want them to share one contract.
-- Use **`HttpClient`** directly for what effetch doesn't cover, such as
-  WebSockets or uploads with progress. Every effetch client gives you its
+- Use **`HttpClient`** directly for what Effetch doesn't cover, such as
+  WebSockets or uploads with progress. Every Effetch client gives you its
   own when you need it.
 
 Coming from axios or ky? [This table](#coming-from-axios-or-ky) maps what
-you know to effetch.
+you know to Effetch.
 
 ## Getting started
 
@@ -302,7 +302,7 @@ await Effect.runPromise(program.pipe(Effect.provide(ApiLive)));
 
 Here's what each part does:
 
-1. **`Todo` describes the response.** effetch decodes the body with it, so
+1. **`Todo` describes the response.** Effetch decodes the body with it, so
    `todo` is typed, and checked when it arrives. If the API sends something
    else, the call fails with a `DecodeError` instead of handing you bad data.
 2. **`Api` is your client.** `Fetch.Service` declares it as an Effect
@@ -319,7 +319,7 @@ Calling an API from a web page on another origin? Read
 
 ### How the pieces fit
 
-Everything in effetch builds on four ideas, from the bottom up:
+Everything in Effetch builds on four ideas, from the bottom up:
 
 - **An `HttpClient`** sends requests. It's Effect's, and you choose it when
   you run your program: the global `fetch`, Node's, or a fake in tests.
@@ -938,7 +938,7 @@ export const me = api
 ### Typed error bodies
 
 APIs usually explain an error in its body, such as
-`{ "code": "not_found" }`. Give effetch a schema for it, and
+`{ "code": "not_found" }`. Give Effetch a schema for it, and
 `HttpError.body` is decoded and typed:
 
 - `defaultError`, on the client, applies to every call;
@@ -1059,7 +1059,7 @@ How a non-2xx response is resolved:
 <summary><strong>Details: tags, renamed fields, unions and types</strong></summary>
 
 - **The `_tag`.** Backends don't send one, so when a schema has a literal
-  `_tag`, as `Schema.TaggedError` classes do, effetch adds it to the body
+  `_tag`, as `Schema.TaggedError` classes do, Effetch adds it to the body
   before decoding. A body that has its own `_tag` is decoded as it is.
 - **Renamed fields.** To read `error_code` into `code`, use
   `Schema.encodeKeys`:
@@ -1361,7 +1361,7 @@ line shows. Defects are printed as they are.
 <summary><strong>Details: bodies, platforms and timing</strong></summary>
 
 - It only reads a response body that's text: JSON, `text/*` other than event
-  streams, XML or a form, up to 1 MB. effetch has read it already to check
+  streams, XML or a form, up to 1 MB. Effetch has read it already to check
   the status or decode it, and Effect caches it. A call without `output`
   returns the response itself, so its body isn't read, and stays yours to
   stream. Neither is an interrupted call's.
@@ -2351,7 +2351,7 @@ export const deadline = Fetch.plugin({
 
 A client is declared once, and endpoints are bound to it once, in a layer.
 Where each piece lives depends on the size of your app. These are patterns,
-not rules: effetch works the same way whichever you pick.
+not rules: Effetch works the same way whichever you pick.
 
 ### A small app
 
@@ -2459,8 +2459,8 @@ src/
 └── runtime.ts             modules, on top of clients, on top of HttpClient
 ```
 
-> **This layout is a personal preference,** the one effetch's author uses in
-> their own apps, and effetch doesn't depend on it. Rename, merge or split the
+> **This layout is a personal preference,** the one Effetch's author uses in
+> their own apps, and Effetch doesn't depend on it. Rename, merge or split the
 > folders to suit your project. What carries over is that modules import the
 > client, never the other way around, and that endpoints are bound once, in a
 > layer.
@@ -2562,7 +2562,7 @@ talks to, and one `HttpClient` layer serves them all.
 
 ## Testing
 
-effetch never touches the network itself: it sends every request through the
+Effetch never touches the network itself: it sends every request through the
 `HttpClient` you provide. In tests, `@monarcode/effetch/test` gives you a fake
 one, made from your endpoints, so your code runs as it does in production:
 the real client, with its plugins, `defaultError` and `statusErrors`.
@@ -2884,7 +2884,7 @@ const todo = await Effect.runPromise(
 
 ## Platform notes
 
-effetch has no platform-specific imports or builds, and runs wherever Effect's
+Effetch has no platform-specific imports or builds, and runs wherever Effect's
 `HttpClient` does: browsers, React Native, Node 20 or newer, Bun and Deno.
 Two platforms need a little setup.
 
@@ -2917,10 +2917,10 @@ page's URL.
 
 ### React Native
 
-- effetch doesn't use `URL` itself. Effect's `HttpClient` does, including
+- Effetch doesn't use `URL` itself. Effect's `HttpClient` does, including
   `searchParams`. Expo provides a standard `URL`. In a React Native app
   without Expo, install a polyfill such as `react-native-url-polyfill`.
-- effetch and Effect use package `exports` (`effect/http/HttpClient`,
+- Effetch and Effect use package `exports` (`effect/http/HttpClient`,
   `@monarcode/effetch/plugins`). Metro resolves them by default from React
   Native 0.79 (Expo SDK 53). On older versions, set
   `resolver.unstable_enablePackageExports = true` in `metro.config.js`.
@@ -2936,9 +2936,9 @@ page's URL.
 
 ## Coming from axios or ky
 
-The following table maps what you know from axios and ky to effetch:
+The following table maps what you know from axios and ky to Effetch:
 
-| axios or ky                                                   | effetch                                                                                                                                   |
+| axios or ky                                                   | Effetch                                                                                                                                   |
 | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `axios.create`, `ky.create`                                   | [`Fetch.Service`](#declaring-a-client), or [`Fetch.make`](#fetchservice-or-fetchmake) in a script                                         |
 | `ky.extend`, a client per API version                         | A second `Fetch.Service` from `{ ...Api.config, baseUrl }` (see [A client from another](#a-client-from-another))                          |

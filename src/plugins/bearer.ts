@@ -230,10 +230,10 @@ const maxRecent = 32;
  *   }),
  * });
  *
- * const makeApi = Fetch.make({
+ * class Api extends Fetch.Service<Api>()("Api", {
  *   baseUrl: "https://api.example.com",
  *   plugins: [fromSession],
- * });
+ * }) {}
  *
  * // Per call: api.post("/auth/login", { body, plugins: { bearer: false } })
  *

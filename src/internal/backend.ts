@@ -119,7 +119,7 @@ const jsonPayload = (value: unknown, what: string): Effect.Effect<Payload> =>
 	});
 
 /**
- * A body sent by its runtime type, as effetch sends a call's `body` without
+ * A body sent by its runtime type, as Effetch sends a call's `body` without
  * `input` (see `encodeBody`): nothing for `undefined`, text for a string,
  * bytes for an `ArrayBuffer` or any view of one, a `Blob` or `FormData` as
  * it is, a form for `URLSearchParams`, and JSON for anything else. Dies

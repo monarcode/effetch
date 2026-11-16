@@ -221,18 +221,18 @@ const afterHeader = (
  * import * as Fetch from "@monarcode/effetch";
  * import { retry } from "@monarcode/effetch/plugins";
  *
- * const makeApi = Fetch.make({
+ * class Api extends Fetch.Service<Api>()("Api", {
  *   baseUrl: "https://api.example.com",
  *   plugins: [retry({ times: 3 })],
- * });
+ * }) {}
  *
  * // Per call: api.get("/health", { plugins: { retry: { times: 0 } } })
  *
  * // Wait as Retry-After asks, up to 30 seconds.
- * const makeOtherApi = Fetch.make({
+ * class OtherApi extends Fetch.Service<OtherApi>()("OtherApi", {
  *   baseUrl: "https://api.example.com",
  *   plugins: [retry({ times: 5, retryAfter: { max: "30 seconds" } })],
- * });
+ * }) {}
  * ```
  *
  * @since 0.1.0
@@ -262,13 +262,13 @@ export function retry(
  * import { retry, timeout } from "@monarcode/effetch/plugins";
  *
  * // 10 seconds per attempt, 30 seconds in all.
- * const makeApi = Fetch.make({
+ * class Api extends Fetch.Service<Api>()("Api", {
  *   baseUrl: "https://api.example.com",
  *   plugins: [
  *     retry({ times: 5, budget: "30 seconds" }),
  *     timeout({ duration: "10 seconds" }),
  *   ],
- * });
+ * }) {}
  *
  * // Per call: api.get("/report", { plugins: { retry: { budget: "2 minutes" } } })
  * ```

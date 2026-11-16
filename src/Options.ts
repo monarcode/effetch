@@ -10,7 +10,7 @@ import type { PathParamNames, PathParams, PathParamValue } from "./Path.js";
 import type { Plugin } from "./Plugin.js";
 
 /**
- * A single query value. effetch drops `null` and `undefined` (Effect's own
+ * A single query value. Effetch drops `null` and `undefined` (Effect's own
  * `UrlParams` would send `null` as the string `"null"`); other values are
  * converted with `String()`. With Effect 4.1 or later, a value can also be
  * `Redacted`: it's sent as its value, and stays redacted in Effect's own logs
@@ -148,7 +148,7 @@ export type AnySchema = Schema.Constraint;
  * an `HttpError`.
  *
  * Usually the schemas are `Schema.TaggedError` classes. Backends don't send
- * a `_tag`, so when a schema has a literal `_tag`, effetch adds it to the
+ * a `_tag`, so when a schema has a literal `_tag`, Effetch adds it to the
  * body before decoding. A literal field, such as
  * `code: Schema.Literal("INVALID_ROLE")`, is how one 400 becomes your error
  * while other 400s don't.

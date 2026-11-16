@@ -627,7 +627,7 @@ export const requests: Effect.Effect<
  * status: a `201` with a `location` header, a `404` for a missing item, a
  * `500`. The body isn't checked against the endpoint's schemas.
  *
- * The body is sent by its runtime type, as effetch sends a call's `body`
+ * The body is sent by its runtime type, as Effetch sends a call's `body`
  * without `input`:
  *
  * - `undefined`: no body;

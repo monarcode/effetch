@@ -591,7 +591,9 @@ export interface EndpointMethod<
 		route: ValidRoute<R>,
 		definition?: EndpointDefinition<R, O, EB, I, Ps, SE, M, QS, St> &
 			StreamDefinitionCheck<O, St>,
-	): Endpoint<R, O, EB, I, Ps, SE | ClientSE, M, QS, St>;
+		// `NoInfer`: as in `Fetch.endpoint`, the type parameters come from
+		// `definition` alone, not from the type the endpoint is used as.
+	): NoInfer<Endpoint<R, O, EB, I, Ps, SE | ClientSE, M, QS, St>>;
 }
 
 /**
@@ -1148,16 +1150,21 @@ export interface BindAllMethod<
  *   output: Schema.Array(User),
  * });
  *
- * // Bound once there is a client.
- * const makeApi = Effect.gen(function* () {
- *   const api = yield* Fetch.make({
- *     baseUrl: "https://api.example.com",
- *     plugins: [bearer({ token: "token" })],
- *   });
- *   return {
- *     login: api.bind(login, { plugins: { bearer: false } }),
- *     getUser: api.bind(getUser),
- *   };
+ * // Bound once there is a client, and shared as a service.
+ * class Api extends Fetch.Service<Api>()("Api", {
+ *   baseUrl: "https://api.example.com",
+ *   plugins: [bearer({ token: "token" })],
+ * }) {}
+ *
+ * class UserApi extends Fetch.Endpoints<UserApi>()("UserApi", Api, {
+ *   login: [login, { plugins: { bearer: false } }],
+ *   get: getUser,
+ *   list: listUsers,
+ * }) {}
+ *
+ * const program = Effect.gen(function* () {
+ *   const users = yield* UserApi;
+ *   return yield* users.list({ query: { page: 2 } });
  * });
  * ```
  *
@@ -1176,7 +1183,10 @@ export function endpoint<
 	route: ValidRoute<R>,
 	definition?: UnboundDefinition<R, O, EB, I, SE, M, QS, St> &
 		StreamDefinitionCheck<O, St>,
-): UnboundEndpoint<R, O, EB, I, SE, M, QS, St>;
+	// `NoInfer`: the type parameters come from `definition` alone. Inside a
+	// `[definition, options]` pair, the surrounding type would otherwise
+	// fill in the unset ones, typing the endpoint as a stream.
+): NoInfer<UnboundEndpoint<R, O, EB, I, SE, M, QS, St>>;
 // `unknown`: the typed `url` takes no arguments when the query schema needs
 // services, which the runtime `url` can't be checked against.
 export function endpoint(

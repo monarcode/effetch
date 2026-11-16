@@ -72,7 +72,7 @@ const streamCall = (
  *   the client's one of the same name. `content-type` and `content-length`
  *   are ignored here: they come from each request's body (set
  *   `content-type` on a call to override it). When a call has an `output`
- *   schema, effetch sends an `Accept` header that matches it
+ *   schema, Effetch sends an `Accept` header that matches it
  *   (`application/json`, or text for `Fetch.text()`), unless an `accept`
  *   header is set here or on the call.
  * - `defaultError`: the schema for non-2xx response bodies of calls that
@@ -101,12 +101,12 @@ const streamCall = (
  *     Effect.succeed(HttpClientRequest.setHeader(request, "x-api-key", "key")),
  * });
  *
- * const makeApi = Fetch.make({
+ * class Api extends Fetch.Service<Api>()("Api", {
  *   baseUrl: Config.String("API_URL"),
  *   headers: { accept: "application/json" },
  *   defaultError: ApiError,
  *   plugins: [apiKey],
- * });
+ * }) {}
  * ```
  *
  * @since 0.1.0
@@ -138,7 +138,7 @@ export interface ClientConfig<
  * no services, apart from those its schemas require (the call's or
  * endpoint's own, and the client's `defaultError` and `statusErrors`), and
  * that can fail with the plugins' errors and the `statusErrors` that apply,
- * on top of effetch's own.
+ * on top of Effetch's own.
  *
  * - `Ps`: the plugins the client was made with.
  * - `EB`: the client's `defaultError` schema.
@@ -489,6 +489,7 @@ export interface Client<
 	 * ```ts
 	 * import * as Context from "effect/Context";
 	 * import * as Effect from "effect/Effect";
+	 * import * as Layer from "effect/Layer";
 	 * import * as Schema from "effect/Schema";
 	 * import * as Fetch from "@monarcode/effetch";
 	 * import { bearer } from "@monarcode/effetch/plugins";
@@ -498,11 +499,14 @@ export interface Client<
 	 * const Credentials = Schema.Struct({ user: Schema.String, password: Schema.String });
 	 * const Session = Schema.Struct({ token: Schema.String });
 	 *
-	 * const makeApi = Effect.gen(function* () {
-	 *   const api = yield* Fetch.make({
-	 *     baseUrl: "https://api.example.com",
-	 *     plugins: [bearer({ token: "token" })],
-	 *   });
+	 * class Api extends Fetch.Service<Api>()("Api", {
+	 *   baseUrl: "https://api.example.com",
+	 *   plugins: [bearer({ token: "token" })],
+	 * }) {}
+	 *
+	 * // Made once, when the layer is built.
+	 * const makeUserApi = Effect.gen(function* () {
+	 *   const api = yield* Api;
 	 *   return {
 	 *     getUser: api.endpoint("GET /users/:id", { output: User }),
 	 *     createUser: api.endpoint("POST /users", { input: NewUser, output: User }),
@@ -514,10 +518,15 @@ export interface Client<
 	 *   };
 	 * });
 	 *
-	 * class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()("Api") {}
+	 * class UserApi extends Context.Service<
+	 *   UserApi,
+	 *   Effect.Success<typeof makeUserApi>
+	 * >()("UserApi") {}
+	 *
+	 * const UserApiLive = Layer.effect(UserApi)(makeUserApi);
 	 *
 	 * const program = Effect.gen(function* () {
-	 *   const { getUser, createUser } = yield* Api;
+	 *   const { getUser, createUser } = yield* UserApi;
 	 *   const ada = yield* createUser({ body: { name: "Ada" } });
 	 *   return yield* getUser({ params: { id: ada.id } });
 	 * });
@@ -549,7 +558,8 @@ export interface Client<
 	 * @example
 	 * ```ts
 	 * import * as Context from "effect/Context";
-	 * import * as Effect from "effect/Effect";
+	 * import type * as Effect from "effect/Effect";
+	 * import * as Layer from "effect/Layer";
 	 * import * as Schema from "effect/Schema";
 	 * import * as Fetch from "@monarcode/effetch";
 	 * import { bearer } from "@monarcode/effetch/plugins";
@@ -561,23 +571,24 @@ export interface Client<
 	 * const getUser = Fetch.endpoint("GET /users/:id", { output: User });
 	 * const refresh = Fetch.endpoint("POST /auth/refresh", { output: Session });
 	 *
-	 * const makeApi = Effect.gen(function* () {
-	 *   const api = yield* Fetch.make({
-	 *     baseUrl: "https://api.example.com",
-	 *     plugins: [bearer({ token: "token" })],
-	 *   });
-	 *   return {
-	 *     getUser: api.bind(getUser),
-	 *     refresh: api.bind(refresh, { plugins: { bearer: false } }),
-	 *   };
-	 * });
+	 * class Api extends Fetch.Service<Api>()("Api", {
+	 *   baseUrl: "https://api.example.com",
+	 *   plugins: [bearer({ token: "token" })],
+	 * }) {}
 	 *
-	 * class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()("Api") {}
+	 * // Bound once, when a layer is built. `Fetch.Endpoints` does this for
+	 * // a record of definitions.
+	 * const makeUserApi = Api.useSync((api) => ({
+	 *   getUser: api.bind(getUser),
+	 *   refresh: api.bind(refresh, { plugins: { bearer: false } }),
+	 * }));
 	 *
-	 * const program = Effect.gen(function* () {
-	 *   const { getUser } = yield* Api;
-	 *   return yield* getUser({ params: { id: 1 } });
-	 * });
+	 * class UserApi extends Context.Service<
+	 *   UserApi,
+	 *   Effect.Success<typeof makeUserApi>
+	 * >()("UserApi") {}
+	 *
+	 * const UserApiLive = Layer.effect(UserApi)(makeUserApi);
 	 * ```
 	 */
 	readonly bind: BindMethod<Ps, EB, SE>;
@@ -595,7 +606,9 @@ export interface Client<
 	 *
 	 * @example
 	 * ```ts
+	 * import * as Context from "effect/Context";
 	 * import * as Effect from "effect/Effect";
+	 * import * as Layer from "effect/Layer";
 	 * import * as Schema from "effect/Schema";
 	 * import * as Fetch from "@monarcode/effetch";
 	 * import { bearer } from "@monarcode/effetch/plugins";
@@ -607,16 +620,30 @@ export interface Client<
 	 * const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
 	 * const refresh = Fetch.endpoint("POST /auth/refresh", { output: Session });
 	 *
-	 * const program = Effect.gen(function* () {
-	 *   const api = yield* Fetch.make({
-	 *     baseUrl: "https://api.example.com",
-	 *     plugins: [bearer({ token: "token" })],
-	 *   });
-	 *   const todos = api.bindAll({
+	 * class Api extends Fetch.Service<Api>()("Api", {
+	 *   baseUrl: "https://api.example.com",
+	 *   plugins: [bearer({ token: "token" })],
+	 * }) {}
+	 *
+	 * // Bound once, when a layer is built. `Fetch.Endpoints` declares this
+	 * // service and its layer in one class.
+	 * const makeTodoApi = Api.useSync((api) =>
+	 *   api.bindAll({
 	 *     list: listTodos,
 	 *     get: getTodo,
 	 *     refresh: [refresh, { plugins: { bearer: false } }],
-	 *   });
+	 *   }),
+	 * );
+	 *
+	 * class TodoApi extends Context.Service<
+	 *   TodoApi,
+	 *   Effect.Success<typeof makeTodoApi>
+	 * >()("TodoApi") {}
+	 *
+	 * const TodoApiLive = Layer.effect(TodoApi)(makeTodoApi);
+	 *
+	 * const program = Effect.gen(function* () {
+	 *   const todos = yield* TodoApi;
 	 *   return yield* todos.get({ params: { id: 1 } });
 	 * });
 	 * ```
@@ -651,11 +678,13 @@ export interface Client<
  * URL).
  *
  * An `HttpClient` that fails on non-2xx statuses (`filterStatusOk`) works
- * too: effetch takes the response back and reports the usual `HttpError`.
+ * too: Effetch takes the response back and reports the usual `HttpError`.
  *
- * To share a client as a service, `Fetch.Service` declares the service, its
- * layer and its config in one class. The example below is the hand-written
- * form, for a config that is only known inside an Effect.
+ * `Fetch.Service` is the recommended way to set up a client: it declares
+ * the service, its layer and its config in one class, and takes the same
+ * config. Use `make` directly in scripts and tests, to make a client inside
+ * your own service's layer, or when the config itself comes from an Effect,
+ * as in the example below, where the headers are read from a service.
  *
  * **Browsers and tracing headers.** Effect's `HttpClient` adds `traceparent`
  * and `b3` headers to every request. In a browser, those make cross-origin
@@ -684,9 +713,23 @@ export interface Client<
  * import * as FetchHttpClient from "effect/http/FetchHttpClient";
  * import * as Fetch from "@monarcode/effetch";
  *
- * const makeApi = Fetch.make({
- *   baseUrl: "https://api.example.com",
- *   headers: { accept: "application/json" },
+ * // In a script
+ * const health = Effect.gen(function* () {
+ *   const api = yield* Fetch.make({ baseUrl: "https://api.example.com" });
+ *   return yield* api.get("/health");
+ * }).pipe(Effect.provide(FetchHttpClient.layer));
+ *
+ * // With a config read from a service
+ * class Tenant extends Context.Service<Tenant, { readonly id: string }>()(
+ *   "Tenant",
+ * ) {}
+ *
+ * const makeApi = Effect.gen(function* () {
+ *   const tenant = yield* Tenant;
+ *   return yield* Fetch.make({
+ *     baseUrl: "https://api.example.com",
+ *     headers: { "x-tenant": tenant.id },
+ *   });
  * });
  *
  * class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()("Api") {}

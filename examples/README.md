@@ -1,6 +1,6 @@
 # Examples
 
-Complete programs using effetch. They're typechecked with the package
+Complete programs using Effetch. They're typechecked with the package
 (`pnpm run typecheck`), so they always match the current API.
 
 | Example                                | What it shows                                                                                                                  |
@@ -8,8 +8,8 @@ Complete programs using effetch. They're typechecked with the package
 | [`basic.ts`](basic.ts)                 | A client in a service, the methods (`get`, `post`, `patch`, `del`) and handling each error.                                    |
 | [`builtins.ts`](builtins.ts)           | The built-in plugins (`logger`, `consoleLogger`, `retry`, `timeout`, `bearer`) and per-call overrides.                         |
 | [`plugins.ts`](plugins.ts)             | Writing plugins: auth with a service, a header with options, a `wrap` with its own error, error reporting.                     |
-| [`endpoints.ts`](endpoints.ts)         | The same app as `builtins.ts` with endpoints: one client, its endpoints as the service's methods.                              |
-| [`backends.ts`](backends.ts)           | Two backends in one file: one client each, shared plugins, and each backend's errors caught next to its calls.                 |
+| [`endpoints.ts`](endpoints.ts)         | The same app as `builtins.ts` with endpoints: defined with `Fetch.endpoint`, shared with `Fetch.Endpoints`.                    |
+| [`backends.ts`](backends.ts)           | Two backends in one file: a client and endpoints for each, shared plugins, and each backend's errors caught next to its calls. |
 | [`status-errors.ts`](status-errors.ts) | Your own errors by status: client-wide, per endpoint, a 400 told apart by its `code`, a renamed field, a one-off call.         |
 | [`streams.ts`](streams.ts)             | Streams and pages: a job's progress as SSE, an NDJSON export, an answer that ends with `[DONE]`, and a list paged by `Link`.   |
 | [`testing.ts`](testing.ts)             | Tests for the `app/` todos module against `FetchTest`: a fake backend from its endpoints, errors by status, and what was sent. |
@@ -19,17 +19,18 @@ Complete programs using effetch. They're typechecked with the package
 small app. `app/` is a layout for an app with many endpoints and modules.
 
 A client shared as a service is a `Fetch.Service` class, with its layer as
-`.layer`: `Api` in `basic.ts`, `builtins.ts` and `plugins.ts`, and
-`AppApiClient` and `WalletApiClient` in `app/`. A record of definitions shared
-as a service is a `Fetch.Endpoints` class: `TodoApi` in `app/`. Any other
-service is built by an Effect named after it: `makeApi` builds the `Api` of
-`endpoints.ts` and `status-errors.ts` (the client's endpoints), and
-`makeWalletApi` builds `WalletApi`.
+`.layer`: `Api` in most examples, `UsersClient` and `WalletClient` in
+`backends.ts`, and `AppApiClient` and `WalletApiClient` in `app/`. A record of
+definitions shared as a service is a `Fetch.Endpoints` class: `TodoApi` in
+`endpoints.ts`, `status-errors.ts` and `app/`, `StreamsApi` in `streams.ts`,
+and `UsersApi` and `WalletApi` in `backends.ts`. The one endpoints service
+written by hand is the `WalletApi` of `app/`, which shows `client.endpoint`:
+`makeWalletApi` makes its endpoints from the client.
 
 ## `app/`: endpoints in a feature-sliced app
 
-> **This folder structure is a personal preference:** the layout effetch's
-> author uses in their own apps (React Native, with Expo). effetch doesn't
+> **This folder structure is a personal preference:** the layout Effetch's
+> author uses in their own apps (React Native, with Expo). Effetch doesn't
 > depend on any of it. Rename the folders and files, merge or split them, and
 > adapt it to your own taste and project. What carries over to any layout is
 > in [the rules it follows](#the-rules-it-follows).
