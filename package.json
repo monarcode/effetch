@@ -90,6 +90,7 @@
 		"oxfmt": "0.72.0",
 		"oxlint": "1.87.0",
 		"publint": "0.3.25",
+		"rolldown": "1.2.13",
 		"tsdown": "0.23.1",
 		"typescript": "6.0.3",
 		"vitest": "5.0.3"
