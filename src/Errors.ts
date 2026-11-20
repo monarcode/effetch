@@ -10,7 +10,7 @@ import * as Schema from "effect/Schema";
  * @example
  * ```ts
  * import * as Effect from "effect/Effect";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * declare const call: Effect.Effect<string, Fetch.FetchError>;
  *
@@ -65,7 +65,7 @@ export class NetworkError extends Schema.TaggedError<NetworkError>()(
  * @example
  * ```ts
  * import * as Effect from "effect/Effect";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * declare const call: Effect.Effect<
  *   string,
@@ -102,7 +102,7 @@ export class HttpError extends Schema.TaggedError<HttpError>()("HttpError", {
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type NotFound = Fetch.HttpError.With<{ readonly resource: string }>;
  * ```
@@ -116,7 +116,7 @@ export declare namespace HttpError {
 	 *
 	 * @example
 	 * ```ts
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * type ApiHttpError = Fetch.HttpError.With<{ readonly code: string }>;
 	 *
@@ -153,7 +153,7 @@ export declare namespace HttpError {
  * @example
  * ```ts
  * import * as Effect from "effect/Effect";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * declare const call: Effect.Effect<string, Fetch.FetchError>;
  *
@@ -183,7 +183,7 @@ export class DecodeError extends Schema.TaggedError<DecodeError>()(
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const describe = (error: Fetch.FetchError): string => {
  *   switch (error._tag) {
@@ -207,7 +207,7 @@ export type FetchError = NetworkError | HttpError | DecodeError;
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const report = (error: unknown) => {
  *   if (Fetch.isFetchError(error)) {

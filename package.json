@@ -1,6 +1,6 @@
 {
 	"name": "@monarcode/effetch",
-	"version": "0.1.0-rc.3",
+	"version": "0.1.0-rc.4",
 	"description": "Typed, schema-driven HTTP calls on Effect v4's HttpClient: path params, object queries, decoded responses and plugins",
 	"keywords": [
 		"effect",
@@ -20,8 +20,13 @@
 		"type": "git",
 		"url": "git+https://github.com/monarcode/effetch.git"
 	},
+	"bin": {
+		"effetch-migrate": "./bin/effetch-migrate.mjs"
+	},
 	"files": [
 		"dist",
+		"bin/effetch-migrate.mjs",
+		"bin/migrate.mjs",
 		"README.md",
 		"LICENSE",
 		"CHANGELOG.md"
@@ -35,6 +40,10 @@
 			"types": "./dist/index.d.ts",
 			"default": "./dist/index.js"
 		},
+		"./Fetch": {
+			"types": "./dist/Fetch.d.ts",
+			"default": "./dist/Fetch.js"
+		},
 		"./plugins": {
 			"types": "./dist/plugins/index.d.ts",
 			"default": "./dist/plugins/index.js"
@@ -42,6 +51,10 @@
 		"./test": {
 			"types": "./dist/test/index.d.ts",
 			"default": "./dist/test/index.js"
+		},
+		"./test/FetchTest": {
+			"types": "./dist/test/FetchTest.d.ts",
+			"default": "./dist/test/FetchTest.js"
 		},
 		"./package.json": "./package.json"
 	},
@@ -77,6 +90,7 @@
 		"oxfmt": "0.72.0",
 		"oxlint": "1.87.0",
 		"publint": "0.3.25",
+		"rolldown": "1.2.13",
 		"tsdown": "0.23.1",
 		"typescript": "6.0.3",
 		"vitest": "5.0.3"

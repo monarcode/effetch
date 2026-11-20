@@ -91,7 +91,7 @@ const streamCall = (
  * import * as Effect from "effect/Effect";
  * import * as HttpClientRequest from "effect/http/HttpClientRequest";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const ApiError = Schema.Struct({ code: Schema.String });
  *
@@ -148,7 +148,7 @@ export interface ClientConfig<
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
  *
@@ -182,7 +182,7 @@ export interface Client<
 	 * ```ts
 	 * import * as Effect from "effect/Effect";
 	 * import * as HttpClientRequest from "effect/http/HttpClientRequest";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * const download = (api: Fetch.Client) =>
 	 *   Effect.flatMap(
@@ -205,7 +205,7 @@ export interface Client<
 	 * @example
 	 * ```ts
 	 * import * as Schema from "effect/Schema";
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * class SessionExpired extends Schema.TaggedError<SessionExpired>()(
 	 *   "SessionExpired",
@@ -230,7 +230,7 @@ export interface Client<
 	 * @example
 	 * ```ts
 	 * import * as Schema from "effect/Schema";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * const Todo = Schema.Struct({ id: Schema.Finite, done: Schema.Boolean });
 	 *
@@ -250,7 +250,7 @@ export interface Client<
 	 * @example
 	 * ```ts
 	 * import * as Schema from "effect/Schema";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 	 *
@@ -273,7 +273,7 @@ export interface Client<
 	 * @example
 	 * ```ts
 	 * import * as Effect from "effect/Effect";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * const exists = (api: Fetch.Client, id: number) =>
 	 *   api.head("/todos/:id", { params: { id } }).pipe(
@@ -290,7 +290,7 @@ export interface Client<
 	 * @example
 	 * ```ts
 	 * import * as Effect from "effect/Effect";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * const allowed = (api: Fetch.Client) =>
 	 *   Effect.map(api.options("/todos"), (response) => response.headers["allow"]);
@@ -305,7 +305,7 @@ export interface Client<
 	 * @example
 	 * ```ts
 	 * import * as Schema from "effect/Schema";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
 	 * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
@@ -333,7 +333,7 @@ export interface Client<
 	 * @example
 	 * ```ts
 	 * import * as Schema from "effect/Schema";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 	 *
@@ -355,7 +355,7 @@ export interface Client<
 	 * @example
 	 * ```ts
 	 * import * as Schema from "effect/Schema";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * const Todo = Schema.Struct({ id: Schema.Finite, done: Schema.Boolean });
 	 *
@@ -375,7 +375,7 @@ export interface Client<
 	 *
 	 * @example
 	 * ```ts
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * const remove = (api: Fetch.Client, id: number) =>
 	 *   api.del("/todos/:id", { params: { id } });
@@ -418,7 +418,7 @@ export interface Client<
 	 * import * as Effect from "effect/Effect";
 	 * import * as Schema from "effect/Schema";
 	 * import * as Stream from "effect/Stream";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * const JobEvent = Schema.Struct({ percent: Schema.Finite });
 	 *
@@ -452,7 +452,7 @@ export interface Client<
 	 * ```ts
 	 * import * as Schema from "effect/Schema";
 	 * import * as Stream from "effect/Stream";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * const Row = Schema.Struct({ id: Schema.Finite, name: Schema.String });
 	 *
@@ -491,7 +491,7 @@ export interface Client<
 	 * import * as Effect from "effect/Effect";
 	 * import * as Layer from "effect/Layer";
 	 * import * as Schema from "effect/Schema";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 * import { bearer } from "@monarcode/effetch/plugins";
 	 *
 	 * const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
@@ -561,7 +561,7 @@ export interface Client<
 	 * import type * as Effect from "effect/Effect";
 	 * import * as Layer from "effect/Layer";
 	 * import * as Schema from "effect/Schema";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 * import { bearer } from "@monarcode/effetch/plugins";
 	 *
 	 * const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
@@ -610,7 +610,7 @@ export interface Client<
 	 * import * as Effect from "effect/Effect";
 	 * import * as Layer from "effect/Layer";
 	 * import * as Schema from "effect/Schema";
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 * import { bearer } from "@monarcode/effetch/plugins";
 	 *
 	 * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
@@ -711,7 +711,7 @@ export interface Client<
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import * as FetchHttpClient from "effect/http/FetchHttpClient";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * // In a script
  * const health = Effect.gen(function* () {

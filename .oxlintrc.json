@@ -46,7 +46,13 @@
 	},
 	"overrides": [
 		{
-			"files": ["scripts/**", "test/**", "examples/**", "*.config.ts"],
+			"files": [
+				"bin/**",
+				"scripts/**",
+				"test/**",
+				"examples/**",
+				"*.config.ts"
+			],
 			"env": { "node": true },
 			"rules": {
 				"no-restricted-imports": [

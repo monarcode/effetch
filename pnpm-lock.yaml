@@ -35,6 +35,9 @@ importers:
       publint:
         specifier: 0.3.25
         version: 0.3.25
+      rolldown:
+        specifier: 1.2.13
+        version: 1.2.13
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(@arethetypeswrong/core@0.18.5)(publint@0.3.25)(typescript@6.0.3)

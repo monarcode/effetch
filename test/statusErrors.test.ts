@@ -8,7 +8,7 @@ import * as SchemaGetter from "effect/SchemaGetter";
 
 import { describe, expect } from "vitest";
 
-import * as Fetch from "../src/index.js";
+import { Fetch } from "../src/index.js";
 import { retry } from "../src/plugins/index.js";
 import { setup } from "./utils/client.js";
 import { after } from "./utils/clock.js";

@@ -21,7 +21,7 @@ type SegmentParam<S extends string> = S extends `:${infer N}`
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type Names = Fetch.PathParamNames<"/users/:id/posts/:postId">;
  * //   ^? "id" | "postId"
@@ -43,7 +43,7 @@ export type PathParamNames<P extends string> =
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const id: Fetch.PathParamValue = 42;
  * ```
@@ -57,7 +57,7 @@ export type PathParamValue = string | number;
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const params: Fetch.PathParams<"/users/:id/posts/:postId"> = {
  *   id: 1,

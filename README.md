@@ -33,7 +33,7 @@ TypeScript tells you what a call returns and every way it can fail.
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
@@ -63,6 +63,7 @@ export const getTodo = (id: number) =>
   - [Where it fits](#where-it-fits)
 - [Getting started](#getting-started)
   - [Install](#install)
+  - [Importing](#importing)
   - [Your first client](#your-first-client)
   - [How the pieces fit](#how-the-pieces-fit)
 - [Setting up a client](#setting-up-a-client)
@@ -75,6 +76,7 @@ export const getTodo = (id: number) =>
   - [Methods](#methods)
   - [Path and query parameters](#path-and-query-parameters)
   - [Sending a body](#sending-a-body)
+  - [Uploading files](#uploading-files)
   - [Reading the response](#reading-the-response)
   - [All call options](#all-call-options)
   - [When the methods aren't enough](#when-the-methods-arent-enough)
@@ -166,7 +168,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as HttpIncomingMessage from "effect/http/HttpIncomingMessage";
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -259,6 +261,72 @@ You'll need:
 - TypeScript 5.4 or newer. With `skipLibCheck: false`, Effect's own
   declarations need TypeScript 5.7 or newer.
 
+### Importing
+
+Everything in the main entry is under one export, `Fetch`. Plugins and the
+test backend have their own entries:
+
+```ts
+import { Fetch } from "@monarcode/effetch";
+import { bearer, retry } from "@monarcode/effetch/plugins";
+import { FetchTest } from "@monarcode/effetch/test";
+
+export const plugins = [bearer({ token: "token" }), retry()];
+export const getTodo = Fetch.endpoint("GET /todos/:id");
+export const Backend = FetchTest.layer([]);
+```
+
+Your editor offers to add the `Fetch` import as you type it. For types
+alone, use `import type { Fetch } from "@monarcode/effetch"`.
+
+The package also has `@monarcode/effetch/Fetch` and
+`@monarcode/effetch/test/FetchTest`: the same exports, without the
+namespace, as `effect/Effect` is to `import { Effect } from "effect"`.
+TypeScript uses them to name Effetch's types in the `.d.ts` files it emits
+for your code. In your own code, import from the main entry.
+
+#### Upgrading from 0.1.0-rc.3
+
+Before 0.1.0-rc.4, the main entry exported each API by name, and you
+imported it with `import * as Fetch`. To move a project to the `Fetch`
+export, upgrade it, then run the migration in the directory of the
+package that depends on Effetch:
+
+```bash
+npx -p @monarcode/effetch effetch-migrate --dry-run
+```
+
+```bash
+npx -p @monarcode/effetch effetch-migrate
+```
+
+The first command lists the files it would change. The second changes
+them. With pnpm, run `pnpm exec effetch-migrate` instead. It makes these
+changes:
+
+- `import * as Fetch from "@monarcode/effetch"` becomes
+  `import { Fetch } from "@monarcode/effetch"`.
+- Named imports, such as `import { HttpError, type Client }`, become
+  `import { Fetch }`, and each use becomes `Fetch.HttpError` or
+  `Fetch.Client`.
+- `export … from "@monarcode/effetch"` re-exports from
+  `@monarcode/effetch/Fetch`, and `import("@monarcode/effetch").Client`
+  types become `import("@monarcode/effetch").Fetch.Client`.
+- Code that already imports `Fetch` is left as it is.
+
+It reads `.ts`, `.tsx`, `.js` and similar files, and uses the project's
+own TypeScript. In a git repository it reads the files git sees, so it
+skips what `.gitignore` does. Elsewhere, it skips `node_modules`, `dist`,
+`build`, `coverage` and hidden directories, and lists the build output it
+skipped. Pass paths to choose what it reads, such as
+`effetch-migrate src test`.
+
+It lists, with their lines, what it can't rewrite for you to change by
+hand: a dynamic `import()`, a `vi.mock("@monarcode/effetch")`, an import
+inside a `declare module` block, and JSDoc comments that use the old
+names. It doesn't read Markdown. Afterwards, run your formatter and type
+checker.
+
 ### Your first client
 
 Let's fetch a todo from [JSONPlaceholder](https://jsonplaceholder.typicode.com),
@@ -270,7 +338,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 // 1. What a todo looks like
 const Todo = Schema.Struct({
@@ -364,7 +432,7 @@ the rest of your app.
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
@@ -413,7 +481,7 @@ of them:
 import * as Config from "effect/Config";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
 
 const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
@@ -459,7 +527,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
@@ -483,7 +551,7 @@ the class:
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
@@ -513,7 +581,7 @@ its client has the same type:
 ```ts
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { retry } from "@monarcode/effetch/plugins";
 
 export class Api extends Fetch.Service<Api>()("Api", {
@@ -552,7 +620,7 @@ In a script, use `Fetch.make` inline:
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const program = Effect.gen(function* () {
   const api = yield* Fetch.make({ baseUrl: "https://api.example.com" });
@@ -570,7 +638,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 class Tenant extends Context.Service<Tenant, { readonly id: string }>()(
   "Tenant",
@@ -611,7 +679,7 @@ A client has a method for each HTTP method:
 ```ts
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -644,7 +712,7 @@ a schema for it. See [Typed query parameters](#typed-query-parameters).
 ```ts
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -683,7 +751,154 @@ A `body` is sent according to its type:
 
 Add an `input` schema, and `body` is typed by it and encoded with it before
 it's sent as JSON. In `create`, `due` is a `Date` in your code and an ISO
-string on the wire.
+string on the wire. To send a typed body as a form instead, such as a file
+upload, see [Uploading files](#uploading-files).
+
+### Uploading files
+
+To upload files, wrap the `input` schema in `Fetch.multipart`. The body is
+typed and checked by the schema, as for JSON, then sent as
+`multipart/form-data`. Use `Fetch.UploadFile` for a file field:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+const Document = Schema.Struct({ id: Schema.String });
+
+export const uploadDocument = Fetch.endpoint("POST /documents", {
+  input: Fetch.multipart(
+    Schema.Struct({
+      file: Fetch.UploadFile,
+      kind: Schema.Literals(["PASSPORT", "DRIVERS_LICENSE"]),
+      pages: Schema.optional(Schema.Finite),
+    }),
+  ),
+  output: Document,
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+class DocumentApi extends Fetch.Endpoints<DocumentApi>()("DocumentApi", Api, {
+  upload: uploadDocument,
+}) {}
+
+// In a browser, `file` comes from an <input type="file">.
+export const upload = (file: File) =>
+  Effect.gen(function* () {
+    const documents = yield* DocumentApi;
+    return yield* documents.upload({ body: { file, kind: "PASSPORT" } });
+  });
+```
+
+`Fetch.UploadFile` takes the files each platform can send:
+
+- in browsers, Node, Bun and Deno, a `Blob` or `File`;
+- in React Native, the `{ uri, name, type }` object its pickers give, typed
+  `Fetch.NativeFile`. `uri` and `name` are required: a server only treats a
+  part as a file when it has a file name. `type` is optional, and a file
+  without one is sent as `application/octet-stream`.
+
+In React Native, send a `NativeFile`, not a `Blob`: React Native's `fetch`
+reads a form's files from disk by `uri`, and can't send a `Blob` in a form.
+
+```ts
+import type { Fetch } from "@monarcode/effetch";
+
+// From expo-image-picker, for example
+declare const asset: {
+  readonly uri: string;
+  readonly fileName?: string | null;
+  readonly mimeType?: string;
+};
+
+export const photo: Fetch.NativeFile = {
+  uri: asset.uri,
+  name: asset.fileName ?? "photo.jpg",
+  type: asset.mimeType,
+};
+```
+
+Use `Fetch.UploadFile` rather than `Schema.File`. `Schema.File` only takes a
+`File`, not the `{ uri, name, type }` objects React Native's pickers give,
+and `FetchTest` can't read it back from a form.
+
+How the schema's fields become form parts:
+
+- strings as they are; numbers, booleans and bigints as strings; a `Date` as
+  its ISO string;
+- a file as a file part;
+- a list as one part per item, under the same name;
+- `null` and `undefined` left out.
+
+A form can't hold a nested object or a list of lists, so TypeScript rejects
+most schemas that have one, and a value that has one makes the call die. To
+send one, encode it to a string in the schema, such as
+`meta: Schema.fromJsonString(Meta)`.
+
+<details>
+<summary><strong>Details: headers, errors and where it works</strong></summary>
+
+- The request sets no `Content-Type`, so the platform adds the multipart
+  boundary. A `content-type` header from the call, the endpoint or the client
+  is removed, for any `FormData` body.
+- The request sets no `Content-Type` before your plugins run. A plugin's
+  `onRequest` that sets one replaces the boundary, so leave it out for forms.
+- A body that doesn't match the schema, or a value a form can't hold, makes
+  the call die with an `Invalid request body:` defect, as for JSON (see
+  [Bugs are defects](#bugs-are-defects)). So does a `{ uri, name, type }` file
+  outside React Native, where `FormData` would send `"[object Object]"`, or
+  in a field that isn't a `Fetch.UploadFile`.
+- `Fetch.UploadFile` in an `input` schema without `Fetch.multipart` makes the
+  call die too: a file has no JSON form.
+- It works wherever `input` does: on methods such as `api.post`, on endpoints,
+  and in `api.sse` and `api.ndjson`.
+- `Fetch.multipart` returns the schema, marked. Add checks or annotations to
+  it as you like. A schema built around it, such as with `Schema.NullOr`, is
+  sent as JSON again.
+- A field's encoded value must be a string, number, boolean, bigint, `Date`,
+  file, `null` or `undefined`, or a list of them. A schema such as
+  `Schema.DateTimeUtc` or `Schema.URL`, which encodes to an object, needs a
+  string form first, such as `Schema.DateTimeUtcFromString`.
+- [`FetchTest`](#testing) reads the form back into the body a handler gets,
+  decoded with the schema, with files as `File`s. In Node, test with a
+  `Blob` or `File`, since a `{ uri, name, type }` file only works in React
+  Native.
+- A form loses some of what the schema encodes, so `FetchTest` reads it back
+  as best it can:
+  - A `null` or `undefined` field and an empty list are left out. Such a
+    field comes back missing when it's optional. When it's required, it
+    comes back as `null` if it takes `null`, then as `[]` if it's a list,
+    then as `undefined`.
+  - Every part is a string. In a field that takes `null`, the string
+    `"null"` comes back as `null`, and in
+    `Schema.Union([Schema.String, Schema.Finite])` the string `"12"` comes
+    back as the number `12`.
+
+To check a file's size, add a check to `Fetch.UploadFile`. A
+`NativeFile` has no size until it's read, so the check only looks at a
+`Blob`:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+export const SmallFile = Fetch.UploadFile.check(
+  Schema.makeFilter(
+    (file) => !(file instanceof Blob) || file.size < 10_000_000,
+    { expected: "a file under 10 MB" },
+  ),
+);
+```
+
+- A `FormData` you build yourself still works as a `body` without `input`.
+
+</details>
 
 ### Reading the response
 
@@ -699,7 +914,7 @@ yourself:
 ```ts
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -737,7 +952,7 @@ The call sends a matching `Accept` header: `text/*, */*;q=0.1` for text, and
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -776,7 +991,7 @@ with a pair:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -806,7 +1021,7 @@ export const page = Effect.gen(function* () {
 | `query`        | An object of query parameters. Arrays repeat the key, and `null` and `undefined` are dropped.                                                                                                                                                                                                                     |
 | `headers`      | Headers for this call. They win over the client's, and over the body's `content-type`.                                                                                                                                                                                                                            |
 | `body`         | Sent by its type: `HttpBody`, string, `ArrayBuffer` and typed arrays, `Blob`/`File`, `FormData` and `URLSearchParams` as they are, anything else as JSON.                                                                                                                                                         |
-| `input`        | A schema that `body` is encoded with before it's sent as JSON. `body` is then typed by the schema.                                                                                                                                                                                                                |
+| `input`        | A schema `body` is encoded with. `body` is then typed by it. Sent as JSON, or as `multipart/form-data` when wrapped in `Fetch.multipart` (see [Uploading files](#uploading-files)).                                                                                                                               |
 | `output`       | A schema the 2xx body is decoded with: read as JSON, or as text with `Fetch.text()` and bytes with `Fetch.bytes()`. The call then sends a matching `Accept` header (unless you set `accept`). Without it, the call succeeds with the raw `HttpClientResponse`. See [Reading the response](#reading-the-response). |
 | `responseMode` | `"decoded-and-response"` makes the call succeed with `[value, response]`, to read the status and headers too. Defaults to `"decoded"`, the value alone.                                                                                                                                                           |
 | `error`        | A schema for the body of error responses, replacing the client's `defaultError`.                                                                                                                                                                                                                                  |
@@ -821,7 +1036,7 @@ export const page = Effect.gen(function* () {
   ```ts
   import type * as HttpMethod from "effect/http/HttpMethod";
 
-  import type * as Fetch from "@monarcode/effetch";
+  import type { Fetch } from "@monarcode/effetch";
 
   declare const api: Fetch.Client;
 
@@ -866,7 +1081,7 @@ Catch errors by tag with `Effect.catchTags`:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -903,7 +1118,7 @@ To handle one or more statuses, use `Fetch.catchStatus`. For the common "a
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -970,7 +1185,7 @@ You can give a map in three places, and they add up:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
   message: Schema.String,
@@ -1123,7 +1338,7 @@ The built-in plugins come from `@monarcode/effetch/plugins`:
 ```ts
 import * as Effect from "effect/Effect";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
 
 declare const readToken: () => Promise<string | null>;
@@ -1172,7 +1387,7 @@ To renew an expired access token without failing the call, give `bearer` a
 `refresh` for a new token, then sends the request again with it:
 
 ```ts
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 declare const tokens: {
@@ -1237,7 +1452,7 @@ For "10 seconds per attempt, 30 seconds in all", use both `timeout` and a
 budget:
 
 ```ts
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { retry, timeout } from "@monarcode/effetch/plugins";
 
 export class Api extends Fetch.Service<Api>()("Api", {
@@ -1259,7 +1474,7 @@ prints everything about a call to the console, as a group devtools can
 expand.
 
 ```ts
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { consoleLogger } from "@monarcode/effetch/plugins";
 
 declare const isDevelopment: boolean;
@@ -1313,7 +1528,7 @@ skip it with `false`:
 ```ts
 import * as Effect from "effect/Effect";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { consoleLogger } from "@monarcode/effetch/plugins";
 
 class Api extends Fetch.Service<Api>()("Api", {
@@ -1407,7 +1622,7 @@ them. TypeScript checks the plugin names and the option types:
 ```ts
 import * as Effect from "effect/Effect";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer, retry, timeout } from "@monarcode/effetch/plugins";
 
 class Api extends Fetch.Service<Api>()("Api", {
@@ -1486,7 +1701,7 @@ next to their schemas:
 ```ts
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
 const NewUser = Schema.Struct({ name: Schema.String });
@@ -1525,7 +1740,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 declare const readToken: () => Promise<string | null>;
@@ -1636,7 +1851,7 @@ directly, such as inside your own service's layer:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
@@ -1675,7 +1890,7 @@ since it knows the client's plugins:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 const Session = Schema.Struct({ token: Schema.String });
@@ -1716,7 +1931,7 @@ works too, called with an instance:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
@@ -1772,7 +1987,7 @@ key:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const getFile = Fetch.endpoint("GET /files/:name", {
   query: Schema.Struct({ download: Schema.optional(Schema.Boolean) }),
@@ -1874,7 +2089,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -1895,7 +2110,7 @@ export const followJob = (id: number) =>
   ```ts
   import * as Schema from "effect/Schema";
 
-  import type * as Fetch from "@monarcode/effetch";
+  import type { Fetch } from "@monarcode/effetch";
 
   declare const api: Fetch.Client;
 
@@ -1930,7 +2145,7 @@ at the sentinel, then decode the rest:
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -1957,7 +2172,7 @@ one JSON value per line, decoded with `output`:
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -1984,7 +2199,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const JobEvent = Schema.Struct({ percent: Schema.Finite });
 
@@ -2052,7 +2267,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
@@ -2108,7 +2323,7 @@ each page's response:
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -2146,7 +2361,7 @@ every request, with an option that a call can change:
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export const apiVersion = Fetch.plugin({
   name: "apiVersion",
@@ -2204,7 +2419,7 @@ It suits logging and metrics, and is what `consoleLogger` uses:
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 declare const record: (route: string, ok: boolean, durationMs: number) => void;
 
@@ -2232,7 +2447,7 @@ A `wrap` reads it from its third argument, an Effect like `options`:
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 declare const report: (error: unknown, route: string | undefined) => void;
 
@@ -2265,7 +2480,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export class SessionExpired extends Data.TaggedError("SessionExpired")<{}> {}
 
@@ -2314,7 +2529,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export class TooSlow extends Data.TaggedError("TooSlow")<{
   readonly url: string;
@@ -2364,7 +2579,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
@@ -2419,7 +2634,7 @@ errors are still checked against your plugins and `defaultError`:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
@@ -2472,7 +2687,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 // infrastructure/http/app-api-client.ts: how to reach the backend, nothing else
 export class AppApiClient extends Fetch.Service<AppApiClient>()(
@@ -2579,7 +2794,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { FetchTest } from "@monarcode/effetch/test";
 
 const Todo = Schema.Struct({
@@ -2646,7 +2861,8 @@ real backend would check it:
 
 - **`params`** has the route's params, as strings.
 - **`body`** is decoded with the endpoint's `input` schema, so `body.due` is a
-  `Date` here.
+  `Date` here. A [multipart](#uploading-files) body is read back from the
+  form, with its files as `File`s.
 - **`query`** is decoded with the endpoint's
   [query schema](#typed-query-parameters), if it has one, and is the raw
   query, as strings, otherwise.
@@ -2675,7 +2891,7 @@ decodes it back into your domain error:
 ```ts
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { FetchTest } from "@monarcode/effetch/test";
 
 class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
@@ -2703,7 +2919,7 @@ and anything else as JSON. For a `2xx` with a typed body, such as a `201`, pass
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { FetchTest } from "@monarcode/effetch/test";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
@@ -2743,7 +2959,7 @@ with its `data` and an optional `event` and `id`, and values for
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { FetchTest } from "@monarcode/effetch/test";
 
 const JobEvent = Schema.Struct({ percent: Schema.Finite });
@@ -2779,7 +2995,7 @@ hide it, so use `Layer.provideMerge`:
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { FetchTest } from "@monarcode/effetch/test";
 
 class Api extends Fetch.Service<Api>()("Api", {
@@ -2848,7 +3064,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
@@ -2900,7 +3116,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
@@ -2930,6 +3146,10 @@ page's URL.
   Expo, provide the `fetch` from `expo/fetch`, which streams, as
   `FetchHttpClient.Fetch`:
   `Layer.succeed(FetchHttpClient.Fetch)(expoFetch as typeof globalThis.fetch)`.
+- To upload a file a picker gave you, send its `{ uri, name, type }` in a
+  `Fetch.UploadFile` field (see [Uploading files](#uploading-files)). React
+  Native's `FormData` reads the file from disk by `uri`, and can't send a
+  `Blob`.
 - Metro's terminal drops `console.groupCollapsed` and everything inside it,
   so `consoleLogger` doesn't collapse its groups in React Native (see the
   details under [Console logging](#console-logging)).
@@ -2955,6 +3175,7 @@ The following table maps what you know from axios and ky to Effetch:
 | `responseType: "text"` or `"arraybuffer"`                     | `output: Fetch.text()` or `Fetch.bytes()` (see [Text and bytes](#text-and-bytes))                                                         |
 | Reading the status and headers with the data                  | `responseMode: "decoded-and-response"` (see [The body and the response](#the-body-and-the-response))                                      |
 | `responseType: "stream"`, `onDownloadProgress` for events     | [`api.sse` and `api.ndjson`](#streaming-responses)                                                                                        |
+| A `FormData` body built by hand                               | `input: Fetch.multipart(schema)`, a typed body sent as a form (see [Uploading files](#uploading-files))                                   |
 | The `fetch` option or an `adapter` in tests                   | [`FetchTest`](#testing), or any `HttpClient` layer                                                                                        |
 
 ## Reference
@@ -2982,7 +3203,7 @@ The following table maps what you know from axios and ky to Effetch:
 Every export is documented, with an example, in the type declarations your
 editor shows. This list says where each one is covered here.
 
-`@monarcode/effetch`:
+`@monarcode/effetch`, as the `Fetch` namespace:
 
 - `Service`, `ServiceClass` (and `ServiceClass.Any`), `isService`:
   [declaring a client](#declaring-a-client).
@@ -3002,6 +3223,9 @@ editor shows. This list says where each one is covered here.
   [typed query parameters](#typed-query-parameters).
 - `EndpointUrlOptions`, `EndpointUrlArgs`:
   [building an endpoint's URL](#building-an-endpoints-url).
+- `multipart`, `UploadFile`, `UploadFileSchema`, `NativeFile`,
+  `MultipartSchema`, `MultipartFields`, `MultipartValue`:
+  [uploading files](#uploading-files).
 - `text`, `bytes`, `TextSchema`, `BytesSchema`:
   [text and bytes](#text-and-bytes).
 - `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,

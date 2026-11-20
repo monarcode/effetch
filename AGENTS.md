@@ -1,7 +1,8 @@
 # Agent instructions
 
 `@monarcode/effetch`: typed, schema-driven HTTP calls on Effect v4's
-`HttpClient`. Consumers import it as `import * as Fetch from "@monarcode/effetch"`.
+`HttpClient`. Consumers import it as
+`import { Fetch } from "@monarcode/effetch"`.
 
 ## Rules
 
@@ -28,7 +29,8 @@
 4. **Runtime targets: browsers, React Native (Hermes/Metro), Node ≥ 20, Bun,
    Deno.** No `node:` imports, no Node globals, **no `new URL()`** (React
    Native's URL support is incomplete) — join URLs with string operations. No
-   `#private` class fields.
+   `#private` class fields. This applies to `src/`: `bin/` is the
+   `effetch-migrate` CLI, which runs on Node only.
 5. **Never run `git commit`, `git push`, `git tag`**, or anything else that
    writes git history, unless the maintainer explicitly asks. Stop with the
    working tree ready, a summary of the changes, and a suggested Conventional

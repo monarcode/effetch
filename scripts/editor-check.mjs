@@ -9,7 +9,7 @@ const source = `import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer, type TimeoutPlugin } from "@monarcode/effetch/plugins";
 import { FetchTest } from "@monarcode/effetch/test";
 
@@ -123,6 +123,8 @@ export const /*pages*/pages = Fetch./*paginate*/paginate(typed.bind(listTodos), 
 	next: (todos, page) => (todos.length === 0 ? Option.none() : Option.some(page + 1)),
 });
 export const namespace = /*fetchTestNamespace*/FetchTest;
+export const fetchNamespace = /*fetchNamespace*/Fetch;
+export const members = Fetch./*fetchMembers*/;
 export const /*backend*/backend = FetchTest./*fetchTestLayer*/layer([
 	FetchTest./*respond*/respond(getTodoDefinition, ({ params }) =>
 		Effect.succeed({ id: Number(params./*handlerParams*/id), title: "x" }),
@@ -136,12 +138,19 @@ const config = ts.getParsedCommandLineOfConfigFile(
 	{},
 	{ ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} },
 );
+// A file that doesn't import Effetch yet, to check the editor offers to.
+const autoImportProbe = path.join(dir, "auto-import.ts");
+const autoImportSource = "export const api = Fetc";
 const read = (fileName) =>
-	fileName === probe ? source : ts.sys.readFile(fileName);
+	fileName === probe
+		? source
+		: fileName === autoImportProbe
+			? autoImportSource
+			: ts.sys.readFile(fileName);
 
 const service = ts.createLanguageService(
 	{
-		getScriptFileNames: () => [probe],
+		getScriptFileNames: () => [probe, autoImportProbe],
 		getScriptVersion: () => "1",
 		getScriptSnapshot: (fileName) => {
 			const text = read(fileName);
@@ -153,7 +162,9 @@ const service = ts.createLanguageService(
 		getCompilationSettings: () => config.options,
 		getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
 		fileExists: (fileName) =>
-			fileName === probe || ts.sys.fileExists(fileName),
+			fileName === probe ||
+			fileName === autoImportProbe ||
+			ts.sys.fileExists(fileName),
 		readFile: read,
 		readDirectory: ts.sys.readDirectory,
 		directoryExists: ts.sys.directoryExists,
@@ -319,6 +330,38 @@ const namespaceDocs = ts.displayPartsToString(
 expect(
 	namespaceDocs.includes("A typed fake backend for tests"),
 	`Hover on FetchTest doesn't show its docs: ${JSON.stringify(namespaceDocs.slice(0, 80))}`,
+);
+
+const fetchDocs = ts.displayPartsToString(
+	service.getQuickInfoAtPosition(probe, at("fetchNamespace"))?.documentation,
+);
+expect(
+	fetchDocs.includes("Typed, schema-driven HTTP calls"),
+	`Hover on Fetch doesn't show its docs: ${JSON.stringify(fetchDocs.slice(0, 80))}`,
+);
+
+const fetchMembers = (
+	service.getCompletionsAtPosition(probe, at("fetchMembers"), undefined)
+		?.entries ?? []
+).map((entry) => entry.name);
+expect(
+	// Types aren't offered in a value position.
+	["make", "endpoint", "Service", "Endpoints", "UploadFile"].every((name) =>
+		fetchMembers.includes(name),
+	),
+	`Fetch. doesn't complete its members: ${fetchMembers.slice(0, 10).join(", ")}`,
+);
+
+const autoImports = (
+	service.getCompletionsAtPosition(autoImportProbe, autoImportSource.length, {
+		includeCompletionsForModuleExports: true,
+	})?.entries ?? []
+)
+	.filter((entry) => entry.name === "Fetch")
+	.map((entry) => entry.source);
+expect(
+	autoImports.includes("@monarcode/effetch"),
+	`Typing Fetch doesn't offer to import it from @monarcode/effetch: ${autoImports.join(", ") || "no Fetch entry"}`,
 );
 
 const backendHover = ts

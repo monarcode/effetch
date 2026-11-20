@@ -8,7 +8,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 import { describe, expect } from "vitest";
 
-import * as Fetch from "../../src/index.js";
+import { Fetch } from "../../src/index.js";
 import { bearer, logger } from "../../src/plugins/index.js";
 import { base, setup } from "../utils/client.js";
 import { after } from "../utils/clock.js";

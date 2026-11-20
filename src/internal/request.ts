@@ -97,6 +97,11 @@ const buildRequest = (
 			request = HttpClientRequest.setHeaders(request, options.headers);
 		}
 		request = state.applyDefaults(request);
+		if (body?._tag === "FormData") {
+			// The platform sets the multipart boundary in `Content-Type`; one
+			// set by the call, the endpoint or the client would lose it.
+			request = HttpClientRequest.removeHeader(request, "content-type");
+		}
 		const accept =
 			options.accept ??
 			(options.output === undefined

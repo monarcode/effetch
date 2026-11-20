@@ -18,7 +18,7 @@ import type { Plugin } from "./Plugin.js";
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const page: Fetch.QueryValue = 2;
  * ```
@@ -37,7 +37,7 @@ export type QueryValue = UrlParams.Coercible;
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const query: Fetch.QueryInput = {
  *   page: 1,
@@ -63,7 +63,7 @@ export type QueryInput = {
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * interface ListTodosParams {
  *   readonly limit: number;
@@ -105,7 +105,7 @@ export type QueryOf<Q> = {
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const TodoFilters: Fetch.QuerySchema = Schema.Struct({
  *   done: Schema.optional(Schema.Boolean),
@@ -131,7 +131,7 @@ export type QuerySchema = Schema.Top & {
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const Todo: Fetch.AnySchema = Schema.Struct({ id: Schema.Finite });
  * ```
@@ -170,7 +170,7 @@ export type AnySchema = Schema.Constraint;
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
  *   message: Schema.String,
@@ -219,7 +219,7 @@ type EntrySchema<E> =
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
  *   message: Schema.String,
@@ -254,7 +254,7 @@ type EntryServices<E> =
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
  *   message: Schema.String,
@@ -282,7 +282,7 @@ export type StatusError<M extends StatusErrorMap | undefined> =
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
  *   message: Schema.String,
@@ -306,7 +306,7 @@ export type StatusErrorServices<M extends StatusErrorMap | undefined> =
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const withParams: Fetch.ParamsOption<"/todos/:id"> = { params: { id: 1 } };
  * const without: Fetch.ParamsOption<"/todos"> = {};
@@ -343,7 +343,7 @@ export type ParamsOption<P extends string> = string extends P
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
  *
@@ -377,7 +377,7 @@ export type ResponseMode = "decoded" | "decoded-and-response";
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite });
  *
@@ -457,7 +457,7 @@ export interface BaseOptions<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const NewTodo = Schema.Struct({ title: Schema.String });
  *
@@ -470,7 +470,10 @@ export interface BaseOptions<
  * @since 0.1.0
  */
 export interface BodyOptions<I extends AnySchema> {
-	/** Encodes `body` with this schema, then sends it as JSON. */
+	/**
+	 * Encodes `body` with this schema, then sends it as JSON, or as
+	 * `multipart/form-data` when the schema is wrapped in `Fetch.multipart`.
+	 */
 	readonly input?: I | undefined;
 	/** The request body. Typed by `input` when given. */
 	readonly body?: I["Type"] | undefined;
@@ -483,7 +486,7 @@ export interface BodyOptions<I extends AnySchema> {
  * @example
  * ```ts
  * import type * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const options: Fetch.NoBodyRequestOptions<
  *   "/todos/:id", undefined, Schema.Unknown, []
@@ -514,7 +517,7 @@ export type NoBodyRequestOptions<
  * @example
  * ```ts
  * import type * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const options: Fetch.RequestOptions<
  *   "/todos/:id", undefined, Schema.Unknown, Schema.Unknown, []
@@ -540,7 +543,7 @@ export type RequestOptions<
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type WithParams = Fetch.Args<"/todos/:id", { params: { id: number } }>;
  * //   ^? [options: { params: { id: number } }]
@@ -565,7 +568,7 @@ export type Args<P extends string, T> = [PathParamNames<P>] extends [never]
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type Todo = Fetch.Success<Schema.Struct<{ id: Schema.Finite }>>;
  * //   ^? { readonly id: number }
@@ -604,7 +607,7 @@ export type Success<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type E = Fetch.CallError<
  *   Schema.Struct<{ id: Schema.Finite }>,
@@ -641,7 +644,7 @@ export type CallError<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type R = Fetch.CallServices<
  *   Schema.Struct<{ id: Schema.Finite }>,
@@ -689,7 +692,7 @@ export type CallServices<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type Call = Fetch.CallEffect<
  *   Schema.Struct<{ id: Schema.Finite }>,
@@ -738,7 +741,7 @@ export type CallEffect<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * declare const get: Fetch.NoBodyMethod<[], Schema.Unknown>;
  *
@@ -791,7 +794,7 @@ export interface NoBodyMethod<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * declare const patch: Fetch.BodyMethod<[], Schema.Unknown>;
  *
@@ -850,7 +853,7 @@ export interface BodyMethod<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * declare const request: Fetch.RequestMethod<[], Schema.Unknown>;
  *

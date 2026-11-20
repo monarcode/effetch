@@ -218,7 +218,7 @@ const afterHeader = (
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { retry } from "@monarcode/effetch/plugins";
  *
  * class Api extends Fetch.Service<Api>()("Api", {
@@ -258,7 +258,7 @@ export function retry(
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { retry, timeout } from "@monarcode/effetch/plugins";
  *
  * // 10 seconds per attempt, 30 seconds in all.

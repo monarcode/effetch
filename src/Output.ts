@@ -10,7 +10,7 @@ import { bodyFormatAnnotation } from "./internal/output.js";
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const count: Fetch.TextSchema = Schema.NumberFromString;
  * ```
@@ -49,7 +49,7 @@ export type TextSchema = Schema.Top & { readonly Encoded: string };
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const program = (api: Fetch.Client) =>
  *   Effect.gen(function* () {
@@ -85,7 +85,7 @@ export function text(): Schema.String;
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Status = Fetch.text(Schema.Literals(["up", "down"]));
  *
@@ -107,7 +107,7 @@ export function text(schema?: Schema.Top): Schema.Top {
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const image: Fetch.BytesSchema = Fetch.bytes();
  * ```
@@ -150,7 +150,7 @@ const Bytes = Schema.instanceOf(globalThis.Uint8Array<ArrayBuffer>, {
  * @example
  * ```ts
  * import * as Effect from "effect/Effect";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * // In a browser
  * const avatar = (api: Fetch.Client) =>

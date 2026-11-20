@@ -1,7 +1,7 @@
 import * as UrlParams from "effect/http/UrlParams";
 import * as Redacted from "effect/Redacted";
 
-import type * as Fetch from "../../src/index.js";
+import type { Fetch } from "../../src/index.js";
 
 /**
  * A `Redacted` query value. Effect 4.1's types accept one, but CI also runs

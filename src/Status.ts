@@ -12,7 +12,7 @@ import { HttpError } from "./Errors.js";
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const describe = (error: Fetch.CaughtStatus<[401, 403]>) =>
  *   error.status === 401 ? "signed out" : "not allowed";
@@ -48,7 +48,7 @@ export type CaughtStatus<S extends number | ReadonlyArray<number>> =
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
  *
@@ -110,7 +110,7 @@ export const catchStatus: {
  * import * as Effect from "effect/Effect";
  * import * as Option from "effect/Option";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
  *

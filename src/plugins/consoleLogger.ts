@@ -10,6 +10,7 @@ import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 
+import { formParts, isBlob, isReactNative } from "../internal/platform.js";
 import { type Plugin, type PluginExitContext, plugin } from "../Plugin.js";
 
 /**
@@ -731,8 +732,12 @@ const describeBlob = (blob: unknown): string => {
 	return `<${[name, size, type].filter(Predicate.isNotUndefined).join(", ")}>`;
 };
 
-const isBlob = (value: unknown): boolean =>
-	typeof Blob !== "undefined" && value instanceof Blob;
+/** A React Native file part, `{ uri, name, type }`, as `<name, type>`. */
+const describeNativeFile = (file: unknown): string => {
+	const name = Predicate.hasProperty(file, "name") ? file.name : undefined;
+	const type = Predicate.hasProperty(file, "type") ? file.type : undefined;
+	return `<${[name, type].filter(Predicate.isString).join(", ") || "file"}>`;
+};
 
 const describeObject = (value: unknown): string =>
 	isBlob(value)
@@ -777,17 +782,19 @@ const showRequestBody = (
 				? showText(body.body, mediaTypeOf(body.contentType), max, redact)
 				: describeObject(body.body);
 		case "FormData": {
-			const { formData } = body;
-			if (!Predicate.isFunction(formData.forEach)) {
-				return "<FormData>";
-			}
-			const fields: Array<readonly [string, unknown]> = [];
-			formData.forEach((value, name) => {
-				fields.push([
-					name,
-					Predicate.isString(value) ? value : describeBlob(value),
-				]);
-			});
+			// React Native's `FormData` has no `forEach`: `formParts` reads
+			// its parts, with files as `{ uri, name, type }`.
+			const fields = formParts(body.formData).map(
+				([name, value]) =>
+					[
+						name,
+						Predicate.isString(value)
+							? value
+							: isBlob(value)
+								? describeBlob(value)
+								: describeNativeFile(value),
+					] as const,
+			);
 			return fieldsObject(fields, redact);
 		}
 		case "Stream":
@@ -1156,18 +1163,6 @@ const logCall = (
 		);
 	});
 
-/**
- * `true` in React Native, which sets `navigator.product` to
- * `"ReactNative"`. Browsers, Node, Bun and Deno don't.
- */
-const isReactNative = (): boolean => {
-	const navigator: unknown = Reflect.get(globalThis, "navigator");
-	return (
-		Predicate.hasProperty(navigator, "product") &&
-		navigator.product === "ReactNative"
-	);
-};
-
 const resolveColor = (color: ConsoleLoggerColor): Config["color"] =>
 	color === "auto" ? ("document" in globalThis ? "css" : false) : color;
 
@@ -1242,7 +1237,7 @@ const resolveColor = (color: ConsoleLoggerColor): Config["color"] =>
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { consoleLogger } from "@monarcode/effetch/plugins";
  *
  * declare const isDevelopment: boolean;

@@ -63,7 +63,7 @@ export type LoggerPlugin = Plugin<"logger">;
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { logger } from "@monarcode/effetch/plugins";
  *
  * class Api extends Fetch.Service<Api>()("Api", {

@@ -31,7 +31,7 @@ import type { StreamElement, StreamFormat } from "./Streams.js";
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const route: Fetch.EndpointRoute = "GET /users/:id";
  * const absolute: Fetch.EndpointRoute = "POST https://uploads.example.com/files";
@@ -53,7 +53,7 @@ export type EndpointRoute =
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type Ok = Fetch.ValidRoute<"GET /users/:id">;
  * //   ^? "GET /users/:id"
@@ -72,7 +72,7 @@ export type ValidRoute<R extends string> = R extends EndpointRoute
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type Method = Fetch.RouteMethod<"PATCH /users/:id">;
  * //   ^? "PATCH"
@@ -89,7 +89,7 @@ export type RouteMethod<R extends string> =
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type Path = Fetch.RoutePath<"GET /users/:id">;
  * //   ^? "/users/:id"
@@ -162,7 +162,7 @@ type NoBodyRoute<R extends string> = [RouteMethod<R>] extends [
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const Credentials = Schema.Struct({ user: Schema.String, password: Schema.String });
  * const Session = Schema.Struct({ token: Schema.String });
@@ -203,7 +203,11 @@ export interface EndpointDefinition<
 	// with it `statusErrors: undefined` infers the constraint, which widens
 	// the call's errors to `unknown`.
 	readonly statusErrors?: SE;
-	/** Encodes `body` as JSON, and makes `body` required on every call. */
+	/**
+	 * Encodes `body` with this schema, and makes `body` required on every
+	 * call. Sent as JSON, or as `multipart/form-data` when the schema is
+	 * wrapped in `Fetch.multipart`.
+	 */
 	readonly input?: NoBodyRoute<R> extends true ? undefined : I;
 	/** Headers for every call, over the client's. A call's own header wins. */
 	readonly headers?: Headers.Input | undefined;
@@ -238,7 +242,7 @@ export interface EndpointDefinition<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const NewTodo = Schema.Struct({ title: Schema.String });
  *
@@ -266,7 +270,7 @@ export type EndpointBody<R extends string, I extends AnySchema | undefined> =
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const Page = Schema.Struct({ page: Schema.Finite });
  *
@@ -300,7 +304,7 @@ export type EndpointQuery<
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const options: Fetch.EndpointOptions<"GET /orgs/:org/users", undefined, []> = {
  *   params: { org: "acme" },
@@ -333,7 +337,7 @@ export type EndpointOptions<
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type One = Fetch.EndpointArgs<"GET /todos/:id", undefined, { params: { id: number } }>;
  * //   ^? [options: { params: { id: number } }]
@@ -367,7 +371,7 @@ type Requirements<
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const options: Fetch.EndpointUrlOptions<"GET /files/:id", undefined> = {
  *   params: { id: "a1" },
@@ -393,7 +397,7 @@ export type EndpointUrlOptions<
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const args: Fetch.EndpointUrlArgs<"GET /files/:id", undefined> = [
  *   { params: { id: "a1" } },
@@ -438,7 +442,7 @@ export type EndpointUrlArgs<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
  *
@@ -563,7 +567,7 @@ export interface Endpoint<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * declare const endpoint: Fetch.EndpointMethod<[], Schema.Unknown>;
  *
@@ -635,7 +639,7 @@ export interface EndpointMethod<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, done: Schema.Boolean });
  * const TodoPatch = Schema.Struct({ done: Schema.Boolean });
@@ -673,7 +677,11 @@ export interface UnboundDefinition<
 	// with it `statusErrors: undefined` infers the constraint, which widens
 	// the call's errors to `unknown`.
 	readonly statusErrors?: SE;
-	/** Encodes `body` as JSON, and makes `body` required on every call. */
+	/**
+	 * Encodes `body` with this schema, and makes `body` required on every
+	 * call. Sent as JSON, or as `multipart/form-data` when the schema is
+	 * wrapped in `Fetch.multipart`.
+	 */
 	readonly input?: NoBodyRoute<R> extends true ? undefined : I;
 	/** Headers for every call, over the client's. Binding and call headers win. */
 	readonly headers?: Headers.Input | undefined;
@@ -719,7 +727,7 @@ export interface UnboundDefinition<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
  *
@@ -804,7 +812,7 @@ export interface UnboundEndpoint<
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const options: Fetch.BindOptions<[Fetch.Plugin<"bearer">]> = {
  *   headers: { "x-client": "web" },
@@ -834,7 +842,7 @@ export interface BindOptions<Ps extends ReadonlyArray<Plugin.Any>> {
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * declare const bind: Fetch.BindMethod<[], Schema.Unknown>;
  *
@@ -884,7 +892,7 @@ export interface BindMethod<
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const routes = (definitions: ReadonlyArray<Fetch.AnyUnboundEndpoint>) =>
  *   definitions.map((definition) => definition.route);
@@ -922,7 +930,7 @@ export interface AnyUnboundEndpoint extends Omit<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const getTodo = Fetch.endpoint("GET /todos/:id", {
  *   output: Schema.Struct({ id: Schema.Finite }),
@@ -955,7 +963,7 @@ export type EndpointEntry<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
  *
@@ -985,7 +993,7 @@ export type EndpointDefinitions<D, Ps extends ReadonlyArray<Plugin.Any>> = {
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
  * const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
@@ -1033,7 +1041,7 @@ export type BoundEndpoint<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
  * const definitions = {
@@ -1068,7 +1076,7 @@ export type BoundEndpoints<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * declare const bindAll: Fetch.BindAllMethod<[], Schema.Unknown>;
  *
@@ -1132,7 +1140,7 @@ export interface BindAllMethod<
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { bearer } from "@monarcode/effetch/plugins";
  *
  * const Credentials = Schema.Struct({ user: Schema.String, password: Schema.String });

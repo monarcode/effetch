@@ -10,7 +10,7 @@ import type * as Stream from "effect/Stream";
 
 import { describe, expectTypeOf, it } from "vitest";
 
-import * as Fetch from "../../src/index.js";
+import { Fetch } from "../../src/index.js";
 import type { timeout } from "../../src/plugins/index.js";
 import { FetchTest } from "../../src/test/index.js";
 

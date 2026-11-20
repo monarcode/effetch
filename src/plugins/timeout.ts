@@ -96,7 +96,7 @@ export type TimeoutPlugin = Plugin<
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { timeout } from "@monarcode/effetch/plugins";
  *
  * class Api extends Fetch.Service<Api>()("Api", {

@@ -1,23 +1,26 @@
 import { describe, expect, it } from "vitest";
 
-import * as Fetch from "../src/index.js";
+import * as Root from "../src/index.js";
 import * as Plugins from "../src/plugins/index.js";
 import * as Test from "../src/test/index.js";
 
 describe("public entry points", () => {
 	it("@monarcode/effetch exports exactly these values", () => {
-		expect(Object.keys(Fetch).sort()).toEqual([
+		expect(Object.keys(Root)).toEqual(["Fetch"]);
+		expect(Object.keys(Root.Fetch).sort()).toEqual([
 			"DecodeError",
 			"Endpoints",
 			"HttpError",
 			"NetworkError",
 			"Service",
+			"UploadFile",
 			"bytes",
 			"catchStatus",
 			"endpoint",
 			"isFetchError",
 			"isService",
 			"make",
+			"multipart",
 			"optional",
 			"paginate",
 			"plugin",

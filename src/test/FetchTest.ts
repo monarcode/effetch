@@ -34,7 +34,7 @@ import type { StreamFormat } from "../Streams.js";
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import type { FetchTest } from "@monarcode/effetch/test";
  *
  * const getTodo: FetchTest.TestEndpoint = Fetch.endpoint("GET /todos/:id");
@@ -164,7 +164,7 @@ export type RequestQuery<QS extends QuerySchema | undefined> = [QS] extends [
  * @example
  * ```ts
  * import * as Effect from "effect/Effect";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { FetchTest } from "@monarcode/effetch/test";
  *
  * const getTodo = Fetch.endpoint("GET /todos/:id");
@@ -296,7 +296,7 @@ export type RespondResult<
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import type { FetchTest } from "@monarcode/effetch/test";
  *
  * const getTodo = Fetch.endpoint("GET /todos/:id");
@@ -326,7 +326,7 @@ export type RespondServices<EP extends TestEndpoint> =
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import type { FetchTest } from "@monarcode/effetch/test";
  *
  * class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
@@ -368,7 +368,7 @@ type StatusBody<
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import type { FetchTest } from "@monarcode/effetch/test";
  *
  * const getTodo = Fetch.endpoint("GET /todos/:id");
@@ -391,7 +391,7 @@ export type FailServices<EP extends TestEndpoint> =
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { FetchTest } from "@monarcode/effetch/test";
  *
  * const listTodos = Fetch.endpoint("GET /todos");
@@ -421,7 +421,7 @@ export interface Handler<out R = never> {
  * ```ts
  * import * as Context from "effect/Context";
  * import * as Effect from "effect/Effect";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { FetchTest } from "@monarcode/effetch/test";
  *
  * class Clock extends Context.Service<Clock, { readonly now: Date }>()("Clock") {}
@@ -595,7 +595,7 @@ export const Recorder: Context.Service<Recorder, Recorder> =
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { FetchTest } from "@monarcode/effetch/test";
  *
  * class Api extends Fetch.Service<Api>()("Api", { baseUrl: "https://api.test" }) {}
@@ -650,7 +650,7 @@ export const requests: Effect.Effect<
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { FetchTest } from "@monarcode/effetch/test";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
@@ -712,7 +712,7 @@ export const reply = (
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { FetchTest } from "@monarcode/effetch/test";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String, due: Schema.Date });
@@ -768,7 +768,7 @@ export const respond = <const EP extends TestEndpoint, R = never>(
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { FetchTest } from "@monarcode/effetch/test";
  *
  * class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
@@ -829,7 +829,7 @@ export const fail = <const EP extends TestEndpoint, const S extends number>(
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { FetchTest } from "@monarcode/effetch/test";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
