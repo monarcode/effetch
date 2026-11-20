@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 // The module's wire formats, and its endpoints next to the schemas they use.
 // The endpoints are defined without a client, so they can be read (route,

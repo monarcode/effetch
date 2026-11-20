@@ -28,7 +28,7 @@ import type { Plugin } from "./Plugin.js";
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const format: Fetch.StreamFormat = "sse";
  * ```
@@ -52,7 +52,7 @@ export type StreamFormat = "sse" | "ndjson";
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
  * import * as Stream from "effect/Stream";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Progress = Schema.Struct({ percent: Schema.Finite });
  *
@@ -87,7 +87,7 @@ export interface SseEvent<A> {
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const Row = Schema.Struct({ id: Schema.Finite });
  *
@@ -126,7 +126,7 @@ export type StreamElement<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const Prompt = Schema.Struct({ prompt: Schema.String });
  *
@@ -189,7 +189,7 @@ export type StreamOptions<
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * declare const ndjson: Fetch.StreamMethod<"ndjson", [], Schema.Unknown>;
  *

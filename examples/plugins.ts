@@ -9,7 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Todo = Schema.Struct({
 	id: Schema.Finite,

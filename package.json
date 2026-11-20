@@ -35,6 +35,10 @@
 			"types": "./dist/index.d.ts",
 			"default": "./dist/index.js"
 		},
+		"./Fetch": {
+			"types": "./dist/Fetch.d.ts",
+			"default": "./dist/Fetch.js"
+		},
 		"./plugins": {
 			"types": "./dist/plugins/index.d.ts",
 			"default": "./dist/plugins/index.js"
@@ -42,6 +46,10 @@
 		"./test": {
 			"types": "./dist/test/index.d.ts",
 			"default": "./dist/test/index.js"
+		},
+		"./test/FetchTest": {
+			"types": "./dist/test/FetchTest.d.ts",
+			"default": "./dist/test/FetchTest.js"
 		},
 		"./package.json": "./package.json"
 	},

@@ -1,94 +1,29 @@
-export { make } from "./Client.js";
-export type { Client, ClientConfig } from "./Client.js";
-export { endpoint } from "./Endpoint.js";
-export type {
-	AnyUnboundEndpoint,
-	BindAllMethod,
-	BindMethod,
-	BindOptions,
-	BoundEndpoint,
-	BoundEndpoints,
-	Endpoint,
-	EndpointArgs,
-	EndpointBody,
-	EndpointDefinition,
-	EndpointDefinitions,
-	EndpointEntry,
-	EndpointMethod,
-	EndpointOptions,
-	EndpointQuery,
-	EndpointRoute,
-	EndpointUrlArgs,
-	EndpointUrlOptions,
-	RouteMethod,
-	RoutePath,
-	UnboundDefinition,
-	UnboundEndpoint,
-	ValidRoute,
-} from "./Endpoint.js";
-export {
-	DecodeError,
-	HttpError,
-	isFetchError,
-	NetworkError,
-} from "./Errors.js";
-export type { FetchError } from "./Errors.js";
-export type {
-	AnySchema,
-	Args,
-	BaseOptions,
-	BodyMethod,
-	BodyOptions,
-	CallEffect,
-	CallError,
-	CallServices,
-	NoBodyMethod,
-	NoBodyRequestOptions,
-	ParamsOption,
-	QueryInput,
-	QueryOf,
-	QuerySchema,
-	QueryValue,
-	RequestMethod,
-	RequestOptions,
-	ResponseMode,
-	StatusError,
-	StatusErrorMap,
-	StatusErrorSchema,
-	StatusErrorServices,
-	Success,
-} from "./Options.js";
-export { bytes, text } from "./Output.js";
-export { multipart, UploadFile } from "./Input.js";
-export type {
-	MultipartFields,
-	MultipartSchema,
-	MultipartValue,
-	NativeFile,
-	UploadFileSchema,
-} from "./Input.js";
-export { catchStatus, optional } from "./Status.js";
-export type { CaughtStatus } from "./Status.js";
-export type { BytesSchema, TextSchema } from "./Output.js";
-export type { PathParamNames, PathParams, PathParamValue } from "./Path.js";
-export { Endpoints } from "./Endpoints.js";
-export type { EndpointsClass } from "./Endpoints.js";
-export { isService, Service } from "./Service.js";
-export type { ServiceClass } from "./Service.js";
-export { plugin } from "./Plugin.js";
-export type { Plugin, PluginContext, PluginExitContext } from "./Plugin.js";
-export type {
-	SseEvent,
-	StreamElement,
-	StreamFormat,
-	StreamMethod,
-	StreamOptions,
-} from "./Streams.js";
-export { paginate } from "./Paginate.js";
-export type {
-	PageEndpoint,
-	PageOf,
-	PageRequest,
-	PageResponse,
-	PaginateOptions,
-} from "./Paginate.js";
+/**
+ * Typed, schema-driven HTTP calls on Effect's `HttpClient`. Everything is
+ * under `Fetch`: start with `Fetch.Service` (or `Fetch.make`) for a
+ * client, and `Fetch.endpoint` for typed calls. Plugins live in
+ * `@monarcode/effetch/plugins`, and the test backend, `FetchTest`, in
+ * `@monarcode/effetch/test`.
+ *
+ * @example
+ * ```ts
+ * import * as Effect from "effect/Effect";
+ * import * as Schema from "effect/Schema";
+ * import { Fetch } from "@monarcode/effetch";
+ *
+ * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+ *
+ * class Api extends Fetch.Service<Api>()("Api", {
+ *   baseUrl: "https://api.example.com",
+ * }) {}
+ *
+ * export const getTodo = (id: number) =>
+ *   Effect.gen(function* () {
+ *     const api = yield* Api;
+ *     return yield* api.get("/todos/:id", { params: { id }, output: Todo });
+ *   });
+ * ```
+ *
+ * @since 0.1.0
+ */
+export * as Fetch from "./Fetch.js";

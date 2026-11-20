@@ -1,4 +1,4 @@
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 import { AppApiClient } from "../../../infrastructure/http/app-api-client.js";
 import {

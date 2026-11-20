@@ -10,7 +10,7 @@ import * as Schema from "effect/Schema";
 
 import { describe, expectTypeOf, it } from "vitest";
 
-import * as Fetch from "../../src/index.js";
+import { Fetch } from "../../src/index.js";
 import { FetchTest } from "../../src/test/index.js";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });

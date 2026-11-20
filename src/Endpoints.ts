@@ -29,7 +29,7 @@ import type { Plugin } from "./Plugin.js";
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
  * const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
@@ -118,7 +118,7 @@ export interface EndpointsClass<
  * import * as Layer from "effect/Layer";
  * import * as Schema from "effect/Schema";
  * import * as FetchHttpClient from "effect/http/FetchHttpClient";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { bearer } from "@monarcode/effetch/plugins";
  *
  * // infrastructure: the client

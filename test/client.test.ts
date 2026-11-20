@@ -14,7 +14,7 @@ import * as Schema from "effect/Schema";
 
 import { describe, expect } from "vitest";
 
-import * as Fetch from "../src/index.js";
+import { Fetch } from "../src/index.js";
 import { base, setup, wire } from "./utils/client.js";
 import {
 	failure,

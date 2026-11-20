@@ -12,7 +12,7 @@ import * as Stream from "effect/Stream";
 
 import { describe, expect, vi } from "vitest";
 
-import * as Fetch from "../src/index.js";
+import { Fetch } from "../src/index.js";
 import { consoleLogger, retry, timeout } from "../src/plugins/index.js";
 import { FetchTest } from "../src/test/index.js";
 

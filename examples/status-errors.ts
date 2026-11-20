@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 // The backend's error body, for responses that aren't one of the errors
 // below.

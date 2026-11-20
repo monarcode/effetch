@@ -30,10 +30,14 @@ for required in \
 	package/LICENSE \
 	package/dist/index.js \
 	package/dist/index.d.ts \
+	package/dist/Fetch.js \
+	package/dist/Fetch.d.ts \
 	package/dist/plugins/index.js \
 	package/dist/plugins/index.d.ts \
 	package/dist/test/index.js \
-	package/dist/test/index.d.ts; do
+	package/dist/test/index.d.ts \
+	package/dist/test/FetchTest.js \
+	package/dist/test/FetchTest.d.ts; do
 	if ! grep -qx "$required" <<<"$contents"; then
 		echo "✗ Missing from tarball: $required" >&2
 		exit 1
@@ -69,7 +73,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import {
 	bearer,
 	type BearerPlugin,
@@ -524,6 +528,72 @@ echo "› Typechecking consumer (NodeNext)"
 
 echo "› Typechecking consumer (Bundler)"
 ./node_modules/.bin/tsc -p tsconfig.bundler.json
+
+echo "› Emitting declarations from a consumer (NodeNext)"
+# Types reached through another module, such as a client's errors, must be
+# nameable in the consumer's own .d.ts files.
+mkdir -p declarations
+cat >declarations/api.ts <<'TS'
+import * as Effect from "effect/Effect";
+import { Fetch } from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+export class Api extends Fetch.Service<Api>()("smoke/Api", {
+	baseUrl: "https://api.test",
+}) {}
+export const client = Fetch.make({ baseUrl: "https://api.test" });
+export const Backend = FetchTest.layer([]);
+export const ok = Effect.void;
+TS
+cat >declarations/use.ts <<'TS'
+import * as Effect from "effect/Effect";
+import { Api, Backend, client } from "./api.js";
+
+export const call = Effect.gen(function* () {
+	const api = yield* Api;
+	return yield* api.get("/todos");
+});
+export const sameClient = client;
+export const backend = Backend;
+TS
+cat >declarations/tsconfig.json <<JSON
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"lib": ["ES2022", "DOM"],
+		"strict": true,
+		"skipLibCheck": false,
+		"declaration": true,
+		"emitDeclarationOnly": true,
+		"outDir": "out",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext"
+	},
+	"files": ["api.ts", "use.ts"]
+}
+JSON
+./node_modules/.bin/tsc -p declarations/tsconfig.json
+
+echo "› Bundling a consumer that only uses Fetch.make"
+cat >shake.js <<'JS'
+import { Fetch } from "@monarcode/effetch";
+console.log(Fetch.make);
+JS
+cat >shake.config.mjs <<'JS'
+export default {
+	input: "shake.js",
+	external: [/^effect(\/|$)/],
+	platform: "neutral",
+	output: { file: "shake.out.js", format: "esm" },
+};
+JS
+"$root/node_modules/.bin/rolldown" -c shake.config.mjs >/dev/null
+for unused in Paginate Endpoints Service Status Input; do
+	if grep -q "dist/$unused.js" shake.out.js; then
+		echo "✗ Fetch.make alone bundles dist/$unused.js: the Fetch namespace isn't tree-shaken" >&2
+		exit 1
+	fi
+done
 
 echo "› Running consumer"
 node consumer.ts

@@ -5,7 +5,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { retry, timeout } from "@monarcode/effetch/plugins";
 
 // Streams and pages: a job's progress as Server-Sent Events, an export as

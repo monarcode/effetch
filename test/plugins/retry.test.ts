@@ -10,7 +10,7 @@ import * as TestClock from "effect/testing/TestClock";
 
 import { describe, expect } from "vitest";
 
-import * as Fetch from "../../src/index.js";
+import { Fetch } from "../../src/index.js";
 import {
 	bearer,
 	logger,

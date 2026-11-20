@@ -207,7 +207,7 @@ const maxRecent = 32;
  * ```ts
  * import * as Context from "effect/Context";
  * import * as Effect from "effect/Effect";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { bearer } from "@monarcode/effetch/plugins";
  *
  * declare const SecureStore: {

@@ -28,7 +28,7 @@ const TypeId = "~@monarcode/effetch/Service";
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const ApiError = Schema.Struct({ code: Schema.String });
  *
@@ -81,7 +81,7 @@ export interface ServiceClass<
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const describe = (service: Fetch.ServiceClass.Any): string => service.key;
  * ```
@@ -95,7 +95,7 @@ export declare namespace ServiceClass {
 	 *
 	 * @example
 	 * ```ts
-	 * import * as Fetch from "@monarcode/effetch";
+	 * import { Fetch } from "@monarcode/effetch";
 	 *
 	 * class Api extends Fetch.Service<Api>()("Api") {}
 	 *
@@ -191,7 +191,7 @@ const snapshot = <
  * import * as Layer from "effect/Layer";
  * import * as Schema from "effect/Schema";
  * import * as FetchHttpClient from "effect/http/FetchHttpClient";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const ApiError = Schema.Struct({ code: Schema.String });
  * class NotFound extends Schema.TaggedError<NotFound>()("NotFound", {}) {}
@@ -222,7 +222,7 @@ const snapshot = <
  * ```ts
  * import * as Layer from "effect/Layer";
  * import * as FetchHttpClient from "effect/http/FetchHttpClient";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * // A layer that needs nothing: override `layer` in the class.
  * export class Api extends Fetch.Service<Api>()("Api", {
@@ -270,7 +270,7 @@ export const Service =
  * @example
  * ```ts
  * import * as Context from "effect/Context";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * class Api extends Fetch.Service<Api>()("Api") {}
  * class Other extends Context.Service<Other, string>()("Other") {}

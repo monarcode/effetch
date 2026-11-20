@@ -1237,7 +1237,7 @@ const resolveColor = (color: ConsoleLoggerColor): Config["color"] =>
  *
  * @example
  * ```ts
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { consoleLogger } from "@monarcode/effetch/plugins";
  *
  * declare const isDevelopment: boolean;

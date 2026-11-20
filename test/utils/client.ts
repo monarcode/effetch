@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type * as Schema from "effect/Schema";
 
-import * as Fetch from "../../src/index.js";
+import { Fetch } from "../../src/index.js";
 import {
 	type MockClient,
 	makeMockClient,

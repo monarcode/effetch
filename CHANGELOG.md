@@ -6,6 +6,33 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ### Changed
 
+- **Breaking:** the main entry now has one export, the `Fetch` namespace,
+  so you import it by name. Change the import line in each file; uses
+  such as `Fetch.endpoint` and `Fetch.Client` stay the same:
+
+  ```ts
+  // Before
+  import * as Fetch from "@monarcode/effetch";
+  import type * as Fetch from "@monarcode/effetch";
+  // After
+  import { Fetch } from "@monarcode/effetch";
+  import type { Fetch } from "@monarcode/effetch";
+  ```
+
+  A named import of a member, such as
+  `import { HttpError, type Client } from "@monarcode/effetch"`, becomes
+  `import { Fetch } from "@monarcode/effetch"`, with `Fetch.HttpError` and
+  `Fetch.Client` where they're used.
+
+  - Your editor can now add the import for you as you type `Fetch`.
+  - Bundlers still drop what you don't use: an app that only calls
+    `Fetch.make` doesn't bundle `Fetch.paginate` or `Fetch.Endpoints`.
+  - New subpaths, `@monarcode/effetch/Fetch` and
+    `@monarcode/effetch/test/FetchTest`, hold the same exports without the
+    namespace. TypeScript uses them to name Effetch's types in the `.d.ts`
+    files it emits for your code, which a namespace alone can't do.
+  - The `/plugins` and `/test` entries are unchanged.
+
 - A `content-type` header set by a call, an endpoint or the client is now
   removed for a `FormData` body, so the platform's multipart boundary is
   kept. Before, it replaced the boundary, and servers couldn't read the

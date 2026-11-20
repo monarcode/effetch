@@ -8,7 +8,7 @@ import * as Schema from "effect/Schema";
 
 import { describe, expect } from "vitest";
 
-import * as Fetch from "../src/index.js";
+import { Fetch } from "../src/index.js";
 import { mergeOverrides } from "../src/internal/plugins.js";
 import { base, setup, wire } from "./utils/client.js";
 import type { RecordedRequest } from "./utils/mockClient.js";

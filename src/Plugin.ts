@@ -62,7 +62,7 @@ declare const UpstreamServicesTypeId: unique symbol;
  * @example
  * ```ts
  * import * as Effect from "effect/Effect";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const tracing = Fetch.plugin({
  *   name: "tracing",
@@ -118,7 +118,7 @@ export interface PluginContext<Opts> {
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Exit from "effect/Exit";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const timing = Fetch.plugin({
  *   name: "timing",
@@ -181,7 +181,7 @@ export interface PluginExitContext<Opts> extends PluginContext<Opts> {
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as HttpClientRequest from "effect/http/HttpClientRequest";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const apiKey: Fetch.Plugin<"apiKey"> = Fetch.plugin({
  *   name: "apiKey",
@@ -221,7 +221,7 @@ export interface Plugin<
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * type Plugins = [Fetch.Plugin<"bearer">];
  * type Overrides = Fetch.Plugin.Overrides<Plugins>;
@@ -237,7 +237,7 @@ export declare namespace Plugin {
 	 * @example
 	 * ```ts
 	 * import * as Effect from "effect/Effect";
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * const passThrough: Fetch.Plugin.OnRequest<undefined, never, never> = (
 	 *   request,
@@ -258,7 +258,7 @@ export declare namespace Plugin {
 	 * @example
 	 * ```ts
 	 * import * as Effect from "effect/Effect";
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * const passThrough: Fetch.Plugin.OnResponse<undefined, never, never> = (
 	 *   response,
@@ -285,7 +285,7 @@ export declare namespace Plugin {
 	 * @example
 	 * ```ts
 	 * import * as Effect from "effect/Effect";
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * const report: Fetch.Plugin.OnError<undefined, never> = (error, ctx) =>
 	 *   Effect.logWarning(ctx.request.url, error);
@@ -324,7 +324,7 @@ export declare namespace Plugin {
 	 * ```ts
 	 * import * as Effect from "effect/Effect";
 	 * import * as Exit from "effect/Exit";
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * const report: Fetch.Plugin.OnExit<undefined, never> = (exit, ctx) =>
 	 *   Effect.logDebug(
@@ -355,7 +355,7 @@ export declare namespace Plugin {
 	 * ```ts
 	 * import * as Effect from "effect/Effect";
 	 * import * as HttpClient from "effect/http/HttpClient";
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * const retryTwice: Fetch.Plugin.Wrap<undefined, never, never> = (client) =>
 	 *   HttpClient.retry(client, { times: 2 });
@@ -397,7 +397,7 @@ export declare namespace Plugin {
 	 *
 	 * @example
 	 * ```ts
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * type Names<Ps extends ReadonlyArray<Fetch.Plugin.Any>> =
 	 *   Ps[number]["name"];
@@ -436,7 +436,7 @@ export declare namespace Plugin {
 	 * @example
 	 * ```ts
 	 * import type * as HttpClient from "effect/http/HttpClient";
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * type Wrapped = HttpClient.HttpClient.With<
 	 *   Fetch.Plugin.UpstreamError | Error,
@@ -457,7 +457,7 @@ export declare namespace Plugin {
 	 *
 	 * @example
 	 * ```ts
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * declare const services: Fetch.Plugin.UpstreamServices;
 	 * ```
@@ -475,7 +475,7 @@ export declare namespace Plugin {
 	 * @example
 	 * ```ts
 	 * import * as HttpClient from "effect/http/HttpClient";
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * const withRetries = (client: Fetch.Plugin.Upstream) =>
 	 *   HttpClient.retry(client, { times: 2 });
@@ -500,7 +500,7 @@ export declare namespace Plugin {
 	 * @example
 	 * ```ts
 	 * import * as Effect from "effect/Effect";
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * const definition: Fetch.Plugin.Definition<
 	 *   "noop", never, never, never, never, never, never, never, undefined
@@ -547,7 +547,7 @@ export declare namespace Plugin {
 	 *
 	 * @example
 	 * ```ts
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * class TimeoutError extends Error {
 	 *   readonly _tag = "TimeoutError";
@@ -568,7 +568,7 @@ export declare namespace Plugin {
 	 *
 	 * @example
 	 * ```ts
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * declare const plugins: [Fetch.Plugin<"auth", never, "Session">];
 	 *
@@ -585,7 +585,7 @@ export declare namespace Plugin {
 	 *
 	 * @example
 	 * ```ts
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * type Opts = Fetch.Plugin.Options<
 	 *   Fetch.Plugin<"retry", never, never, { times: number }>
@@ -604,7 +604,7 @@ export declare namespace Plugin {
 	 *
 	 * @example
 	 * ```ts
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * type RetryOverride = Fetch.Plugin.Override<
 	 *   Fetch.Plugin<"retry", never, never, { times: number }>
@@ -626,7 +626,7 @@ export declare namespace Plugin {
 	 *
 	 * @example
 	 * ```ts
-	 * import type * as Fetch from "@monarcode/effetch";
+	 * import type { Fetch } from "@monarcode/effetch";
 	 *
 	 * type Overrides = Fetch.Plugin.Overrides<
 	 *   [
@@ -658,7 +658,7 @@ export declare namespace Plugin {
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as HttpClientRequest from "effect/http/HttpClientRequest";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const userAgent = Fetch.plugin({
  *   name: "userAgent",

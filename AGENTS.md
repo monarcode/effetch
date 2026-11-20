@@ -1,7 +1,8 @@
 # Agent instructions
 
 `@monarcode/effetch`: typed, schema-driven HTTP calls on Effect v4's
-`HttpClient`. Consumers import it as `import * as Fetch from "@monarcode/effetch"`.
+`HttpClient`. Consumers import it as
+`import { Fetch } from "@monarcode/effetch"`.
 
 ## Rules
 

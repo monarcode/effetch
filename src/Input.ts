@@ -27,7 +27,7 @@ const noJson = SchemaGetter.forbidden<never, unknown>(
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * declare const picked: {
  *   readonly uri: string;
@@ -63,7 +63,7 @@ export interface NativeFile {
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Avatar: Fetch.UploadFileSchema = Fetch.UploadFile;
  * type Avatar = Schema.Schema.Type<typeof Avatar>; // Blob | Fetch.NativeFile
@@ -104,7 +104,7 @@ export interface UploadFileSchema extends Schema.declare<Blob | NativeFile> {
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * export const uploadDocument = Fetch.endpoint("POST /documents", {
  *   input: Fetch.multipart(
@@ -151,7 +151,7 @@ export const UploadFile: UploadFileSchema = Schema.declare(
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const values: ReadonlyArray<Fetch.MultipartValue> = ["a", 1, true, null];
  * ```
@@ -175,7 +175,7 @@ export type MultipartValue =
  *
  * @example
  * ```ts
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * declare const file: Blob;
  *
@@ -196,7 +196,7 @@ export type MultipartFields = {
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Upload: Fetch.MultipartSchema = Schema.Struct({
  *   file: Fetch.UploadFile,
@@ -264,7 +264,7 @@ export type MultipartSchema = Schema.Top & {
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const uploadDocument = Fetch.endpoint("POST /documents", {
  *   input: Fetch.multipart(

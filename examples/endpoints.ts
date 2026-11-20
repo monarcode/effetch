@@ -3,7 +3,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
 
 // The same app as `builtins.ts`, with endpoints: each route is defined once,

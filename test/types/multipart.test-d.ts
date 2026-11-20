@@ -6,7 +6,7 @@ import * as Schema from "effect/Schema";
 
 import { describe, expectTypeOf, it } from "vitest";
 
-import * as Fetch from "../../src/index.js";
+import { Fetch } from "../../src/index.js";
 import type { FetchTest } from "../../src/test/index.js";
 
 const Fields = Schema.Struct({

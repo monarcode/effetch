@@ -17,7 +17,7 @@ import {
 	jobEvents,
 	listUsers,
 } from "../examples/streams.js";
-import * as Fetch from "../src/index.js";
+import { Fetch } from "../src/index.js";
 import { FetchTest } from "../src/test/index.js";
 
 const completions = Fetch.endpoint("POST /completions", {

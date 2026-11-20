@@ -8,7 +8,7 @@
  * @example
  * ```ts
  * import * as Effect from "effect/Effect";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { FetchTest } from "@monarcode/effetch/test";
  *
  * const getTodo = Fetch.endpoint("GET /todos/:id");

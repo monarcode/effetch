@@ -21,7 +21,7 @@ import type {
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite });
  *
@@ -56,7 +56,7 @@ export interface PageEndpoint {
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * declare const listTodos: Fetch.Endpoint<"GET /orgs/:org/todos", undefined, Schema.Unknown, undefined, []>;
  *
@@ -92,7 +92,7 @@ export type PageRequest<EP extends PageEndpoint> = EP extends {
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const Todos = Schema.Array(Schema.Struct({ id: Schema.Finite }));
  * declare const listTodos: Fetch.Endpoint<"GET /todos", typeof Todos, Schema.Unknown, undefined, []>;
@@ -116,7 +116,7 @@ export type PageOf<EP extends PageEndpoint> = [EP["output"]] extends [AnySchema]
  * @example
  * ```ts
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * declare const listTodos: Fetch.Endpoint<
  *   "GET /todos", undefined, Schema.Unknown, undefined, [], undefined, "decoded-and-response"
@@ -149,7 +149,7 @@ export type PageResponse<EP extends PageEndpoint> = [
  * ```ts
  * import * as Option from "effect/Option";
  * import * as Schema from "effect/Schema";
- * import type * as Fetch from "@monarcode/effetch";
+ * import type { Fetch } from "@monarcode/effetch";
  *
  * const Todos = Schema.Array(Schema.Struct({ id: Schema.Finite }));
  * declare const listTodos: Fetch.Endpoint<"GET /todos", typeof Todos, Schema.Unknown, undefined, []>;
@@ -216,7 +216,7 @@ type ServicesOf<EP> = EP extends (
  * import * as Option from "effect/Option";
  * import * as Schema from "effect/Schema";
  * import * as Stream from "effect/Stream";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  *
  * const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
  * const listTodos = Fetch.endpoint("GET /todos", {

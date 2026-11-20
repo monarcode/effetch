@@ -8,7 +8,7 @@ import * as Schema from "effect/Schema";
 
 import { describe, expect } from "vitest";
 
-import * as Fetch from "../src/index.js";
+import { Fetch } from "../src/index.js";
 import { encodeBody } from "../src/internal/body.js";
 import { buildForm, fileFieldsOf } from "../src/internal/multipart.js";
 import { FetchTest } from "../src/test/index.js";

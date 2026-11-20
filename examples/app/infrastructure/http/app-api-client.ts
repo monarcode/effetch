@@ -1,7 +1,7 @@
 import * as Config from "effect/Config";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { logger, retry } from "@monarcode/effetch/plugins";
 
 import { auth, reportErrors, SessionExpired } from "./plugins.js";

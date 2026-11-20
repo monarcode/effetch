@@ -8,7 +8,7 @@ import * as Schedule from "effect/Schedule";
 
 import { describe, expectTypeOf, it } from "vitest";
 
-import * as Fetch from "../../src/index.js";
+import { Fetch } from "../../src/index.js";
 import {
 	bearer,
 	type BearerPlugin,

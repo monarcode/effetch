@@ -33,7 +33,7 @@ TypeScript tells you what a call returns and every way it can fail.
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
@@ -63,6 +63,7 @@ export const getTodo = (id: number) =>
   - [Where it fits](#where-it-fits)
 - [Getting started](#getting-started)
   - [Install](#install)
+  - [Importing](#importing)
   - [Your first client](#your-first-client)
   - [How the pieces fit](#how-the-pieces-fit)
 - [Setting up a client](#setting-up-a-client)
@@ -167,7 +168,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as HttpIncomingMessage from "effect/http/HttpIncomingMessage";
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -260,6 +261,30 @@ You'll need:
 - TypeScript 5.4 or newer. With `skipLibCheck: false`, Effect's own
   declarations need TypeScript 5.7 or newer.
 
+### Importing
+
+Everything in the main entry is under one export, `Fetch`. Plugins and the
+test backend have their own entries:
+
+```ts
+import { Fetch } from "@monarcode/effetch";
+import { bearer, retry } from "@monarcode/effetch/plugins";
+import { FetchTest } from "@monarcode/effetch/test";
+
+export const plugins = [bearer({ token: "token" }), retry()];
+export const getTodo = Fetch.endpoint("GET /todos/:id");
+export const Backend = FetchTest.layer([]);
+```
+
+Your editor offers to add the `Fetch` import as you type it. For types
+alone, use `import type { Fetch } from "@monarcode/effetch"`.
+
+The package also has `@monarcode/effetch/Fetch` and
+`@monarcode/effetch/test/FetchTest`: the same exports, without the
+namespace, as `effect/Effect` is to `import { Effect } from "effect"`.
+TypeScript uses them to name Effetch's types in the `.d.ts` files it emits
+for your code. In your own code, import from the main entry.
+
 ### Your first client
 
 Let's fetch a todo from [JSONPlaceholder](https://jsonplaceholder.typicode.com),
@@ -271,7 +296,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 // 1. What a todo looks like
 const Todo = Schema.Struct({
@@ -365,7 +390,7 @@ the rest of your app.
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
@@ -414,7 +439,7 @@ of them:
 import * as Config from "effect/Config";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
 
 const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
@@ -460,7 +485,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
@@ -484,7 +509,7 @@ the class:
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
@@ -514,7 +539,7 @@ its client has the same type:
 ```ts
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { retry } from "@monarcode/effetch/plugins";
 
 export class Api extends Fetch.Service<Api>()("Api", {
@@ -553,7 +578,7 @@ In a script, use `Fetch.make` inline:
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const program = Effect.gen(function* () {
   const api = yield* Fetch.make({ baseUrl: "https://api.example.com" });
@@ -571,7 +596,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 class Tenant extends Context.Service<Tenant, { readonly id: string }>()(
   "Tenant",
@@ -612,7 +637,7 @@ A client has a method for each HTTP method:
 ```ts
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -645,7 +670,7 @@ a schema for it. See [Typed query parameters](#typed-query-parameters).
 ```ts
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -697,7 +722,7 @@ typed and checked by the schema, as for JSON, then sent as
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Document = Schema.Struct({ id: Schema.String });
 
@@ -740,7 +765,7 @@ In React Native, send a `NativeFile`, not a `Blob`: React Native's `fetch`
 reads a form's files from disk by `uri`, and can't send a `Blob` in a form.
 
 ```ts
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 // From expo-image-picker, for example
 declare const asset: {
@@ -819,7 +844,7 @@ To check a file's size, add a check to `Fetch.UploadFile`. A
 ```ts
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export const SmallFile = Fetch.UploadFile.check(
   Schema.makeFilter(
@@ -847,7 +872,7 @@ yourself:
 ```ts
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -885,7 +910,7 @@ The call sends a matching `Accept` header: `text/*, */*;q=0.1` for text, and
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -924,7 +949,7 @@ with a pair:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -969,7 +994,7 @@ export const page = Effect.gen(function* () {
   ```ts
   import type * as HttpMethod from "effect/http/HttpMethod";
 
-  import type * as Fetch from "@monarcode/effetch";
+  import type { Fetch } from "@monarcode/effetch";
 
   declare const api: Fetch.Client;
 
@@ -1014,7 +1039,7 @@ Catch errors by tag with `Effect.catchTags`:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -1051,7 +1076,7 @@ To handle one or more statuses, use `Fetch.catchStatus`. For the common "a
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -1118,7 +1143,7 @@ You can give a map in three places, and they add up:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
   message: Schema.String,
@@ -1271,7 +1296,7 @@ The built-in plugins come from `@monarcode/effetch/plugins`:
 ```ts
 import * as Effect from "effect/Effect";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
 
 declare const readToken: () => Promise<string | null>;
@@ -1320,7 +1345,7 @@ To renew an expired access token without failing the call, give `bearer` a
 `refresh` for a new token, then sends the request again with it:
 
 ```ts
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 declare const tokens: {
@@ -1385,7 +1410,7 @@ For "10 seconds per attempt, 30 seconds in all", use both `timeout` and a
 budget:
 
 ```ts
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { retry, timeout } from "@monarcode/effetch/plugins";
 
 export class Api extends Fetch.Service<Api>()("Api", {
@@ -1407,7 +1432,7 @@ prints everything about a call to the console, as a group devtools can
 expand.
 
 ```ts
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { consoleLogger } from "@monarcode/effetch/plugins";
 
 declare const isDevelopment: boolean;
@@ -1461,7 +1486,7 @@ skip it with `false`:
 ```ts
 import * as Effect from "effect/Effect";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { consoleLogger } from "@monarcode/effetch/plugins";
 
 class Api extends Fetch.Service<Api>()("Api", {
@@ -1555,7 +1580,7 @@ them. TypeScript checks the plugin names and the option types:
 ```ts
 import * as Effect from "effect/Effect";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer, retry, timeout } from "@monarcode/effetch/plugins";
 
 class Api extends Fetch.Service<Api>()("Api", {
@@ -1634,7 +1659,7 @@ next to their schemas:
 ```ts
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
 const NewUser = Schema.Struct({ name: Schema.String });
@@ -1673,7 +1698,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 declare const readToken: () => Promise<string | null>;
@@ -1784,7 +1809,7 @@ directly, such as inside your own service's layer:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
@@ -1823,7 +1848,7 @@ since it knows the client's plugins:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 const Session = Schema.Struct({ token: Schema.String });
@@ -1864,7 +1889,7 @@ works too, called with an instance:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
@@ -1920,7 +1945,7 @@ key:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const getFile = Fetch.endpoint("GET /files/:name", {
   query: Schema.Struct({ download: Schema.optional(Schema.Boolean) }),
@@ -2022,7 +2047,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -2043,7 +2068,7 @@ export const followJob = (id: number) =>
   ```ts
   import * as Schema from "effect/Schema";
 
-  import type * as Fetch from "@monarcode/effetch";
+  import type { Fetch } from "@monarcode/effetch";
 
   declare const api: Fetch.Client;
 
@@ -2078,7 +2103,7 @@ at the sentinel, then decode the rest:
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -2105,7 +2130,7 @@ one JSON value per line, decoded with `output`:
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import type * as Fetch from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -2132,7 +2157,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const JobEvent = Schema.Struct({ percent: Schema.Finite });
 
@@ -2200,7 +2225,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
@@ -2256,7 +2281,7 @@ each page's response:
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
@@ -2294,7 +2319,7 @@ every request, with an option that a call can change:
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export const apiVersion = Fetch.plugin({
   name: "apiVersion",
@@ -2352,7 +2377,7 @@ It suits logging and metrics, and is what `consoleLogger` uses:
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 declare const record: (route: string, ok: boolean, durationMs: number) => void;
 
@@ -2380,7 +2405,7 @@ A `wrap` reads it from its third argument, an Effect like `options`:
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 declare const report: (error: unknown, route: string | undefined) => void;
 
@@ -2413,7 +2438,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export class SessionExpired extends Data.TaggedError("SessionExpired")<{}> {}
 
@@ -2462,7 +2487,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export class TooSlow extends Data.TaggedError("TooSlow")<{
   readonly url: string;
@@ -2512,7 +2537,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
@@ -2567,7 +2592,7 @@ errors are still checked against your plugins and `defaultError`:
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
@@ -2620,7 +2645,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 // infrastructure/http/app-api-client.ts: how to reach the backend, nothing else
 export class AppApiClient extends Fetch.Service<AppApiClient>()(
@@ -2727,7 +2752,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { FetchTest } from "@monarcode/effetch/test";
 
 const Todo = Schema.Struct({
@@ -2824,7 +2849,7 @@ decodes it back into your domain error:
 ```ts
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { FetchTest } from "@monarcode/effetch/test";
 
 class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
@@ -2852,7 +2877,7 @@ and anything else as JSON. For a `2xx` with a typed body, such as a `201`, pass
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { FetchTest } from "@monarcode/effetch/test";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
@@ -2892,7 +2917,7 @@ with its `data` and an optional `event` and `id`, and values for
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { FetchTest } from "@monarcode/effetch/test";
 
 const JobEvent = Schema.Struct({ percent: Schema.Finite });
@@ -2928,7 +2953,7 @@ hide it, so use `Layer.provideMerge`:
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { FetchTest } from "@monarcode/effetch/test";
 
 class Api extends Fetch.Service<Api>()("Api", {
@@ -2997,7 +3022,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
@@ -3049,7 +3074,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 
 export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
@@ -3136,7 +3161,7 @@ The following table maps what you know from axios and ky to Effetch:
 Every export is documented, with an example, in the type declarations your
 editor shows. This list says where each one is covered here.
 
-`@monarcode/effetch`:
+`@monarcode/effetch`, as the `Fetch` namespace:
 
 - `Service`, `ServiceClass` (and `ServiceClass.Any`), `isService`:
   [declaring a client](#declaring-a-client).
