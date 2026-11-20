@@ -20,8 +20,13 @@
 		"type": "git",
 		"url": "git+https://github.com/monarcode/effetch.git"
 	},
+	"bin": {
+		"effetch-migrate": "./bin/effetch-migrate.mjs"
+	},
 	"files": [
 		"dist",
+		"bin/effetch-migrate.mjs",
+		"bin/migrate.mjs",
 		"README.md",
 		"LICENSE",
 		"CHANGELOG.md"

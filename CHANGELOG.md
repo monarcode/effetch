@@ -24,6 +24,12 @@ All notable changes to `@monarcode/effetch`, newest first.
   `import { Fetch } from "@monarcode/effetch"`, with `Fetch.HttpError` and
   `Fetch.Client` where they're used.
 
+  - `npx -p @monarcode/effetch effetch-migrate` (or
+    `pnpm exec effetch-migrate`) makes these changes for you: run it in
+    the package that depends on Effetch after upgrading, with
+    `--dry-run` first to see the files it would change. It lists what it
+    can't rewrite, such as a dynamic `import()`. See "Upgrading from
+    0.1.0-rc.3" in the README.
   - Your editor can now add the import for you as you type `Fetch`.
   - Bundlers still drop what you don't use: an app that only calls
     `Fetch.make` doesn't bundle `Fetch.paginate` or `Fetch.Endpoints`.

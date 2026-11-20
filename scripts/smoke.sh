@@ -37,13 +37,15 @@ for required in \
 	package/dist/test/index.js \
 	package/dist/test/index.d.ts \
 	package/dist/test/FetchTest.js \
-	package/dist/test/FetchTest.d.ts; do
+	package/dist/test/FetchTest.d.ts \
+	package/bin/effetch-migrate.mjs \
+	package/bin/migrate.mjs; do
 	if ! grep -qx "$required" <<<"$contents"; then
 		echo "✗ Missing from tarball: $required" >&2
 		exit 1
 	fi
 done
-forbidden="$(grep -E '^package/src/|\.map$|\.test\.|\.test-d\.' <<<"$contents" || true)"
+forbidden="$(grep -E '^package/src/|\.map$|\.test\.|\.test-d\.|\.d\.mts$' <<<"$contents" || true)"
 if [ -n "$forbidden" ]; then
 	echo "✗ Unexpected files in tarball:" >&2
 	echo "$forbidden" >&2
@@ -594,6 +596,37 @@ for unused in Paginate Endpoints Service Status Input; do
 		exit 1
 	fi
 done
+
+echo "› Migrating rc.3-style imports with effetch-migrate"
+mkdir -p legacy
+cat >legacy/api.ts <<'TS'
+import * as Effect from "effect/Effect";
+import { HttpError, make, type Client } from "@monarcode/effetch";
+import type * as Http from "@monarcode/effetch";
+
+export const client: Effect.Effect<Client, never, never> = Effect.die("unused");
+export const make2 = make;
+export const isHttp = (u: unknown): u is HttpError => u instanceof HttpError;
+export type Api = Http.Client;
+export type Remote = import("@monarcode/effetch").Client;
+TS
+# The command the README documents, without reaching the registry.
+npx --offline -p @monarcode/effetch effetch-migrate legacy >/dev/null
+if grep -q '\* as Http from\|{ HttpError, make' legacy/api.ts; then
+	echo "✗ effetch-migrate left rc.3-style imports in legacy/api.ts:" >&2
+	cat legacy/api.ts >&2
+	exit 1
+fi
+cat >tsconfig.legacy.json <<JSON
+{
+	"compilerOptions": {$common_options,
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext"
+	},
+	"files": ["legacy/api.ts"]
+}
+JSON
+./node_modules/.bin/tsc -p tsconfig.legacy.json
 
 echo "› Running consumer"
 node consumer.ts

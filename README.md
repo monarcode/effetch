@@ -285,6 +285,48 @@ namespace, as `effect/Effect` is to `import { Effect } from "effect"`.
 TypeScript uses them to name Effetch's types in the `.d.ts` files it emits
 for your code. In your own code, import from the main entry.
 
+#### Upgrading from 0.1.0-rc.3
+
+Before 0.1.0-rc.4, the main entry exported each API by name, and you
+imported it with `import * as Fetch`. To move a project to the `Fetch`
+export, upgrade it, then run the migration in the directory of the
+package that depends on Effetch:
+
+```bash
+npx -p @monarcode/effetch effetch-migrate --dry-run
+```
+
+```bash
+npx -p @monarcode/effetch effetch-migrate
+```
+
+The first command lists the files it would change. The second changes
+them. With pnpm, run `pnpm exec effetch-migrate` instead. It makes these
+changes:
+
+- `import * as Fetch from "@monarcode/effetch"` becomes
+  `import { Fetch } from "@monarcode/effetch"`.
+- Named imports, such as `import { HttpError, type Client }`, become
+  `import { Fetch }`, and each use becomes `Fetch.HttpError` or
+  `Fetch.Client`.
+- `export … from "@monarcode/effetch"` re-exports from
+  `@monarcode/effetch/Fetch`, and `import("@monarcode/effetch").Client`
+  types become `import("@monarcode/effetch").Fetch.Client`.
+- Code that already imports `Fetch` is left as it is.
+
+It reads `.ts`, `.tsx`, `.js` and similar files, and uses the project's
+own TypeScript. In a git repository it reads the files git sees, so it
+skips what `.gitignore` does. Elsewhere, it skips `node_modules`, `dist`,
+`build`, `coverage` and hidden directories, and lists the build output it
+skipped. Pass paths to choose what it reads, such as
+`effetch-migrate src test`.
+
+It lists, with their lines, what it can't rewrite for you to change by
+hand: a dynamic `import()`, a `vi.mock("@monarcode/effetch")`, an import
+inside a `declare module` block, and JSDoc comments that use the old
+names. It doesn't read Markdown. Afterwards, run your formatter and type
+checker.
+
 ### Your first client
 
 Let's fetch a todo from [JSONPlaceholder](https://jsonplaceholder.typicode.com),
