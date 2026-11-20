@@ -75,6 +75,7 @@ export const getTodo = (id: number) =>
   - [Methods](#methods)
   - [Path and query parameters](#path-and-query-parameters)
   - [Sending a body](#sending-a-body)
+  - [Uploading files](#uploading-files)
   - [Reading the response](#reading-the-response)
   - [All call options](#all-call-options)
   - [When the methods aren't enough](#when-the-methods-arent-enough)
@@ -683,7 +684,154 @@ A `body` is sent according to its type:
 
 Add an `input` schema, and `body` is typed by it and encoded with it before
 it's sent as JSON. In `create`, `due` is a `Date` in your code and an ISO
-string on the wire.
+string on the wire. To send a typed body as a form instead, such as a file
+upload, see [Uploading files](#uploading-files).
+
+### Uploading files
+
+To upload files, wrap the `input` schema in `Fetch.multipart`. The body is
+typed and checked by the schema, as for JSON, then sent as
+`multipart/form-data`. Use `Fetch.UploadFile` for a file field:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+const Document = Schema.Struct({ id: Schema.String });
+
+export const uploadDocument = Fetch.endpoint("POST /documents", {
+  input: Fetch.multipart(
+    Schema.Struct({
+      file: Fetch.UploadFile,
+      kind: Schema.Literals(["PASSPORT", "DRIVERS_LICENSE"]),
+      pages: Schema.optional(Schema.Finite),
+    }),
+  ),
+  output: Document,
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+class DocumentApi extends Fetch.Endpoints<DocumentApi>()("DocumentApi", Api, {
+  upload: uploadDocument,
+}) {}
+
+// In a browser, `file` comes from an <input type="file">.
+export const upload = (file: File) =>
+  Effect.gen(function* () {
+    const documents = yield* DocumentApi;
+    return yield* documents.upload({ body: { file, kind: "PASSPORT" } });
+  });
+```
+
+`Fetch.UploadFile` takes the files each platform can send:
+
+- in browsers, Node, Bun and Deno, a `Blob` or `File`;
+- in React Native, the `{ uri, name, type }` object its pickers give, typed
+  `Fetch.NativeFile`. `uri` and `name` are required: a server only treats a
+  part as a file when it has a file name. `type` is optional, and a file
+  without one is sent as `application/octet-stream`.
+
+In React Native, send a `NativeFile`, not a `Blob`: React Native's `fetch`
+reads a form's files from disk by `uri`, and can't send a `Blob` in a form.
+
+```ts
+import type * as Fetch from "@monarcode/effetch";
+
+// From expo-image-picker, for example
+declare const asset: {
+  readonly uri: string;
+  readonly fileName?: string | null;
+  readonly mimeType?: string;
+};
+
+export const photo: Fetch.NativeFile = {
+  uri: asset.uri,
+  name: asset.fileName ?? "photo.jpg",
+  type: asset.mimeType,
+};
+```
+
+Use `Fetch.UploadFile` rather than `Schema.File`. `Schema.File` only takes a
+`File`, not the `{ uri, name, type }` objects React Native's pickers give,
+and `FetchTest` can't read it back from a form.
+
+How the schema's fields become form parts:
+
+- strings as they are; numbers, booleans and bigints as strings; a `Date` as
+  its ISO string;
+- a file as a file part;
+- a list as one part per item, under the same name;
+- `null` and `undefined` left out.
+
+A form can't hold a nested object or a list of lists, so TypeScript rejects
+most schemas that have one, and a value that has one makes the call die. To
+send one, encode it to a string in the schema, such as
+`meta: Schema.fromJsonString(Meta)`.
+
+<details>
+<summary><strong>Details: headers, errors and where it works</strong></summary>
+
+- The request sets no `Content-Type`, so the platform adds the multipart
+  boundary. A `content-type` header from the call, the endpoint or the client
+  is removed, for any `FormData` body.
+- The request sets no `Content-Type` before your plugins run. A plugin's
+  `onRequest` that sets one replaces the boundary, so leave it out for forms.
+- A body that doesn't match the schema, or a value a form can't hold, makes
+  the call die with an `Invalid request body:` defect, as for JSON (see
+  [Bugs are defects](#bugs-are-defects)). So does a `{ uri, name, type }` file
+  outside React Native, where `FormData` would send `"[object Object]"`, or
+  in a field that isn't a `Fetch.UploadFile`.
+- `Fetch.UploadFile` in an `input` schema without `Fetch.multipart` makes the
+  call die too: a file has no JSON form.
+- It works wherever `input` does: on methods such as `api.post`, on endpoints,
+  and in `api.sse` and `api.ndjson`.
+- `Fetch.multipart` returns the schema, marked. Add checks or annotations to
+  it as you like. A schema built around it, such as with `Schema.NullOr`, is
+  sent as JSON again.
+- A field's encoded value must be a string, number, boolean, bigint, `Date`,
+  file, `null` or `undefined`, or a list of them. A schema such as
+  `Schema.DateTimeUtc` or `Schema.URL`, which encodes to an object, needs a
+  string form first, such as `Schema.DateTimeUtcFromString`.
+- [`FetchTest`](#testing) reads the form back into the body a handler gets,
+  decoded with the schema, with files as `File`s. In Node, test with a
+  `Blob` or `File`, since a `{ uri, name, type }` file only works in React
+  Native.
+- A form loses some of what the schema encodes, so `FetchTest` reads it back
+  as best it can:
+  - A `null` or `undefined` field and an empty list are left out. Such a
+    field comes back missing when it's optional. When it's required, it
+    comes back as `null` if it takes `null`, then as `[]` if it's a list,
+    then as `undefined`.
+  - Every part is a string. In a field that takes `null`, the string
+    `"null"` comes back as `null`, and in
+    `Schema.Union([Schema.String, Schema.Finite])` the string `"12"` comes
+    back as the number `12`.
+
+To check a file's size, add a check to `Fetch.UploadFile`. A
+`NativeFile` has no size until it's read, so the check only looks at a
+`Blob`:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import * as Fetch from "@monarcode/effetch";
+
+export const SmallFile = Fetch.UploadFile.check(
+  Schema.makeFilter(
+    (file) => !(file instanceof Blob) || file.size < 10_000_000,
+    { expected: "a file under 10 MB" },
+  ),
+);
+```
+
+- A `FormData` you build yourself still works as a `body` without `input`.
+
+</details>
 
 ### Reading the response
 
@@ -806,7 +954,7 @@ export const page = Effect.gen(function* () {
 | `query`        | An object of query parameters. Arrays repeat the key, and `null` and `undefined` are dropped.                                                                                                                                                                                                                     |
 | `headers`      | Headers for this call. They win over the client's, and over the body's `content-type`.                                                                                                                                                                                                                            |
 | `body`         | Sent by its type: `HttpBody`, string, `ArrayBuffer` and typed arrays, `Blob`/`File`, `FormData` and `URLSearchParams` as they are, anything else as JSON.                                                                                                                                                         |
-| `input`        | A schema that `body` is encoded with before it's sent as JSON. `body` is then typed by the schema.                                                                                                                                                                                                                |
+| `input`        | A schema `body` is encoded with. `body` is then typed by it. Sent as JSON, or as `multipart/form-data` when wrapped in `Fetch.multipart` (see [Uploading files](#uploading-files)).                                                                                                                               |
 | `output`       | A schema the 2xx body is decoded with: read as JSON, or as text with `Fetch.text()` and bytes with `Fetch.bytes()`. The call then sends a matching `Accept` header (unless you set `accept`). Without it, the call succeeds with the raw `HttpClientResponse`. See [Reading the response](#reading-the-response). |
 | `responseMode` | `"decoded-and-response"` makes the call succeed with `[value, response]`, to read the status and headers too. Defaults to `"decoded"`, the value alone.                                                                                                                                                           |
 | `error`        | A schema for the body of error responses, replacing the client's `defaultError`.                                                                                                                                                                                                                                  |
@@ -2646,7 +2794,8 @@ real backend would check it:
 
 - **`params`** has the route's params, as strings.
 - **`body`** is decoded with the endpoint's `input` schema, so `body.due` is a
-  `Date` here.
+  `Date` here. A [multipart](#uploading-files) body is read back from the
+  form, with its files as `File`s.
 - **`query`** is decoded with the endpoint's
   [query schema](#typed-query-parameters), if it has one, and is the raw
   query, as strings, otherwise.
@@ -2930,6 +3079,10 @@ page's URL.
   Expo, provide the `fetch` from `expo/fetch`, which streams, as
   `FetchHttpClient.Fetch`:
   `Layer.succeed(FetchHttpClient.Fetch)(expoFetch as typeof globalThis.fetch)`.
+- To upload a file a picker gave you, send its `{ uri, name, type }` in a
+  `Fetch.UploadFile` field (see [Uploading files](#uploading-files)). React
+  Native's `FormData` reads the file from disk by `uri`, and can't send a
+  `Blob`.
 - Metro's terminal drops `console.groupCollapsed` and everything inside it,
   so `consoleLogger` doesn't collapse its groups in React Native (see the
   details under [Console logging](#console-logging)).
@@ -2955,6 +3108,7 @@ The following table maps what you know from axios and ky to Effetch:
 | `responseType: "text"` or `"arraybuffer"`                     | `output: Fetch.text()` or `Fetch.bytes()` (see [Text and bytes](#text-and-bytes))                                                         |
 | Reading the status and headers with the data                  | `responseMode: "decoded-and-response"` (see [The body and the response](#the-body-and-the-response))                                      |
 | `responseType: "stream"`, `onDownloadProgress` for events     | [`api.sse` and `api.ndjson`](#streaming-responses)                                                                                        |
+| A `FormData` body built by hand                               | `input: Fetch.multipart(schema)`, a typed body sent as a form (see [Uploading files](#uploading-files))                                   |
 | The `fetch` option or an `adapter` in tests                   | [`FetchTest`](#testing), or any `HttpClient` layer                                                                                        |
 
 ## Reference
@@ -3002,6 +3156,9 @@ editor shows. This list says where each one is covered here.
   [typed query parameters](#typed-query-parameters).
 - `EndpointUrlOptions`, `EndpointUrlArgs`:
   [building an endpoint's URL](#building-an-endpoints-url).
+- `multipart`, `UploadFile`, `UploadFileSchema`, `NativeFile`,
+  `MultipartSchema`, `MultipartFields`, `MultipartValue`:
+  [uploading files](#uploading-files).
 - `text`, `bytes`, `TextSchema`, `BytesSchema`:
   [text and bytes](#text-and-bytes).
 - `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,

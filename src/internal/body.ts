@@ -1,17 +1,20 @@
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 
 import type { AnySchema } from "../Options.js";
+import { buildForm, fileFieldsOf, isMultipart } from "./multipart.js";
+import { isBlob, isGlobalInstance } from "./platform.js";
+
+export { isBlob, isGlobalInstance } from "./platform.js";
 
 let formatIssue: SchemaIssue.Formatter<string> | undefined;
 
 const describeFailure = (error: HttpBody.HttpBodyError): string => {
 	const { reason, cause } = error;
 	if (reason._tag === "SchemaError") {
-		formatIssue ??= SchemaIssue.makeFormatterDefault();
-		return `it doesn't match the input schema: ${formatIssue(reason.issue)}`;
+		return doesNotMatch(reason.issue);
 	}
 	return `it can't be serialised as JSON: ${cause instanceof Error ? cause.message : String(cause)}`;
 };
@@ -19,31 +22,17 @@ const describeFailure = (error: HttpBody.HttpBodyError): string => {
 const invalidBody = (message: string, cause?: unknown): Effect.Effect<never> =>
 	Effect.die(new Error(`Invalid request body: ${message}`, { cause }));
 
+const doesNotMatch = (issue: SchemaIssue.Issue): string => {
+	formatIssue ??= SchemaIssue.makeFormatterDefault();
+	return `it doesn't match the input schema: ${formatIssue(issue)}`;
+};
+
 const orDieInvalid = <A, R>(
 	self: Effect.Effect<A, HttpBody.HttpBodyError, R>,
 ): Effect.Effect<A, never, R> =>
 	self.pipe(
 		Effect.catch((error) => invalidBody(describeFailure(error), error)),
 	);
-
-/**
- * True when `value` is an instance of the global constructor `name`.
- *
- * Falls back to the `Object.prototype.toString` tag so values from another
- * realm (an iframe, a `vm` context, a second undici copy) still match.
- * React Native's polyfills have no tag, but they are the global
- * constructors, so `instanceof` covers them.
- */
-export const isGlobalInstance = (value: unknown, name: string): boolean => {
-	const constructor = (globalThis as Record<string, unknown>)[name];
-	return (
-		(typeof constructor === "function" && value instanceof constructor) ||
-		Object.prototype.toString.call(value) === `[object ${name}]`
-	);
-};
-
-export const isBlob = (value: unknown): value is Blob =>
-	isGlobalInstance(value, "Blob") || isGlobalInstance(value, "File");
 
 export const toBytes = (value: ArrayBuffer | ArrayBufferView): Uint8Array =>
 	ArrayBuffer.isView(value)
@@ -91,10 +80,27 @@ const encodePlain = (body: unknown): Effect.Effect<HttpBody.HttpBody> => {
 };
 
 /**
+ * Encodes `body` with a `Fetch.multipart` input schema, then sends the
+ * fields it encodes to as `FormData` (see `buildForm`). The `FormData` body
+ * sets no `Content-Type`, so the platform adds the multipart boundary.
+ */
+const encodeMultipart = <I extends AnySchema>(
+	body: unknown,
+	input: I,
+): Effect.Effect<HttpBody.HttpBody, never, I["EncodingServices"]> =>
+	Schema.encodeUnknownEffect(input)(body).pipe(
+		Effect.catch((error) => invalidBody(doesNotMatch(error.issue), error)),
+		Effect.flatMap((encoded) => buildForm(encoded, fileFieldsOf(input))),
+		Effect.map(HttpBody.formData),
+	);
+
+/**
  * Turns the `body` option into an `HttpBody`, or `undefined` for no body.
  *
- * With an `input` schema the body is always encoded with it and sent as JSON.
- * Without one it is sent by runtime type, checked in this order:
+ * With an `input` schema the body is always encoded with it: sent as
+ * `FormData` when `Fetch.multipart` marked the schema (see `buildForm`),
+ * and as JSON otherwise. Without one it is sent by runtime type, checked
+ * in this order:
  *
  * - `HttpBody`: as-is.
  * - `string`: `text/plain`.
@@ -105,9 +111,11 @@ const encodePlain = (body: unknown): Effect.Effect<HttpBody.HttpBody> => {
  * - `URLSearchParams`: `application/x-www-form-urlencoded`.
  * - anything else: JSON.
  *
- * Dies (it does not fail) when the body doesn't match `input` or can't be
- * serialised as JSON. The defect is an `Error` whose message starts with
- * `Invalid request body:` and whose `cause` is the underlying error.
+ * Dies (it does not fail) when the body doesn't match `input`, can't be
+ * serialised as JSON, or, for multipart, encodes to something a form can't
+ * hold. The defect is an `Error` whose message starts with
+ * `Invalid request body:` and whose `cause`, when there is one, is the
+ * underlying error.
  */
 export const encodeBody = <I extends AnySchema = Schema.Unknown>(
 	body: unknown,
@@ -121,7 +129,9 @@ export const encodeBody = <I extends AnySchema = Schema.Unknown>(
 		return Effect.undefined;
 	}
 	if (input !== undefined) {
-		return orDieInvalid(HttpBody.jsonSchema(input)(body));
+		return isMultipart(input)
+			? encodeMultipart(body, input)
+			: orDieInvalid(HttpBody.jsonSchema(input)(body));
 	}
 	return encodePlain(body);
 };

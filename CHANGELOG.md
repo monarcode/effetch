@@ -4,6 +4,61 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ## 0.1.0-rc.4
 
+### Changed
+
+- A `content-type` header set by a call, an endpoint or the client is now
+  removed for a `FormData` body, so the platform's multipart boundary is
+  kept. Before, it replaced the boundary, and servers couldn't read the
+  form.
+
+### Added
+
+- `Fetch.multipart(schema)` sends a typed body as `multipart/form-data`,
+  for file uploads. Wrap an `input` schema in it: `body` is typed and
+  checked by the schema, as for JSON, then sent as `FormData`. Before, an
+  upload had no `input`, and its `FormData` was built by hand and untyped:
+
+  ```ts
+  const uploadDocument = Fetch.endpoint("POST /documents", {
+    input: Fetch.multipart(
+      Schema.Struct({ file: Fetch.UploadFile, kind: Schema.String }),
+    ),
+    output: Document,
+  });
+  // upload({ body: { file, kind: "PASSPORT" } })
+  ```
+
+  - Fields become form parts: strings as they are; numbers, booleans and
+    bigints as strings; a `Date` as its ISO string; a file as a file part;
+    a list as one part per item. `null` and `undefined` are left out.
+  - A nested object or a list of lists can't be sent: TypeScript rejects
+    most schemas that encode to one, and a value that does makes the call
+    die.
+    `Schema.fromJsonString` sends one as a string.
+  - A body that doesn't match the schema dies with the same
+    `Invalid request body:` defect as for JSON.
+  - It works wherever `input` does: methods, `client.endpoint`,
+    `Fetch.endpoint`, `api.sse` and `api.ndjson`. Endpoints without `input`,
+    and `input` schemas without it, are sent as before.
+  - `FetchTest` reads the form back into the handler's `body`, decoded with
+    the schema, with files as `File`s. A form has no `null`, `undefined` or
+    empty list, and every part is a string, so it reads some values back as
+    best it can (see "Uploading files" in the README).
+  - New types: `MultipartSchema`, `MultipartFields`, `MultipartValue`.
+
+- `Fetch.UploadFile` is a schema for a file field of a multipart body. It
+  takes a `Blob` or `File` in browsers, Node, Bun and Deno, and, in React
+  Native, the `{ uri, name, type }` object its pickers give (new type:
+  `NativeFile`), which React Native's `FormData` reads from disk by `uri`.
+  React Native can't send a `Blob` in a form. New type: `UploadFileSchema`.
+  - `uri` and `name` are required. `type` is optional, and a file without
+    one is sent as `application/octet-stream`, since Android rejects a file
+    part without a type.
+  - A `NativeFile` sent outside React Native, or in a field that isn't an
+    `UploadFile`, makes the call die, rather than send `"[object Object]"`.
+  - In an `input` schema without `Fetch.multipart`, it makes the call die:
+    a file has no JSON form.
+
 ## 0.1.0-rc.3
 
 ### Changed

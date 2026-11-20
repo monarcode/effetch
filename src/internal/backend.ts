@@ -6,6 +6,7 @@ import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type * as HttpMethod from "effect/http/HttpMethod";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 
@@ -14,8 +15,10 @@ import type { StreamFormat } from "../Streams.js";
 import { isBlob, isGlobalInstance, toBytes } from "./body.js";
 import { decodeJson } from "./json.js";
 import { messageOf } from "./message.js";
+import { formFieldsOf, isMultipart } from "./multipart.js";
 import { hasOwn } from "./object.js";
 import { bodyFormat } from "./output.js";
+import { formParts } from "./platform.js";
 import { codecOf, toUrlParams } from "./query.js";
 import { statusErrorsFor } from "./statusErrors.js";
 import { targetUrl } from "./target.js";
@@ -521,37 +524,74 @@ const readBody = (request: HttpClientRequest.HttpClientRequest): unknown => {
 // Query schemas
 // ---------------------------------------------------------------------------
 
-/** How a query schema's encoded side takes lists, by key. */
+/** How a query or form schema's encoded side takes lists, by key. */
 interface ListKeys {
 	/**
-	 * The declared keys: `list` when they take only lists, `someList` when
-	 * a union member takes only lists for them.
+	 * The declared keys: `list` when they take only lists, `listOrNull`
+	 * when they take only lists or `null`, so a value other than `"null"` is
+	 * an item, and `someList` when a union member takes only lists for them.
 	 */
 	readonly fields: ReadonlyMap<string, ListField>;
 	/** `true` when other keys take only lists (a record of lists). */
 	readonly others: boolean;
+	/** `true` when other keys take only lists or `null`. */
+	readonly othersListOrNull: boolean;
 }
 
 /** How one key takes lists (see `ListKeys`). */
 interface ListField {
 	readonly list: boolean;
+	readonly listOrNull: boolean;
 	readonly someList: boolean;
 	readonly optional: boolean;
 }
 
-const noListKeys: ListKeys = { fields: new Map(), others: false };
+const noListKeys: ListKeys = {
+	fields: new Map(),
+	others: false,
+	othersListOrNull: false,
+};
 
 /** For each query schema, how its encoded side takes lists. */
 const listKeysCache = new WeakMap<QuerySchema, ListKeys>();
 
+/** `true` for `null` as a string tree encodes it: the string `"null"`. */
+const isEncodedNull = (ast: SchemaAST.AST): boolean =>
+	SchemaAST.isNull(ast) ||
+	(SchemaAST.isLiteral(ast) && ast.literal === "null");
+
+/** The members of `ast`, with nested unions flattened: `[ast]` for one that isn't a union. */
+const unionTypes = (ast: SchemaAST.AST): ReadonlyArray<SchemaAST.AST> =>
+	SchemaAST.isUnion(ast) ? ast.types.flatMap(unionTypes) : [ast];
+
 /** `true` when `ast` only takes lists (or `undefined`), never a string. */
-const takesOnlyLists = (ast: SchemaAST.AST): boolean =>
-	SchemaAST.isArrays(ast) ||
-	(SchemaAST.isUnion(ast) &&
-		ast.types.some(SchemaAST.isArrays) &&
-		ast.types.every(
+const takesOnlyLists = (ast: SchemaAST.AST): boolean => {
+	const types = unionTypes(ast);
+	return (
+		types.some(SchemaAST.isArrays) &&
+		types.every(
 			(type) => SchemaAST.isArrays(type) || SchemaAST.isUndefined(type),
-		));
+		)
+	);
+};
+
+/**
+ * `true` when `ast` takes lists and `null`, and no other string: a value
+ * is `"null"` as sent, or else a list.
+ */
+const takesListsOrNull = (ast: SchemaAST.AST): boolean => {
+	const types = unionTypes(ast);
+	return (
+		types.some(SchemaAST.isArrays) &&
+		types.some(isEncodedNull) &&
+		types.every(
+			(type) =>
+				SchemaAST.isArrays(type) ||
+				SchemaAST.isUndefined(type) ||
+				isEncodedNull(type),
+		)
+	);
+};
 
 /**
  * How `ast` takes lists: the fields of a struct and its index signatures,
@@ -567,6 +607,7 @@ const listKeysOfAst = (ast: SchemaAST.AST): ListKeys => {
 				const list = takesOnlyLists(property.type);
 				fields.set(property.name, {
 					list,
+					listOrNull: takesListsOrNull(property.type),
 					someList: list,
 					optional: SchemaAST.isOptional(property.type),
 				});
@@ -576,6 +617,9 @@ const listKeysOfAst = (ast: SchemaAST.AST): ListKeys => {
 			fields,
 			others: ast.indexSignatures.some((signature) =>
 				takesOnlyLists(signature.type),
+			),
+			othersListOrNull: ast.indexSignatures.some((signature) =>
+				takesListsOrNull(signature.type),
 			),
 		};
 	}
@@ -590,15 +634,25 @@ const listKeysOfAst = (ast: SchemaAST.AST): ListKeys => {
 				const field = member.fields.get(name);
 				return field === undefined ? [] : [field];
 			});
+			const list = declared.every((field) => field.list);
 			fields.set(name, {
-				list: declared.every((field) => field.list),
-				someList: declared.some((field) => field.someList),
+				list,
+				listOrNull:
+					!list &&
+					declared.every((field) => field.list || field.listOrNull),
+				someList: declared.some(
+					(field) => field.someList || field.listOrNull,
+				),
 				optional:
 					declared.length < members.length ||
 					declared.some((field) => field.optional),
 			});
 		}
-		return { fields, others: members.some((member) => member.others) };
+		return {
+			fields,
+			others: members.some((member) => member.others),
+			othersListOrNull: members.some((member) => member.othersListOrNull),
+		};
 	}
 	return noListKeys;
 };
@@ -614,25 +668,37 @@ const listKeysOf = (schema: QuerySchema): ListKeys => {
 };
 
 /**
- * Decodes a request's query with the endpoint's query schema, undoing what
- * the URL loses: a list of one item is a single value there, and an empty
- * list isn't there at all. A required list that's missing is decoded as
- * empty, as the URL can't tell `[]` from `undefined`.
+ * Decodes `values`, strings and lists of them as a URL or a form gives
+ * them, with `codec`, a string-tree codec whose encoded side takes lists as
+ * `keys` says, undoing what the URL or form loses: a list of one item is a
+ * single value there, and an empty list isn't there at all. A required list
+ * that's missing is decoded as empty, as the URL can't tell `[]` from
+ * `undefined`. The `missing` keys, which the client leaves out when
+ * they're `null` or `undefined`, get their value there when they're
+ * missing.
+ *
+ * A required key that takes lists or `null` and is still missing is
+ * decoded as empty: a URL sends `null` as `"null"`.
  *
  * In a union, a key that takes a list in one member and a single value in
  * another is tried as sent, then, if that doesn't decode, with a single
  * value as a list.
  */
-const decodeQuery = (
-	schema: QuerySchema,
-	query: RuntimeQueryParams,
-	route: string,
-): Effect.Effect<unknown, never, unknown> => {
-	const { fields, others } = listKeysOf(schema);
-	const input: Record<string, unknown> = { ...query };
+const tryDecodeStringTree = (
+	codec: Schema.Top,
+	keys: ListKeys,
+	values: { readonly [name: string]: unknown },
+	missing: ReadonlyMap<string, unknown>,
+): Effect.Effect<unknown, Schema.SchemaError, unknown> => {
+	const { fields, others, othersListOrNull } = keys;
+	const input: Record<string, unknown> = { ...values };
 	for (const [name, value] of Object.entries(input)) {
 		const field = fields.get(name);
-		if (typeof value === "string" && (field?.list ?? others)) {
+		if (
+			!Array.isArray(value) &&
+			((field?.list ?? others) ||
+				((field?.listOrNull ?? othersListOrNull) && value !== "null"))
+		) {
 			input[name] = [value];
 		}
 	}
@@ -641,11 +707,21 @@ const decodeQuery = (
 			input[name] = [];
 		}
 	}
-	const decode = Schema.decodeUnknownEffect(codecOf(schema));
+	for (const [name, value] of missing) {
+		if (!hasOwn(input, name)) {
+			input[name] = value;
+		}
+	}
+	for (const [name, { listOrNull, optional }] of fields) {
+		if (listOrNull && !optional && !hasOwn(input, name)) {
+			input[name] = [];
+		}
+	}
+	const decode = Schema.decodeUnknownEffect(codec);
 	const asLists: Record<string, unknown> = { ...input };
 	let maybeLists = false;
 	for (const [name, value] of Object.entries(input)) {
-		if (typeof value === "string" && fields.get(name)?.someList === true) {
+		if (!Array.isArray(value) && fields.get(name)?.someList === true) {
 			asLists[name] = [value];
 			maybeLists = true;
 		}
@@ -656,13 +732,218 @@ const decodeQuery = (
 				? Effect.mapError(decode(asLists), () => error)
 				: Effect.fail(error),
 		),
-		Effect.catch((error) =>
-			defect(
-				`the query sent to ${route} doesn't match its query schema: ${error.message}`,
-				error,
-			),
-		),
+	) as Effect.Effect<unknown, Schema.SchemaError, unknown>;
+};
+
+/**
+ * Decodes `values` (see `tryDecodeStringTree`), and dies with
+ * `mismatch`'s message when they don't match.
+ */
+const decodeStringTree = (
+	codec: Schema.Top,
+	keys: ListKeys,
+	values: { readonly [name: string]: unknown },
+	missing: ReadonlyMap<string, unknown>,
+	mismatch: (error: Schema.SchemaError) => string,
+): Effect.Effect<unknown, never, unknown> =>
+	tryDecodeStringTree(codec, keys, values, missing).pipe(
+		Effect.catch((error) => defect(mismatch(error), error)),
 	);
+
+/**
+ * Decodes a request's query with the endpoint's query schema (see
+ * `decodeStringTree`).
+ */
+const decodeQuery = (
+	schema: QuerySchema,
+	query: RuntimeQueryParams,
+	route: string,
+): Effect.Effect<unknown, never, unknown> =>
+	decodeStringTree(
+		codecOf(schema),
+		listKeysOf(schema),
+		query,
+		noMissing,
+		(error) =>
+			`the query sent to ${route} doesn't match its query schema: ${error.message}`,
+	);
+
+const noMissing: ReadonlyMap<string, unknown> = new Map();
+
+// ---------------------------------------------------------------------------
+// Multipart bodies
+// ---------------------------------------------------------------------------
+
+/** How a multipart input schema is read back from a form. */
+interface FormReader {
+	readonly codec: Schema.Top;
+	/**
+	 * How to read the form for each set of fields the schema takes: one,
+	 * or one per member of a union. Each is tried in turn.
+	 */
+	readonly members: ReadonlyArray<FormMember>;
+}
+
+/** How to read a form for one set of fields (see `FormReader`). */
+interface FormMember {
+	readonly keys: ListKeys;
+	/**
+	 * Required fields that take `null` or `undefined`, which the client
+	 * leaves out, with the value they get when they're missing: `"null"`,
+	 * as the string tree encodes `null`, or `undefined`.
+	 */
+	readonly missing: ReadonlyMap<string, unknown>;
+}
+
+const formReaders = new WeakMap<AnySchema, FormReader>();
+
+/** `true` when `ast` takes a value `is` accepts, alone or in a union. */
+const takes = (
+	ast: SchemaAST.AST,
+	is: (ast: SchemaAST.AST) => boolean,
+): boolean =>
+	is(ast) ||
+	(SchemaAST.isUnion(ast) && ast.types.some((type) => takes(type, is)));
+
+/**
+ * The required fields of `ast`, a string tree's encoded object, that take
+ * `null` or `undefined` (see `FormMember`). One that takes both is read
+ * back as `null`.
+ */
+const missingOf = (ast: SchemaAST.AST): ReadonlyMap<string, unknown> => {
+	const missing = new Map<string, unknown>();
+	if (SchemaAST.isObjects(ast)) {
+		for (const { name, type } of ast.propertySignatures) {
+			if (typeof name !== "string" || SchemaAST.isOptional(type)) {
+				continue;
+			}
+			if (takes(type, isEncodedNull)) {
+				missing.set(name, "null");
+			} else if (takes(type, SchemaAST.isUndefined)) {
+				missing.set(name, undefined);
+			}
+		}
+	}
+	return missing;
+};
+
+/** `true` for `Schema.File`, which FetchTest can't read back from a form. */
+const isFileSchema = (ast: SchemaAST.AST): boolean => {
+	const representation: unknown = ast.annotations?.["representation"];
+	return (
+		SchemaAST.isDeclaration(ast) &&
+		Predicate.hasProperty(representation, "id") &&
+		typeof representation.id === "string" &&
+		representation.id === "effect/schema/File"
+	);
+};
+
+/**
+ * Throws when a field of `encoded`, a multipart input schema's encoded
+ * side, is a `Schema.File`: the client sends it as a file, but its string
+ * form is a JSON object, which a form part isn't.
+ */
+const checkNoFileSchema = (encoded: SchemaAST.AST, route: string): void => {
+	const { fields, others } = formFieldsOf(encoded);
+	const named = [...fields].find(([, types]) => types.some(isFileSchema));
+	if (named !== undefined || others.some(isFileSchema)) {
+		const field = named === undefined ? "a field" : `the field "${named[0]}"`;
+		throw new Error(
+			`FetchTest: ${field} of the input schema of ${route} is a \`Schema.File\`, which FetchTest can't read back from a form. Use \`Fetch.UploadFile\` for files.`,
+		);
+	}
+};
+
+/**
+ * How to read `schema`, a `Fetch.multipart` input schema, back from a form:
+ * with its string-tree codec, in which `Fetch.UploadFile` stays a file.
+ */
+const formReaderOf = (schema: AnySchema, route: string): FormReader => {
+	let reader = formReaders.get(schema);
+	if (reader === undefined) {
+		const encoded = SchemaAST.toEncoded(schema.ast);
+		checkNoFileSchema(encoded, route);
+		let codec: Schema.Top;
+		try {
+			codec = Schema.toCodecStringTree(schema);
+		} catch (error) {
+			throw new Error(
+				`FetchTest: the input schema of ${route} can't be read from a form, since one of its fields has no string form: ${messageOf(error)}. Use Fetch.UploadFile for files.`,
+				{ cause: error },
+			);
+		}
+		reader = {
+			codec,
+			members: unionTypes(SchemaAST.toEncoded(codec.ast)).map((member) => ({
+				keys: listKeysOfAst(member),
+				missing: missingOf(member),
+			})),
+		};
+		formReaders.set(schema, reader);
+	}
+	return reader;
+};
+
+/**
+ * The fields of `form`: each name's value, or its values as a list when it
+ * has more than one.
+ */
+const formFields = (form: FormData): { readonly [name: string]: unknown } => {
+	const fields = new Map<string, unknown>();
+	for (const [name, value] of formParts(form)) {
+		const previous = fields.get(name);
+		fields.set(
+			name,
+			previous === undefined
+				? value
+				: Array.isArray(previous)
+					? [...previous, value]
+					: [previous, value],
+		);
+	}
+	return Object.fromEntries(fields);
+};
+
+/**
+ * Decodes a multipart request's body with the endpoint's `Fetch.multipart`
+ * input schema: strings back to numbers, booleans and dates, single values
+ * back to lists, missing `null` fields back to `null`, and files as `File`s.
+ */
+const decodeForm = (
+	schema: AnySchema,
+	body: unknown,
+	route: string,
+): Effect.Effect<unknown, never, unknown> => {
+	if (!isGlobalInstance(body, "FormData")) {
+		return defect(
+			`the body sent to ${route} isn't a form, though its input schema is multipart`,
+		);
+	}
+	return Effect.suspend(() => {
+		const { codec, members } = formReaderOf(schema, route);
+		const values = formFields(body as FormData);
+		const [first, ...rest] = members;
+		const readAs = ({ keys, missing }: FormMember) =>
+			tryDecodeStringTree(codec, keys, values, missing);
+		// Read for each member in turn, and report the first one's mismatch.
+		let decoded =
+			first === undefined ? Effect.succeed(values) : readAs(first);
+		for (const member of rest) {
+			decoded = decoded.pipe(
+				Effect.catch((error) =>
+					Effect.mapError(readAs(member), () => error),
+				),
+			);
+		}
+		return decoded.pipe(
+			Effect.catch((error) =>
+				defect(
+					`the body sent to ${route} doesn't match its input schema: ${error.message}`,
+					error,
+				),
+			),
+		);
+	});
 };
 
 // ---------------------------------------------------------------------------
@@ -768,14 +1049,16 @@ export const makeRespond = (
 				const body =
 					input === undefined
 						? incoming.body
-						: yield* decodeJson(input)(incoming.body ?? null).pipe(
-								Effect.catch((error) =>
-									defect(
-										`the body sent to ${route} doesn't match its input schema: ${error.message}`,
-										error,
+						: isMultipart(input)
+							? yield* decodeForm(input, incoming.body, route)
+							: yield* decodeJson(input)(incoming.body ?? null).pipe(
+									Effect.catch((error) =>
+										defect(
+											`the body sent to ${route} doesn't match its input schema: ${error.message}`,
+											error,
+										),
 									),
-								),
-							);
+								);
 				const decodedQuery =
 					query === undefined
 						? incoming.query

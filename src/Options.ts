@@ -470,7 +470,10 @@ export interface BaseOptions<
  * @since 0.1.0
  */
 export interface BodyOptions<I extends AnySchema> {
-	/** Encodes `body` with this schema, then sends it as JSON. */
+	/**
+	 * Encodes `body` with this schema, then sends it as JSON, or as
+	 * `multipart/form-data` when the schema is wrapped in `Fetch.multipart`.
+	 */
 	readonly input?: I | undefined;
 	/** The request body. Typed by `input` when given. */
 	readonly body?: I["Type"] | undefined;

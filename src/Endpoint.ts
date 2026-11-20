@@ -203,7 +203,11 @@ export interface EndpointDefinition<
 	// with it `statusErrors: undefined` infers the constraint, which widens
 	// the call's errors to `unknown`.
 	readonly statusErrors?: SE;
-	/** Encodes `body` as JSON, and makes `body` required on every call. */
+	/**
+	 * Encodes `body` with this schema, and makes `body` required on every
+	 * call. Sent as JSON, or as `multipart/form-data` when the schema is
+	 * wrapped in `Fetch.multipart`.
+	 */
 	readonly input?: NoBodyRoute<R> extends true ? undefined : I;
 	/** Headers for every call, over the client's. A call's own header wins. */
 	readonly headers?: Headers.Input | undefined;
@@ -673,7 +677,11 @@ export interface UnboundDefinition<
 	// with it `statusErrors: undefined` infers the constraint, which widens
 	// the call's errors to `unknown`.
 	readonly statusErrors?: SE;
-	/** Encodes `body` as JSON, and makes `body` required on every call. */
+	/**
+	 * Encodes `body` with this schema, and makes `body` required on every
+	 * call. Sent as JSON, or as `multipart/form-data` when the schema is
+	 * wrapped in `Fetch.multipart`.
+	 */
 	readonly input?: NoBodyRoute<R> extends true ? undefined : I;
 	/** Headers for every call, over the client's. Binding and call headers win. */
 	readonly headers?: Headers.Input | undefined;

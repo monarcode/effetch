@@ -59,6 +59,14 @@ export type {
 	Success,
 } from "./Options.js";
 export { bytes, text } from "./Output.js";
+export { multipart, UploadFile } from "./Input.js";
+export type {
+	MultipartFields,
+	MultipartSchema,
+	MultipartValue,
+	NativeFile,
+	UploadFileSchema,
+} from "./Input.js";
 export { catchStatus, optional } from "./Status.js";
 export type { CaughtStatus } from "./Status.js";
 export type { BytesSchema, TextSchema } from "./Output.js";
