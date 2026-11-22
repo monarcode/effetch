@@ -9,3 +9,8 @@ coverage
 .idea
 
 .docs
+
+# The docs site's generated files
+routeTree.gen.ts
+.tanstack
+site/.impeccable

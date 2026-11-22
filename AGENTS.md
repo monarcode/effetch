@@ -30,7 +30,8 @@
    Deno.** No `node:` imports, no Node globals, **no `new URL()`** (React
    Native's URL support is incomplete) — join URLs with string operations. No
    `#private` class fields. This applies to `src/`: `bin/` is the
-   `effetch-migrate` CLI, which runs on Node only.
+   `effetch-migrate` CLI, which runs on Node only, and `site/` is the docs
+   site, which isn't shipped.
 5. **Never run `git commit`, `git push`, `git tag`**, or anything else that
    writes git history, unless the maintainer explicitly asks. Stop with the
    working tree ready, a summary of the changes, and a suggested Conventional
@@ -39,14 +40,33 @@
    `gh secret`, `gh workflow run`, `gh release`, or change repo settings. Those
    are maintainer steps.
 
+## The docs site
+
+`site/` is the documentation site: Fumadocs on TanStack Start, prerendered
+to static files. It's a package in the pnpm workspace and isn't published.
+
+- Fumadocs and TanStack Start change between versions too. Before using one
+  of their APIs, read its `.d.ts` in `site/node_modules`.
+- Pages live in `site/content/docs/(latest)/`, and each folder's `meta.json`
+  orders the sidebar. Every ` ```ts ` block in a page is an example, which
+  the docs check compiles like the README's. Fence TypeScript as `ts`: the
+  check fails on `typescript`, `tsx`, `mts` and `cts` fences, so no example
+  skips it. It compiles `ts` only, so a JSX example needs the check
+  extended first.
+- Pages are `.mdx` only: the site and the docs check read no other files.
+- `pnpm run check` doesn't build the site. After changing `site/`, run
+  `pnpm run build:site`, which prerenders the site into `site/dist/client`.
+  `pnpm --dir site run dev` serves it while you write.
+
 ## Before declaring any work done
 
 Run `pnpm run check` and make sure it passes. It runs lint, format check,
 typecheck, the docs check (every public export has a description, `@example`
-and `@since`, and every `ts` example in the JSDoc and the README compiles),
-tests (including type tests), build, publint, attw and the tarball smoke test
-(which also checks go-to-definition, hovers and completions in the installed
-package).
+and `@since`, and every `ts` example in the JSDoc, the README and the docs
+site's pages compiles), tests (including type tests), build, publint, attw
+and the tarball smoke test (which also checks go-to-definition, hovers and
+completions in the installed package). After changing `site/`, also run
+`pnpm run build:site`.
 
 Source imports use explicit `.js` extensions. Because
 `exactOptionalPropertyTypes` is on, write optional props as

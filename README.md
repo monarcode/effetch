@@ -3310,16 +3310,19 @@ pnpm install
 pnpm run check
 ```
 
-| Script                | What it does                                                                                                                            |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm run build`      | Builds `dist/` (ESM and `.d.ts`) with tsdown.                                                                                           |
-| `pnpm test`           | Runs the tests and type tests with Vitest.                                                                                              |
-| `pnpm run typecheck`  | Typechecks `src`, `test` and `examples`.                                                                                                |
-| `pnpm run lint`       | Lints with oxlint (`lint:effect` runs the Effect language service).                                                                     |
-| `pnpm run format`     | Formats with oxfmt (`format:check` only checks).                                                                                        |
-| `pnpm run check:docs` | Checks every public export has a description, `@example` and `@since`, and compiles every example in the JSDoc and this README.         |
-| `pnpm run smoke`      | Packs the package, installs it in a fresh project, typechecks and runs a consumer, and checks go-to-definition, hovers and completions. |
-| `pnpm run check`      | All of the above, plus publint and attw. CI runs it on every push to `main` and every pull request.                                     |
+| Script                | What it does                                                                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm run build`      | Builds `dist/` (ESM and `.d.ts`) with tsdown.                                                                                                          |
+| `pnpm test`           | Runs the tests and type tests with Vitest.                                                                                                             |
+| `pnpm run typecheck`  | Typechecks `src`, `test` and `examples`.                                                                                                               |
+| `pnpm run lint`       | Lints with oxlint (`lint:effect` runs the Effect language service).                                                                                    |
+| `pnpm run format`     | Formats with oxfmt (`format:check` only checks).                                                                                                       |
+| `pnpm run check:docs` | Checks every public export has a description, `@example` and `@since`, and compiles every example in the JSDoc, this README and the docs site's pages. |
+| `pnpm run smoke`      | Packs the package, installs it in a fresh project, typechecks and runs a consumer, and checks go-to-definition, hovers and completions.                |
+| `pnpm run check`      | All of the above, plus publint and attw. CI runs it on every push to `main` and every pull request.                                                    |
+| `pnpm run build:site` | Prerenders the docs site in `site/` to `site/dist/client`. `check` doesn't build the site; CI does.                                                    |
+
+To work on the docs site, run `pnpm --dir site run dev`.
 
 The pre-commit hook runs `lint` and `format:check`.
 

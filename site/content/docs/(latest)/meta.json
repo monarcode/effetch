@@ -1,0 +1,5 @@
+{
+	"title": "Latest",
+	"root": "version",
+	"pages": ["index", "installation"]
+}

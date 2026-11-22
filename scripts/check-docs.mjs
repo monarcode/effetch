@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import ts from "typescript";
@@ -10,9 +10,9 @@ const entries = [
 	"src/plugins/index.ts",
 	"src/test/index.ts",
 ].map((file) => path.join(root, file));
-const markdown = ["README.md"]
-	.map((file) => path.join(root, file))
-	.filter((file) => existsSync(file));
+// The docs site's current pages. Older release lines are snapshots of
+// released docs, so they aren't checked against the current API.
+const sitePages = path.join(root, "site", "content", "docs", "(latest)");
 
 const relative = (file) => path.relative(root, file);
 
@@ -31,6 +31,23 @@ const parsed = ts.getParsedCommandLineOfConfigFile(
 const options = { ...parsed.options, noEmit: true, plugins: [] };
 const problems = [];
 let exportCount = 0;
+
+if (!existsSync(sitePages)) {
+	problems.push(
+		`${relative(sitePages)}: missing, so its pages went unchecked`,
+	);
+}
+const markdown = [
+	...["README.md"]
+		.map((file) => path.join(root, file))
+		.filter((file) => existsSync(file)),
+	...(existsSync(sitePages)
+		? readdirSync(sitePages, { recursive: true, encoding: "utf8" })
+				.filter((file) => file.endsWith(".mdx"))
+				.sort()
+				.map((file) => path.join(sitePages, file))
+		: []),
+];
 
 const program = ts.createProgram(entries, options);
 const checker = program.getTypeChecker();
@@ -169,20 +186,75 @@ for (const entry of entries) {
 	}
 }
 
+// Other names for TypeScript in a fence. An example fenced with one would
+// go unchecked, so it fails instead: examples are fenced as ```ts.
+const otherTypeScript = new Set(["typescript", "tsx", "mts", "cts"]);
+
+// A fence: three or more backticks or tildes, then the info string, whose
+// first word is the language. It may follow a list marker, as in `1. ```ts`.
+const fenceOpen = /^(?:(?:[-*+]|\d+[.)])\s+)*(`{3,}|~{3,})(.*)$/;
+// A fence in a quote, whose lines would carry the `>` into the example.
+const quotedFence = /^(?:>\s*)+(?:`{3}|~{3})/;
+
+/**
+ * The ```ts blocks in `lines`, with or without meta after the language,
+ * such as ```ts title="api.ts". Other fences are skipped whole, so a ```ts
+ * line inside one isn't read as an example. A line that looks like a fence
+ * but can't be read as one is a problem: it could hide an example.
+ */
 const codeBlocks = (file, lines, firstLine) => {
 	const blocks = [];
 	let block;
 	lines.forEach((line, index) => {
 		const fence = line.trim();
-		if (block === undefined && fence === "```ts") {
-			block = { file, line: firstLine + index + 1, code: [] };
-		} else if (block !== undefined && fence === "```") {
-			blocks.push({ ...block, code: block.code.join("\n") });
+		const at = `${relative(file)}:${firstLine + index}`;
+		if (block === undefined) {
+			if (quotedFence.test(fence)) {
+				problems.push(`${at}: move the code block out of the quote`);
+				return;
+			}
+			const open = fenceOpen.exec(fence);
+			if (open === null) return;
+			const [, ticks, info] = open;
+			// CommonMark: a backtick fence's info string has no backticks, so
+			// this line is text with inline code, which reads as a fence here.
+			if (ticks.startsWith("`") && info.includes("`")) {
+				problems.push(`${at}: a line can't start with \`\`\` here`);
+				return;
+			}
+			const language = info.trim().split(/\s/)[0].toLowerCase();
+			if (otherTypeScript.has(language)) {
+				problems.push(`${at}: fence TypeScript examples as \`\`\`ts`);
+			} else if (/^ts[^a-z0-9]/.test(language)) {
+				// Such as ```ts{1,3}, which a highlighter may read as `ts`.
+				problems.push(`${at}: put a space between \`\`\`ts and its meta`);
+			}
+			block = {
+				at,
+				ticks,
+				example: language === "ts",
+				line: firstLine + index + 1,
+				code: [],
+			};
+		} else if (
+			fence[0] === block.ticks[0] &&
+			new RegExp(`^\\${fence[0]}{${block.ticks.length},}$`).test(fence)
+		) {
+			if (block.example) {
+				blocks.push({
+					file,
+					line: block.line,
+					code: block.code.join("\n"),
+				});
+			}
 			block = undefined;
-		} else if (block !== undefined) {
+		} else {
 			block.code.push(line);
 		}
 	});
+	if (block !== undefined) {
+		problems.push(`${block.at}: code block isn't closed`);
+	}
 	return blocks;
 };
 

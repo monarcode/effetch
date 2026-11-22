@@ -1,0 +1,124 @@
+---
+title: Introduction
+description: Typed HTTP calls for Effect, without the boilerplate.
+---
+
+Effetch is a thin layer over Effect v4's `HttpClient` for calling REST and
+JSON APIs. You give it a path and a schema. It fills in the path, builds the
+query, sends the request, checks the status and decodes the response. What
+you get back is an Effect that's typed end to end, errors included, so
+TypeScript tells you what a call returns and every way it can fail.
+
+This page explains why Effetch exists, what it does and where it fits. To
+start using it, see [Installation](/docs/installation).
+
+<Callout title="Release candidate">
+  Effetch is close to its first stable release (`0.1.0-rc.N`). The API is
+  settled: release candidates add small, opt-in features and fixes, and the
+  [changelog](https://github.com/monarcode/effetch/blob/main/CHANGELOG.md) lists
+  anything that needs a change in your code.
+</Callout>
+
+## Why Effetch
+
+Effect gives you two ways to call an HTTP API, and they sit at opposite
+ends:
+
+- **`HttpClient` is low level.** For every request you build the URL, check
+  the status and decode the body yourself.
+- **`HttpApi` is contract first.** You describe the whole API up front and
+  share it with the server, which is ideal when you own both sides.
+
+Most apps sit in between. They call a backend they don't control, such as
+their company's REST API or a third-party service, one call at a time.
+Effetch is made for that. It gives each call the types and error handling of
+a contract, without you having to write one.
+
+## At a glance
+
+Here's the same call written with `HttpClient` alone, and with Effetch:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as HttpIncomingMessage from "effect/http/HttpIncomingMessage";
+import * as Schema from "effect/Schema";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+// With HttpClient alone
+export const getTodoByHand = (id: number) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* client.get(
+      `https://api.example.com/todos/${encodeURIComponent(id)}`,
+    );
+    const ok = yield* HttpClientResponse.filterStatusOk(response);
+    return yield* HttpIncomingMessage.schemaBodyJson(Todo)(ok);
+  });
+
+// With Effetch
+export const getTodo = (id: number) =>
+  api.get("/todos/:id", { params: { id }, output: Todo });
+```
+
+Both send the same request and decode the same response. The Effetch version
+also:
+
+- checks at compile time that every call passes an `id`;
+- fails with `NetworkError`, `HttpError` or `DecodeError` rather than
+  `HttpClientError | SchemaError`, so you can handle each case on its own;
+- decodes the API's error body onto `HttpError`, with a schema you give it;
+- runs the client's plugins, such as auth, retries, timeouts and logging, on
+  every call.
+
+## What you get
+
+- **Paths that check themselves.** Write `"/users/:id"` and TypeScript asks
+  for `params: { id }`. No more, no less.
+- **Queries from plain objects.** `{ page: 2, tags: ["a", "b"] }` becomes
+  `?page=2&tags=a&tags=b`, and `undefined` values are left out.
+- **Responses you can trust.** Decode the response with a `Schema`, and the
+  API's error body with another. The schemas' types become the call's types.
+- **Errors you can catch by name.** Three tagged errors, `NetworkError`,
+  `HttpError` and `DecodeError`, plus any your plugins add, all in the type.
+  Turn statuses into your own errors, such as a `404` into `TodoNotFound`,
+  with `statusErrors`.
+- **Plugins for the repetitive parts.** Auth with token refresh, retries,
+  timeouts and logging are built in, and your own take a few lines. Any call
+  can turn a plugin off or adjust it, and TypeScript checks the names and
+  options.
+- **Endpoints.** Save a route like `"GET /users/:id"` with its schemas once,
+  then call it like a function wherever you need it. Share a module's
+  endpoints as a service with `Fetch.Endpoints`.
+- **Streams and pages.** Read Server-Sent Events and newline-delimited JSON
+  as an Effect `Stream`, and page through a list with `Fetch.paginate`.
+- **Tests without a network.** `FetchTest` makes a typed fake backend from
+  your endpoints, so tests run the real client with its plugins.
+- **Runs anywhere.** There are no platform-specific imports or builds: it
+  targets browsers, React Native, Node 20+, Bun and Deno.
+
+## Where it fits
+
+- Use **Effetch** to call REST and JSON APIs that you don't own, or don't
+  share code with.
+- Use Effect's **`HttpApi`** when you own both the server and the client,
+  and want them to share one contract.
+- Use **`HttpClient`** directly for what Effetch doesn't cover, such as
+  WebSockets or uploads with progress. Every Effetch client gives you its
+  own when you need it.
+
+If you know axios or ky, see
+[Coming from axios or ky](https://github.com/monarcode/effetch#coming-from-axios-or-ky)
+for how what you know maps to Effetch.
+
+## What's next
+
+- [Install Effetch](/docs/installation).
+- Read the [full guide](https://github.com/monarcode/effetch#getting-started)
+  in the README, from your first client to testing.
