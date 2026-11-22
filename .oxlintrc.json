@@ -9,7 +9,9 @@
 		"**/node_modules/**",
 		"**/dist/**",
 		"**/coverage/**",
-		"**/.smoke/**"
+		"**/.smoke/**",
+		"**/.tanstack/**",
+		"**/routeTree.gen.ts"
 	],
 	"rules": {
 		"no-unused-vars": "off",
@@ -70,6 +72,23 @@
 						]
 					}
 				]
+			}
+		},
+		{
+			"files": ["site/**"],
+			"plugins": [
+				"import",
+				"promise",
+				"typescript",
+				"unicorn",
+				"react",
+				"jsx-a11y"
+			],
+			"env": { "browser": true, "node": true },
+			"rules": {
+				"react/exhaustive-deps": "warn",
+				"jsx-a11y/alt-text": "error",
+				"no-restricted-imports": "off"
 			}
 		}
 	]

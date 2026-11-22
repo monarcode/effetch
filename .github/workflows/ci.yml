@@ -63,7 +63,34 @@ jobs:
            run: pnpm install --frozen-lockfile
 
          - name: Install oldest supported effect
-           run: pnpm add --save-dev --save-exact effect@4.0.0 @effect/vitest@4.0.0
+           run: pnpm add --workspace-root --save-dev --save-exact effect@4.0.0 @effect/vitest@4.0.0
 
          - name: Build and test
            run: pnpm run typecheck && pnpm test && pnpm run build
+
+   site:
+      name: build docs site
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+      steps:
+         - name: Check out repository
+           uses: actions/checkout@v7
+
+         - name: Set up pnpm
+           uses: pnpm/action-setup@v6
+           with:
+              version: 10.12.1
+
+         - name: Set up Node.js
+           uses: actions/setup-node@v7
+           with:
+              node-version: 24
+              cache: pnpm
+
+         - name: Install dependencies
+           run: pnpm install --frozen-lockfile
+
+         # Prerenders every page, so it catches MDX syntax errors and broken
+         # pages, which `check` doesn't build.
+         - name: Build the docs site
+           run: pnpm run build:site

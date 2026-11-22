@@ -13,11 +13,18 @@
 	"insertFinalNewline": true,
 	"overrides": [
 		{
-			"files": ["*.md"],
+			"files": ["*.md", "*.mdx"],
 			"options": { "useTabs": false, "tabWidth": 2 }
 		}
 	],
-	"ignorePatterns": ["node_modules", "dist", "coverage", ".smoke"],
+	"ignorePatterns": [
+		"node_modules",
+		"dist",
+		"coverage",
+		".smoke",
+		".tanstack",
+		"routeTree.gen.ts"
+	],
 	"sortImports": {
 		"customGroups": [
 			{

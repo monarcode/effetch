@@ -70,6 +70,7 @@
 		"format": "oxfmt --write .",
 		"format:check": "oxfmt --check .",
 		"build": "tsdown",
+		"build:site": "pnpm --dir site run build",
 		"dev": "tsdown --watch",
 		"typecheck": "tsc --noEmit",
 		"check:docs": "node scripts/check-docs.mjs",

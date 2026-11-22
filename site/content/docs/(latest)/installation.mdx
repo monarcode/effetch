@@ -1,0 +1,65 @@
+---
+title: Installation
+description: Add Effetch to a project and import its entry points.
+---
+
+This page shows how to install Effetch and import it. After it, you can make
+your first call.
+
+## Before you begin
+
+You need:
+
+- `effect` 4.x, which is a peer dependency;
+- an ESM project, since the package is ESM only;
+- TypeScript 5.4 or later. With `skipLibCheck: false`, Effect's own
+  declarations need TypeScript 5.7 or later.
+
+## Install the package
+
+To install Effetch and Effect, run the following command:
+
+```bash
+pnpm add @monarcode/effetch effect
+```
+
+In an Expo project, run the following commands instead:
+
+```bash
+npx expo install effect
+pnpm add @monarcode/effetch
+```
+
+## Import Effetch
+
+Everything in the main entry is under one export, `Fetch`. Plugins and the
+test backend have their own entries:
+
+```ts
+import { Fetch } from "@monarcode/effetch";
+import { bearer, retry } from "@monarcode/effetch/plugins";
+import { FetchTest } from "@monarcode/effetch/test";
+
+export const plugins = [bearer({ token: "token" }), retry()];
+export const getTodo = Fetch.endpoint("GET /todos/:id");
+export const Backend = FetchTest.layer([]);
+```
+
+Your editor offers to add the `Fetch` import as you type it. For types
+alone, use `import type { Fetch } from "@monarcode/effetch"`.
+
+The package also has `@monarcode/effetch/Fetch` and
+`@monarcode/effetch/test/FetchTest`: the same exports, without the
+namespace, as `effect/Effect` is to `import { Effect } from "effect"`.
+TypeScript uses them to name Effetch's types in the `.d.ts` files it emits
+for your code. In your own code, import from the main entry.
+
+If you're upgrading a project from 0.1.0-rc.3, see
+[Upgrading from 0.1.0-rc.3](https://github.com/monarcode/effetch#upgrading-from-010-rc3)
+to move its imports to `Fetch`.
+
+## What's next
+
+- Make your first call: see
+  [Your first client](https://github.com/monarcode/effetch#your-first-client)
+  in the README.
