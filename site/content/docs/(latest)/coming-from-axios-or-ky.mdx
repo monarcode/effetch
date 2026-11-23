@@ -2,3 +2,26 @@
 title: Coming from axios or ky
 description: Map what you know from axios or ky to Effetch.
 ---
+
+If you've used axios or ky, most of what you know has a counterpart in
+Effetch. The following table maps what you know from axios and ky to Effetch:
+
+| axios or ky                                                   | Effetch                                                                                                                                                              |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `axios.create`, `ky.create`                                   | [`Fetch.Service`](/docs/clients), or [`Fetch.make`](/docs/clients/service-or-make) in a script                                                                       |
+| `ky.extend`, a client per API version                         | A second `Fetch.Service` from `{ ...Api.config, baseUrl }` (see [Derive a client](/docs/clients/derived))                                                            |
+| `baseURL`, `prefixUrl`                                        | `baseUrl`, a string or an Effect such as a `Config`                                                                                                                  |
+| `params`, `searchParams`                                      | `query`, a plain object, or typed by an endpoint's [`query` schema](/docs/endpoints/typed-query)                                                                     |
+| Interceptors, `hooks.beforeRequest` and `hooks.afterResponse` | A [plugin](/docs/plugins/writing)'s `onRequest` and `onResponse`                                                                                                     |
+| `hooks.beforeError`                                           | `Effect.mapError` on the call. A plugin's `onError` sees errors but can't change them                                                                                |
+| `retry`, `timeout`                                            | The [`retry` and `timeout` plugins](/docs/plugins), which a call can turn off or adjust                                                                              |
+| ky's `totalTimeout`                                           | `retry({ budget })`, or `Effect.timeout` around a call                                                                                                               |
+| `AbortController`, `signal`                                   | Interruption: `Fiber.interrupt`, `Effect.race`, `Effect.timeout`. An interrupted call aborts its request                                                             |
+| `validateStatus`, `throwHttpErrors: false`                    | `Effect.catchTag("HttpError", …)`, [`statusErrors`](/docs/errors/status-errors), or [`Fetch.catchStatus`](/docs/errors/catching#catch-a-status) and `Fetch.optional` |
+| `error.response.data`, ky's `HTTPError` body                  | `HttpError.body`, decoded with `defaultError` or the call's `error` schema                                                                                           |
+| `ky.get(url).json<T>()`, `axios.get<T>(url)`                  | `api.get(path, { output: Schema })`: the body is checked, not cast                                                                                                   |
+| `responseType: "text"` or `"arraybuffer"`                     | `output: Fetch.text()` or `Fetch.bytes()` (see [Read text or bytes](/docs/calls/responses#read-text-or-bytes))                                                       |
+| Reading the status and headers with the data                  | `responseMode: "decoded-and-response"` (see [Read the body and the response](/docs/calls/responses#read-the-body-and-the-response))                                  |
+| `responseType: "stream"`, `onDownloadProgress` for events     | [`api.sse` and `api.ndjson`](/docs/streaming)                                                                                                                        |
+| A `FormData` body built by hand                               | `input: Fetch.multipart(schema)`, a typed body sent as a form (see [Upload files](/docs/calls/uploads))                                                              |
+| The `fetch` option or an `adapter` in tests                   | [`FetchTest`](/docs/testing), or any `HttpClient` layer                                                                                                              |

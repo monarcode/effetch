@@ -1,4 +1,80 @@
 ---
 title: Typed query parameters
-description: Give an endpoint a schema for its query.
+description: Give an endpoint a schema that types each call's query and encodes it before it's sent.
 ---
+
+This page shows you how to give an endpoint a `query` schema, how each field
+is encoded into the URL, and what happens when a query doesn't match.
+
+## Add a query schema
+
+Give an endpoint a `query` schema, usually a `Schema.Struct`, and each call's
+`query` is typed by it and encoded with it before it's sent. A `Schema.Class`
+works too, called with an instance:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+const TodoFilters = Schema.Struct({
+  done: Schema.optional(Schema.Boolean),
+  since: Schema.optional(Schema.Date),
+  pageSize: Schema.optional(Schema.Finite),
+}).pipe(Schema.encodeKeys({ pageSize: "page_size" }));
+
+export const listTodos = Fetch.endpoint("GET /todos", {
+  query: TodoFilters,
+  output: Schema.Array(Todo),
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+export const program = Effect.gen(function* () {
+  const api = yield* Api;
+  const list = api.bind(listTodos);
+  // GET /todos?done=false&since=2026-01-01T00%3A00%3A00.000Z&page_size=20
+  return yield* list({
+    query: { done: false, since: new Date("2026-01-01"), pageSize: 20 },
+  });
+});
+```
+
+The schema is the endpoint's `query` property. `client.bind`,
+`client.bindAll` and `Fetch.Endpoints` keep it, and `api.endpoint` takes one
+too.
+
+## How each field is encoded
+
+The schema encodes the query as follows:
+
+- Each field is encoded to a string: a `Date` to its ISO string, a boolean to
+  `"true"` or `"false"`, a number to its digits. An array repeats the key.
+- Rename keys with `Schema.encodeKeys`, as in the example.
+- A field you leave out isn't sent, but a `null` is sent as the string
+  `"null"`, so prefer optional fields to nullable ones.
+- A `Schema.Redacted` field is sent as its value and, with Effect 4.1 or
+  later, stays redacted in Effect's logs and traces.
+
+## Queries that don't match
+
+A query or a schema that can't be encoded fails early:
+
+- A query that doesn't match the schema, or a field that encodes to an
+  object, is a bug, not an error to handle: the call dies before anything is
+  sent. See [Logging and defects](/docs/errors/logging-and-defects).
+- A schema with a field that has no string encoding, such as
+  `Schema.instanceOf(Uint8Array)`, throws when the endpoint is defined.
+
+## What's next
+
+- [Build an endpoint's URL](/docs/endpoints/urls): get the URL, query
+  included, without sending a request.
+- [Call an endpoint](/docs/endpoints/calling): see everything a call takes.
+- [Path and query parameters](/docs/calls/parameters): send a query from a
+  method call.

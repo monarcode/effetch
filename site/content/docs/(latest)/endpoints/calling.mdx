@@ -1,4 +1,134 @@
 ---
 title: Call an endpoint
-description: Bind endpoints to a client and call them.
+description: Pass what changes on each call, and bind endpoints to a client with bind, bindAll or api.endpoint.
 ---
+
+This page shows you what to pass when you call an endpoint, and how to bind
+endpoints to a client yourself when `Fetch.Endpoints` doesn't fit.
+
+## Pass what changes on each call
+
+What's fixed goes in the definition, and what changes goes in each call:
+
+| Defined once, on the endpoint                       | Passed with each call     |
+| --------------------------------------------------- | ------------------------- |
+| `output`, `error`, `input`, `query`, `statusErrors` | `params`, `query`, `body` |
+| `headers`, `responseMode`, `stream`                 | `headers`, `responseMode` |
+| `plugins` (when binding)                            | `plugins`                 |
+
+A call follows these rules:
+
+- `users.get({ params: { id } })` sends exactly what
+  `api.get("/users/:id", { output: User, params: { id } })` does, and
+  returns the same Effect.
+- `params` are required when the route's path has any, as with the methods.
+  An endpoint that needs nothing more is called with no arguments:
+  `users.list()`.
+- With an `input` schema, `body` is required and typed by it.
+- `GET`, `HEAD`, `OPTIONS` and `TRACE` endpoints take no `body` and no
+  `input`, and TypeScript rejects them.
+- With a `query` schema, `query` is typed by it, and required when the
+  schema has required fields. See
+  [Typed query parameters](/docs/endpoints/typed-query).
+
+## Bind endpoints with bind and bindAll
+
+`Fetch.Endpoints` is built on two client methods, which you can also use
+directly, such as inside your own service's layer:
+
+- **`api.bind(definition, options?)`** binds one definition. `options` are
+  the binding's `headers` and `plugins` overrides.
+- **`api.bindAll(record)`** binds a record of definitions, each under its own
+  name. An entry can also be a `[definition, options]` pair, with the options
+  `api.bind` takes. Each endpoint has the type `api.bind` gives it.
+
+The following example binds the same two endpoints both ways:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const Session = Schema.Struct({ token: Schema.String });
+
+const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+const login = Fetch.endpoint("POST /auth/login", { output: Session });
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [bearer({ token: "token" })],
+}) {}
+
+export const endpoints = Effect.gen(function* () {
+  const api = yield* Api;
+  return {
+    getUser: api.bind(getUser),
+    login: api.bind(login, { plugins: { bearer: false } }),
+  };
+});
+
+export const sameEndpoints = Effect.gen(function* () {
+  const api = yield* Api;
+  return api.bindAll({
+    getUser,
+    login: [login, { plugins: { bearer: false } }],
+  });
+});
+```
+
+## Define and bind in one step
+
+**`api.endpoint(route, definition)`** defines and binds in one step, where
+you already have the client. Its definition can take `plugins` directly,
+since it knows the client's plugins:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+const Session = Schema.Struct({ token: Schema.String });
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [bearer({ token: "token" })],
+}) {}
+
+export const endpoints = Effect.gen(function* () {
+  const api = yield* Api;
+  return {
+    login: api.endpoint("POST /auth/login", {
+      output: Session,
+      plugins: { bearer: false },
+    }),
+  };
+});
+```
+
+## Choose between Fetch.endpoint and api.endpoint
+
+`api.bind(Fetch.endpoint(route, definition))` is the endpoint
+`api.endpoint(route, definition)` makes, with the same type and the same
+calls. Prefer `Fetch.endpoint` when:
+
+- endpoints should be listed next to their schemas, in a file with no client
+  (see
+  [A feature-sliced app](/docs/structuring-an-app#a-feature-sliced-app));
+- one definition serves several clients, such as staging and production;
+- a tool works from your endpoints, and needs their routes and schemas
+  without a client, as `FetchTest` does (see
+  [Test with a fake backend](/docs/testing)).
+
+## What's next
+
+- [Typed query parameters](/docs/endpoints/typed-query): give an endpoint a
+  schema for its query.
+- [Build an endpoint's URL](/docs/endpoints/urls): get the URL a call would
+  go to, without sending it.
+- [Endpoints or methods](/docs/endpoints): decide which calls deserve an
+  endpoint.

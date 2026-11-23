@@ -2,3 +2,32 @@
 title: Logging and defects
 description: Learn which errors are safe to log, and why bugs are defects rather than errors.
 ---
+
+This page explains what Effetch keeps out of its errors so you can log them,
+and which mistakes make a call die as a defect instead of failing with a
+typed error.
+
+## Errors that are safe to log
+
+Errors are made to be logged and reported:
+
+- `url` never includes the query string, so tokens in queries stay out of
+  logs.
+- `HttpError.headers` are Effect `Headers`: `authorization`, `set-cookie` and
+  other sensitive headers print as `<redacted>`.
+
+## Bugs as defects
+
+Some mistakes are bugs in the calling code, not failures to recover from at
+runtime. Those make the Effect die, as a defect, rather than fail with a typed
+error:
+
+- a missing path parameter;
+- a body that can't be encoded;
+- a query that doesn't match an endpoint's `query` schema;
+- a body on a `GET` or `HEAD` request;
+- a `baseUrl` with a query string;
+- two plugins with the same name;
+- a relative URL without a `baseUrl`, outside browsers.
+
+For the errors a call can fail with, see [Call errors](/docs/errors).

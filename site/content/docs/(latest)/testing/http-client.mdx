@@ -1,4 +1,64 @@
 ---
 title: Use a hand-written HttpClient
-description: Fake the transport with your own HttpClient.
+description: Fake the transport with your own HttpClient for what a fake backend doesn't do.
 ---
+
+This page shows how to provide an `HttpClient` of your own in tests, for what
+a [fake backend](/docs/testing) doesn't do, such as a network failure or a
+slow response.
+
+## Provide your own HttpClient
+
+Effetch sends every request through the `HttpClient` layer you provide, so a
+test can provide one that answers however you need. The following client
+records each request and answers with a todo:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.test",
+}) {}
+
+const sent: Array<string> = [];
+
+const TestHttpClient = Layer.succeed(
+  HttpClient.HttpClient,
+  HttpClient.make((request, url) => {
+    sent.push(`${request.method} ${url.href}`);
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        Response.json({ id: 1, title: "Write docs" }),
+      ),
+    );
+  }),
+);
+
+const program = Effect.gen(function* () {
+  const api = yield* Api;
+  return yield* api.get("/todos/:id", { params: { id: 1 }, output: Todo });
+});
+
+const todo = await Effect.runPromise(
+  program.pipe(Effect.provide(Api.layer.pipe(Layer.provide(TestHttpClient)))),
+);
+// todo: { id: 1, title: "Write docs" }; sent: ["GET https://api.test/todos/1"]
+```
+
+## What's next
+
+- [Test with a fake backend](/docs/testing): answer requests from your
+  endpoints, with typed handlers.
+- [Test stream endpoints](/docs/testing/streams): fake a stream whose whole
+  body arrives at once.
+- [Platform notes](/docs/platforms): the `HttpClient` setup each platform
+  needs.

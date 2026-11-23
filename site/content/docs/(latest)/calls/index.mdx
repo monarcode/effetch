@@ -2,3 +2,22 @@
 title: Methods
 description: Call a route with get, head, options, post, put, patch or del.
 ---
+
+With a client in hand, every call is one method: you pass the path and an
+object of options, and get an Effect back.
+
+## Pick a method
+
+A client has a method for each HTTP method:
+
+- `get`, `head` and `options` send no body.
+- `post`, `put`, `patch` and `del` can send one. It's `del` because `delete`
+  is a reserved word.
+
+## What's next
+
+- [Path and query parameters](/docs/calls/parameters): fill in the path and
+  build a query.
+- [Send a body](/docs/calls/body): send JSON, forms, text or bytes.
+- [Read the response](/docs/calls/responses): decode what comes back.
+- [Call options](/docs/calls/options): look up every option a call takes.

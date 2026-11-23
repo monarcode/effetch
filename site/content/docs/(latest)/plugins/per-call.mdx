@@ -2,3 +2,55 @@
 title: Change plugins for one call
 description: Turn off or adjust a client's plugin for one call.
 ---
+
+A client's plugins run on every call, but some calls need something
+different: a login that sends no token, or a slow export that needs more
+time. This page shows how to change a client's plugins for one call.
+
+## Skip or adjust a plugin
+
+Any call can skip a plugin with `false`, and plugins with options take part of
+them. TypeScript checks the plugin names and the option types:
+
+```ts
+import * as Effect from "effect/Effect";
+
+import { Fetch } from "@monarcode/effetch";
+import { bearer, retry, timeout } from "@monarcode/effetch/plugins";
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [
+    retry(),
+    timeout({ duration: "10 seconds" }),
+    bearer({ token: "token" }),
+  ],
+}) {}
+
+export const program = Effect.gen(function* () {
+  const api = yield* Api;
+
+  // Logging in sends no token.
+  yield* api.post("/auth/login", {
+    body: { user: "ada" },
+    plugins: { bearer: false },
+  });
+
+  // A slow export gets more time, and isn't retried.
+  yield* api.get("/reports/export", {
+    plugins: { timeout: { duration: "2 minutes" }, retry: { times: 0 } },
+  });
+});
+```
+
+To see what each built-in plugin accepts per call, see the **Per call** column
+in [Built-in plugins](/docs/plugins).
+
+## What's next
+
+- [Write a plugin](/docs/plugins/writing): write your own plugins, with
+  options that calls can override.
+- [Retry-After and a time limit](/docs/plugins/retry-after): override the
+  whole-call budget for one call.
+- [Log to the console](/docs/plugins/console-logging): change the console
+  output for one call.

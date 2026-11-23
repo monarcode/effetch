@@ -2,3 +2,38 @@
 title: Call errors
 description: Learn what a call can fail with and how each error is typed.
 ---
+
+Every call's type lists the ways it can fail, so TypeScript knows which
+errors you've handled and which are left. This page describes those errors.
+The other pages in this section show how to catch them and how to turn the
+API's error responses into errors of your own.
+
+## What can go wrong
+
+A call can fail in three ways, each with its own tagged error. Plugins can add
+their own, such as `timeout`'s `TimeoutError`, and
+[`statusErrors`](/docs/errors/status-errors) can turn an `HttpError` into one
+of your own.
+
+The following table lists each error, when it happens and the fields it
+carries:
+
+| Error                   | When                                                                               | Fields                                               |
+| ----------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `NetworkError`          | No response: offline, DNS failure, connection refused, CORS rejection.             | `method`, `url`, `cause`                             |
+| `HttpError`             | A response outside 200–299 (3xx included).                                         | `method`, `url`, `status`, `headers`, `text`, `body` |
+| `DecodeError`           | A 2xx body that isn't JSON or doesn't match `output`. Only on calls with `output`. | `method`, `url`, `status`, `issue`, `message`        |
+| `TimeoutError` (plugin) | The `timeout` plugin's limit passed before the response arrived.                   | `method`, `url`, `duration`                          |
+
+## Error pages
+
+The rest of this section covers each part of handling errors:
+
+- [Catch errors](/docs/errors/catching): handle an error by its tag, or one
+  status.
+- [Typed error bodies](/docs/errors/error-bodies): decode the API's error
+  body with a schema.
+- [Errors by status](/docs/errors/status-errors): turn an error status into
+  your own domain error.
+- [Logging and defects](/docs/errors/logging-and-defects): what errors keep
+  out of logs, and which mistakes are defects rather than errors.

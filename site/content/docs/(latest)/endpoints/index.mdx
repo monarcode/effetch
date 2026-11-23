@@ -2,3 +2,86 @@
 title: Endpoints or methods
 description: Learn what endpoints add over methods, and when to use each.
 ---
+
+This page explains what an endpoint is, what it adds over the methods, and
+how to choose between them for each call.
+
+The methods spell out a call's path and schemas where the call is made.
+That's fine for a call made once. Once a call is made from several places,
+you start repeating its path, its schemas and its rules, and a mistake in one
+copy still compiles. An endpoint saves them once, and gives you a function to
+call.
+
+## What endpoints add
+
+An HTTP call mixes two kinds of information:
+
+| Fixed by the API                                     | Different on every call             |
+| ---------------------------------------------------- | ----------------------------------- |
+| the route; the response, error and body schemas      | path params, query values, the body |
+| rules for that route, such as "login sends no token" | a one-off header or plugin override |
+
+With the methods, you write both at every call site. Three calls to
+`GET /users/:id` repeat the path and the `User` schema three times, and a
+mistake in one of them, such as the wrong schema or a forgotten
+`bearer: false`, still compiles. An endpoint takes the first column once, when
+it's defined, and only the second column when it's called. That gives you:
+
+- **One place per route.** A path or a schema changes in one line, and the
+  service that holds your endpoints lists the API you use.
+- **Stricter types than a method can have.** A method only learns its HTTP
+  method and its `input` at the call, so it has to accept both ways. An
+  endpoint knows them up front: `body` is required when there's an `input`
+  (it's optional with `api.post`), a `GET` endpoint rejects a `body` at
+  compile time (`api.request("GET", …)` only dies at runtime), and the route
+  is checked as you type.
+- **Defaults that can't be forgotten.** An endpoint's headers and plugin
+  overrides apply to every call.
+- **A name instead of a URL.** Call sites read `users.get(…)`, and `route`,
+  `method` and `path` are there for query keys and log labels.
+
+Endpoints add no new behavior: a call goes through the same plugins,
+decoding and errors as the method it stands for, so everything in
+[Declare a client](/docs/clients), [Methods](/docs/calls),
+[Call errors](/docs/errors) and [Built-in plugins](/docs/plugins) applies to
+both. An endpoint is a saved
+call, not a contract shared with a server. For that, use Effect's `HttpApi`.
+
+## When to use an endpoint
+
+Use an endpoint when a call:
+
+- is made from more than one place;
+- has rules every call must follow, such as an auth exception or a content
+  type;
+- sends a body with an `input` schema;
+- belongs to a backend whose API you want listed in one place.
+
+## When to use a method
+
+Use a method for one-off calls, and for calls whose method or path is only
+known at runtime. Mixing them is normal: keep the client next to its
+endpoints, for the calls that aren't worth one.
+
+## Patterns to avoid
+
+Avoid the following:
+
+- **`api.endpoint(…)(…)` at a call site.** That's a method call written
+  twice: use the method.
+- **Making or binding endpoints in code that runs on every request.** Do it
+  once, when the layer that holds them is built, as `Fetch.Endpoints` does.
+- **Passing a bound endpoint's plugin overrides at every call.** A definition
+  can't hold them, since it doesn't know the client's plugins: give them once,
+  when binding, as in `api.bind(login, { plugins: { bearer: false } })`.
+- **Spreading several groups of endpoints into one object.** When two use the
+  same name, the later one silently wins. Nest them instead:
+  `{ users, todos }`, or give each group its own `Fetch.Endpoints` class.
+
+## What's next
+
+- [Define endpoints](/docs/endpoints/defining): save a route with its
+  schemas and defaults.
+- [Share endpoints as a service](/docs/endpoints/services): bind your
+  endpoints to a client once, in a layer.
+- [Call an endpoint](/docs/endpoints/calling): see what each call takes.

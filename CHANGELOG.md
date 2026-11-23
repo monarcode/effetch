@@ -2,6 +2,22 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## Unreleased
+
+### Added
+
+- Documentation site at [effetch.pages.dev/docs](https://effetch.pages.dev/docs),
+  with a page for each guide that was in the README, and search. The
+  package's `homepage` points to it.
+
+### Changed
+
+- The README is now an overview: what Effetch is, how to install it, a
+  quick start and links to the site's guides. The sections that earlier
+  entries name, such as "Upgrading from 0.1.0-rc.3" and "Uploading files",
+  are now [Upgrade from 0.1.0-rc.3](https://effetch.pages.dev/docs/upgrading)
+  and [Upload files](https://effetch.pages.dev/docs/calls/uploads).
+
 ## 0.1.0-rc.4
 
 ### Changed

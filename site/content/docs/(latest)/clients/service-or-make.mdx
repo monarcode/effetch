@@ -2,3 +2,81 @@
 title: Fetch.Service or Fetch.make
 description: Choose between declaring a client as a service and building one with Fetch.make.
 ---
+
+This page explains how `Fetch.Service` and `Fetch.make` relate, and helps
+you choose between them.
+
+## How they relate
+
+`Fetch.make` is the function underneath `Fetch.Service`: it takes the same
+config and returns an Effect that builds the client. Both give you the same
+client, with the same calls and the same types.
+
+## Which one to use
+
+Use the class by default, and reach for `Fetch.make` when the class doesn't
+fit:
+
+| Situation                                                                          | Use             |
+| ---------------------------------------------------------------------------------- | --------------- |
+| An app, with the client shared as a service                                        | `Fetch.Service` |
+| A config known when the module loads (a `baseUrl` Effect such as `Config` is fine) | `Fetch.Service` |
+| Endpoints shared as a service with [`Fetch.Endpoints`](/docs/endpoints/services)   | `Fetch.Service` |
+| A script, a one-off program, or a quick test                                       | `Fetch.make`    |
+| A config that comes from an Effect, such as headers read from a service            | `Fetch.make`    |
+| A client made inside your own service's layer, or one per tenant at runtime        | `Fetch.make`    |
+
+## Fetch.make in a script
+
+In a script, use `Fetch.make` inline:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+
+import { Fetch } from "@monarcode/effetch";
+
+const program = Effect.gen(function* () {
+  const api = yield* Fetch.make({ baseUrl: "https://api.example.com" });
+  return yield* api.get("/health");
+});
+
+await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)));
+```
+
+## Fetch.make with a config from an Effect
+
+When the config itself comes from an Effect, call `Fetch.make` inside that
+Effect and declare the service by hand:
+
+```ts
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+import { Fetch } from "@monarcode/effetch";
+
+class Tenant extends Context.Service<Tenant, { readonly id: string }>()(
+  "Tenant",
+) {}
+
+const makeApi = Effect.gen(function* () {
+  const tenant = yield* Tenant;
+  return yield* Fetch.make({
+    baseUrl: "https://api.example.com",
+    headers: { "x-tenant": tenant.id },
+  });
+});
+
+export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
+  "Api",
+) {}
+
+export const ApiLive = Layer.effect(Api)(makeApi);
+```
+
+## Related pages
+
+- [Declare a client](/docs/clients): declare a client with `Fetch.Service`.
+- [Client configuration](/docs/clients/configuration): the options both
+  take.

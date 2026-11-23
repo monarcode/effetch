@@ -1,4 +1,107 @@
 ---
 title: Share endpoints as a service
-description: Expose a module's endpoints as a service.
+description: Bind a record of endpoint definitions to a client once, and share them as an Effect service.
 ---
+
+This page shows you how to bind your endpoint definitions to a client with
+`Fetch.Endpoints`, so code anywhere in your app can call them through one
+service.
+
+## Declare the service
+
+`Fetch.Endpoints` binds a record of definitions to a client and shares them as
+a service, the way `Fetch.Service` does for the client. It takes the
+service's id, the client's service and the record:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+declare const readToken: () => Promise<string | null>;
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const NewUser = Schema.Struct({ name: Schema.String });
+const Credentials = Schema.Struct({
+  user: Schema.String,
+  password: Schema.String,
+});
+const Session = Schema.Struct({ token: Schema.String });
+
+const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+const listUsers = Fetch.endpoint("GET /users", { output: Schema.Array(User) });
+const createUser = Fetch.endpoint("POST /users", {
+  input: NewUser,
+  output: User,
+});
+const login = Fetch.endpoint("POST /auth/login", {
+  input: Credentials,
+  output: Session,
+});
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [bearer({ token: () => readToken() })],
+}) {}
+
+export class UserApi extends Fetch.Endpoints<UserApi>()("UserApi", Api, {
+  get: getUser,
+  list: listUsers,
+  create: createUser,
+  // A [definition, options] pair: logging in sends no token.
+  login: [login, { plugins: { bearer: false } }],
+}) {}
+
+export const program = Effect.gen(function* () {
+  const users = yield* UserApi;
+  const ada = yield* users.create({ body: { name: "Ada" } });
+  const page = yield* users.list({ query: { page: 2 } });
+  const user = yield* users.get({ params: { id: ada.id } });
+  return { page, user };
+});
+
+export const AppLayer = UserApi.layer.pipe(
+  Layer.provideMerge(Api.layer),
+  Layer.provide(FetchHttpClient.layer),
+);
+```
+
+## What the class gives you
+
+Like `Fetch.Service`, the class gives you three things:
+
+- **`UserApi` is the service.** `yield* UserApi` gives the endpoints, each
+  typed with the client's plugins, `defaultError` and `statusErrors`.
+- **`UserApi.layer` binds them** to the client once, when it's built. It
+  needs the client's service, here `Api`. The client can also be a service
+  you wrote by hand.
+- **`UserApi.definitions` is the record you passed**, frozen. You can read
+  it when the module loads.
+
+`Layer.provideMerge` keeps `Api` in the layer's output, so code can still
+`yield* Api` for one-off calls.
+
+## Give options that depend on the client
+
+A definition doesn't know its client, so the following options depend on
+the binding:
+
+- **Plugin overrides are given when binding,** as in the `login` pair in the
+  example, where they're checked against the client's plugins. A definition
+  takes no `plugins`.
+- **A definition without an `error` schema** uses the `defaultError` of the
+  client it's bound to.
+- **Headers can be given in both.** The binding's win over the definition's.
+
+## What's next
+
+- [Call an endpoint](/docs/endpoints/calling): see what each call takes,
+  and how to bind endpoints without a service.
+- [Structure an app](/docs/structuring-an-app): decide where clients and
+  endpoints live as your app grows.
+- [Test with a fake backend](/docs/testing): serve your endpoints from a
+  fake backend in tests.

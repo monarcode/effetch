@@ -2,3 +2,44 @@
 title: Derive a client
 description: Make a client from another, with a different base URL or one more header.
 ---
+
+This page shows how to make a second client from a first one, for the same
+client with a different base URL, such as a second API version, or with one
+more header.
+
+## Spread the first client's config
+
+Spread the first class's `config` into a second class. The second class
+keeps the plugins, `defaultError` and `statusErrors`, so its client has the
+same type:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { retry } from "@monarcode/effetch/plugins";
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com/v1",
+  defaultError: Schema.Struct({ code: Schema.String }),
+  plugins: [retry()],
+}) {}
+
+export class ApiV2 extends Fetch.Service<ApiV2>()("ApiV2", {
+  ...Api.config,
+  baseUrl: "https://api.example.com/v2",
+}) {}
+```
+
+## Keep the first client's headers
+
+When you set `headers`, `Api.config.headers` is replaced, not merged. To
+keep the first client's headers, spread them too, as in
+`headers: { ...Api.config.headers, "x-client": "web" }`.
+
+## What's next
+
+- [Client configuration](/docs/clients/configuration): look up the options
+  you can override.
+- [Structure an app](/docs/structuring-an-app): organize an app that talks
+  to several backends.

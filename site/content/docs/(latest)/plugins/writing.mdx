@@ -2,3 +2,152 @@
 title: Write a plugin
 description: Build a first plugin, then learn the hooks and how a plugin knows the route.
 ---
+
+When the built-in plugins don't cover what you need, write your own. The
+built-in ones are written with the same API. In this tutorial, you write a
+plugin that pins the API version on every request, then learn the hooks a
+plugin can use and how it knows which route a call is for.
+
+## Write your first plugin
+
+A plugin is a name and one or more hooks. This one pins the API version on
+every request, with an option that a call can change:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+
+import { Fetch } from "@monarcode/effetch";
+
+export const apiVersion = Fetch.plugin({
+  name: "apiVersion",
+  defaults: { version: "2024-06-01" },
+  onRequest: (request, ctx) =>
+    Effect.succeed(
+      HttpClientRequest.setHeader(request, "api-version", ctx.options.version),
+    ),
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [apiVersion],
+}) {}
+
+export const program = Effect.gen(function* () {
+  const api = yield* Api;
+  yield* api.get("/reports", {
+    plugins: { apiVersion: { version: "2025-01-01" } },
+  });
+});
+```
+
+`Fetch.plugin` infers the plugin's name, options, errors and services from
+what you give it, so calls can override `apiVersion` by name, and their
+options are checked. `ctx.options` is the plugin's `defaults` merged with the
+call's override, so a plugin needs `defaults` to take options.
+
+## Hooks
+
+A plugin can define any of the following hooks:
+
+| Hook                           | Runs                                                                                                                                         |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onRequest(request, ctx)`      | Before the request is sent, in array order. Returns the request to send, or fails. It sees the full URL and the client's headers.            |
+| `onResponse(response, ctx)`    | On every response, non-2xx included, in reverse order. Returns the response, or fails. The status check and decoding come after all plugins. |
+| `onError(error, ctx)`          | After a call fails or dies, in array order. It can't change the outcome.                                                                     |
+| `onExit(exit, ctx)`            | After every call, whatever the outcome, in array order, after `onError`. It can't change the outcome.                                        |
+| `wrap(client, options, route)` | Wraps the plugins after it and the network, for retries, timeouts and the like. It can add errors but can't remove them.                     |
+
+`ctx.request` is the request: in `onResponse`, the one this plugin passed on;
+in `onError` and `onExit`, the one the call built.
+
+### Record every call with onExit
+
+`onExit` gets the call's `Exit`: its result (the decoded `output`, or the
+response for a call without one), or the cause of its failure, defect or
+interruption. Its `ctx` also has:
+
+- `response`: the one the plugins returned; when a plugin failed after a
+  response arrived, the last one the network sent; `undefined` when none
+  arrived;
+- `durationMs`: the time from sending the request to decoding the body,
+  retries included.
+
+It suits logging and metrics, and is what `consoleLogger` uses. This plugin
+records each call's route, outcome and duration:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+
+import { Fetch } from "@monarcode/effetch";
+
+declare const record: (route: string, ok: boolean, durationMs: number) => void;
+
+export const metrics = Fetch.plugin({
+  name: "metrics",
+  onExit: (exit, ctx) =>
+    Effect.sync(() => record(ctx.route, Exit.isSuccess(exit), ctx.durationMs)),
+});
+```
+
+The call returns once every `onExit` hook is done, so keep them quick, and
+fork anything slow.
+
+## Read the route
+
+`ctx.route` is the call's method and path as written, before the params are
+filled in: `"GET /users/:id"`, whether the call was
+`api.get("/users/:id", …)` or an [endpoint](/docs/endpoints). It's the same
+for every user ID, so it's what to group logs, metrics and error reports by.
+It's `undefined` for requests sent through `client.httpClient`.
+
+A `wrap` reads it from its third argument, an Effect like `options`. The
+following example reads the route in an `onError` hook and in a `wrap`:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+
+import { Fetch } from "@monarcode/effetch";
+
+declare const report: (error: unknown, route: string | undefined) => void;
+
+export const errorReporter = Fetch.plugin({
+  name: "errorReporter",
+  onError: (error, ctx) => Effect.sync(() => report(error, ctx.route)),
+});
+
+export const timing = Fetch.plugin({
+  name: "timing",
+  wrap: (client, _options, route) =>
+    HttpClient.transform(client, (response, request) =>
+      Effect.gen(function* () {
+        const label = (yield* route) ?? request.url;
+        return yield* Effect.withLogSpan(response, label);
+      }),
+    ),
+});
+```
+
+## Tips
+
+Keep these rules in mind as you write plugins:
+
+- Services a plugin needs are required once, by the client's layer (or by
+  `Fetch.make`). Calls don't need them. Services provided around a call win
+  over those the client was built with.
+- Plugin names must be unique.
+- Write `wrap` bodies with `Effect.gen`. A ternary that returns two different
+  Effects can't be typed.
+- Pass plugin lists inline, or let TypeScript infer them. Annotating a list as
+  `Fetch.Plugin.Any[]` erases the plugins' types.
+
+## What's next
+
+- [Plugin recipes](/docs/plugins/recipes): copy a plugin that signs out on a
+  `401`, or one that sets a deadline with its own error.
+- [Plugin order](/docs/plugins/order): decide where your plugin goes in the
+  list.
+- [Change plugins for one call](/docs/plugins/per-call): skip or adjust your
+  plugin on a single call.

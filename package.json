@@ -11,7 +11,7 @@
 		"react-native",
 		"schema"
 	],
-	"homepage": "https://github.com/monarcode/effetch#readme",
+	"homepage": "https://effetch.pages.dev/docs",
 	"bugs": {
 		"url": "https://github.com/monarcode/effetch/issues"
 	},

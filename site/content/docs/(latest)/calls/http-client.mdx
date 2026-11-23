@@ -1,4 +1,42 @@
 ---
-title: Use HttpClient directly
-description: Use Effect's HttpClient for what the methods don't cover.
+title: When the methods aren't enough
+description: Choose the method at runtime, read a stream, or use the HttpClient underneath a client.
 ---
+
+When the methods aren't enough, pick a method at runtime with `api.request`,
+read a stream with `api.sse` or `api.ndjson`, or use the `HttpClient`
+underneath the client.
+
+## Choose the method at runtime
+
+When the method is only known at runtime, use `api.request`. It takes the
+method as its first argument, before the path and the options:
+
+```ts
+import type * as HttpMethod from "effect/http/HttpMethod";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+export const send = (method: HttpMethod.HttpMethod, path: string) =>
+  api.request(method, path);
+```
+
+## Read a stream of events or lines
+
+When the response is a stream of events or lines, use `api.sse` or
+`api.ndjson`. See [Streaming responses](/docs/streaming).
+
+## Use the underlying HttpClient
+
+When you need something the methods don't do, use `api.httpClient`. It's the
+configured `HttpClient` underneath, with the base URL, the default headers and
+the plugins, but no status check and no decoding.
+
+## What's next
+
+- [Streaming responses](/docs/streaming): read Server-Sent Events and
+  newline-delimited JSON.
+- [Call errors](/docs/errors): see what can go wrong in a call.
+- [Call options](/docs/calls/options): look up every option the methods take.

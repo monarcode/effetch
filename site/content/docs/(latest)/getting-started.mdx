@@ -2,3 +2,123 @@
 title: Getting started
 description: Declare a client, make a typed call and run it, from an empty file to a working program.
 ---
+
+In this tutorial, you write a complete program that fetches a todo from an
+API, typed and checked by a schema. Along the way, you meet the four ideas
+the rest of Effetch builds on.
+
+## Before you begin
+
+Install Effetch and Effect, and check that your project meets the
+requirements. For the commands, see [Installation](/docs/installation).
+
+## Write your first client
+
+The following program fetches a todo from
+[JSONPlaceholder](https://jsonplaceholder.typicode.com), a free fake API.
+It's complete, so you can run it as it is:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+// 1. What a todo looks like
+const Todo = Schema.Struct({
+  id: Schema.Finite,
+  title: Schema.String,
+  completed: Schema.Boolean,
+});
+
+// 2. The client, declared once for the whole app
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://jsonplaceholder.typicode.com",
+}) {}
+
+// 3. A call
+const program = Effect.gen(function* () {
+  const api = yield* Api;
+  const todo = yield* api.get("/todos/:id", {
+    params: { id: 1 },
+    output: Todo,
+  });
+  console.log(todo.title);
+});
+
+// 4. Run it, with the client and the HttpClient that sends the requests
+const ApiLive = Api.layer.pipe(Layer.provide(FetchHttpClient.layer));
+
+await Effect.runPromise(program.pipe(Effect.provide(ApiLive)));
+```
+
+## What each part does
+
+The numbered comments in the program mark its four parts:
+
+1. **`Todo` describes the response.** Effetch decodes the body with it, so
+   `todo` is typed, and checked when it arrives. If the API sends something
+   else, the call fails with a `DecodeError` instead of handing you bad data.
+2. **`Api` is your client.** `Fetch.Service` declares it as an Effect
+   service, with everything its calls have in common: here the base URL,
+   later the headers, error schemas and plugins.
+3. **`api.get` makes the call.** `yield* Api` gives you the client, and the
+   `:id` in the path is filled in from `params`.
+4. **`Api.layer` builds the client.** It needs an `HttpClient` to send the
+   requests. `FetchHttpClient.layer` uses the global `fetch`. Node's works
+   too, and in tests you'd use a fake one (see
+   [Test with a fake backend](/docs/testing)).
+
+<Callout>
+  Calling an API from a web page on another origin? Read the browser notes in
+  [Platform notes](/docs/platforms) first.
+</Callout>
+
+## How the pieces fit
+
+Everything in Effetch builds on four ideas, from the bottom up:
+
+- **An `HttpClient`** sends requests. It's Effect's, and you choose it when
+  you run your program: the global `fetch`, Node's, or a fake in tests.
+- **A client** is one backend: its base URL, default headers, error schemas
+  and plugins. You declare it once, with `Fetch.Service`.
+- **A call** is one request: a method such as `api.get`, or an
+  [endpoint](/docs/endpoints) you saved. It returns an Effect, typed by your
+  schemas, that fails with typed errors.
+- **Plugins** wrap every call a client makes, for auth, retries, timeouts
+  and logging.
+
+The sidebar follows the same order:
+[clients](/docs/clients), [calls](/docs/calls) and
+[errors](/docs/errors), then [plugins](/docs/plugins), including
+[your own](/docs/plugins/writing), and [endpoints](/docs/endpoints). After
+those come [streams](/docs/streaming), [pagination](/docs/pagination),
+[how to structure an app](/docs/structuring-an-app) and
+[testing](/docs/testing).
+
+## The examples in these docs
+
+To stay short, many examples start from `declare const api: Fetch.Client`: a
+client without plugins, like the one `yield* Api` gives you when `Api` has
+none. In your app, get the client with `yield* Api`. To type a client in a
+function signature, use `Effect.Success<typeof Api>`, which includes your
+plugins and error schemas.
+
+Some examples also bind an endpoint inline, with `api.bind`, to stay short.
+In your app, bind endpoints once, with `Fetch.Endpoints` (see
+[Share endpoints as a service](/docs/endpoints/services)).
+
+Every TypeScript example in these docs is compiled with the package, so
+they all match the API.
+
+## What's next
+
+- [Declare a client](/docs/clients): see what the client class gives you
+  and how to type it.
+- [Client configuration](/docs/clients/configuration): add headers, error
+  schemas and plugins to your client.
+- [Methods](/docs/calls): make calls with each HTTP method.
+- [Call errors](/docs/errors): see what can go wrong in a call and how to
+  catch it.

@@ -2,3 +2,83 @@
 title: Define endpoints
 description: Save a route with its schemas, defaults and overrides.
 ---
+
+This page shows you how to define an endpoint with `Fetch.endpoint`, how
+its defaults combine with the client's and the call's, and which properties
+you can read from it.
+
+## Define an endpoint
+
+`Fetch.endpoint` takes a route, the method and the path in one string, and
+what every call to it shares. It needs no client, so you can define endpoints
+next to their schemas:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const NewUser = Schema.Struct({ name: Schema.String });
+
+export const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+export const listUsers = Fetch.endpoint("GET /users", {
+  output: Schema.Array(User),
+});
+export const createUser = Fetch.endpoint("POST /users", {
+  input: NewUser,
+  output: User,
+});
+
+getUser.route; // "GET /users/:id"
+getUser.output; // User
+```
+
+A definition is plain data: it holds the route, the schemas and the defaults,
+but it can't make a call until it's bound to a client. To bind it, see
+[Share endpoints as a service](/docs/endpoints/services).
+
+## Write the route
+
+The route is an uppercase method, one space, then a path that starts with `/`
+or a full `http(s)://` URL. TypeScript checks it as you type: `"GTE /users"`
+and `"get /users"` don't compile, and your editor suggests the methods.
+`Fetch.endpoint` also throws on a malformed route, so a bad one fails as soon
+as its module is imported.
+
+## Set defaults and overrides
+
+An endpoint's headers, plugin overrides and schemas combine with the
+client's and the call's as follows:
+
+- **Headers.** A call's headers win over the endpoint's, which win over the
+  client's. A bound endpoint's headers are the binding's over the
+  definition's. Unlike the client's, an endpoint's headers can set
+  `content-type`.
+- **Plugins.** A call's plugin override wins over the endpoint's (given when
+  binding, or to `api.endpoint`), and when both give options, they're
+  merged. An endpoint bound with `retry: false` can still be retried in one
+  call with `plugins: { retry: { times: 2 } }`.
+- **Schemas** belong to the endpoint, and can't be changed per call.
+
+## Read an endpoint's properties
+
+Each endpoint also has `route`, `method` and `path` properties, for log labels
+or cache keys. Plugins see the same route, as `ctx.route` (see
+[Write a plugin](/docs/plugins/writing)).
+
+Its `output`, `error` and `input` properties are its schemas, for things like
+decoding cached data or building test fixtures:
+
+- `output` and `input` are `undefined` when the endpoint has none.
+- `error` is the schema error bodies are decoded with: the endpoint's, else
+  the client's `defaultError`, else `Schema.Unknown`.
+
+## What's next
+
+- [Share endpoints as a service](/docs/endpoints/services): bind your
+  definitions to a client and share them as a service.
+- [Call an endpoint](/docs/endpoints/calling): see what goes in each call,
+  and other ways to bind.
+- [Typed query parameters](/docs/endpoints/typed-query): give an endpoint a
+  schema for its query.

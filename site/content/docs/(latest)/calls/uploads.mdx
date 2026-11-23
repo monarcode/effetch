@@ -2,3 +2,173 @@
 title: Upload files
 description: Upload files with a typed multipart body.
 ---
+
+Upload files with a body that's typed and checked by a schema, as for JSON,
+then sent as `multipart/form-data`.
+
+## Send a multipart body
+
+To upload files, wrap the `input` schema in `Fetch.multipart`, and use
+`Fetch.UploadFile` for a file field:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+const Document = Schema.Struct({ id: Schema.String });
+
+export const uploadDocument = Fetch.endpoint("POST /documents", {
+  input: Fetch.multipart(
+    Schema.Struct({
+      file: Fetch.UploadFile,
+      kind: Schema.Literals(["PASSPORT", "DRIVERS_LICENSE"]),
+      pages: Schema.optional(Schema.Finite),
+    }),
+  ),
+  output: Document,
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+class DocumentApi extends Fetch.Endpoints<DocumentApi>()("DocumentApi", Api, {
+  upload: uploadDocument,
+}) {}
+
+// In a browser, `file` comes from an <input type="file">.
+export const upload = (file: File) =>
+  Effect.gen(function* () {
+    const documents = yield* DocumentApi;
+    return yield* documents.upload({ body: { file, kind: "PASSPORT" } });
+  });
+```
+
+## Files on each platform
+
+`Fetch.UploadFile` takes the files each platform can send:
+
+- in browsers, Node, Bun and Deno, a `Blob` or `File`;
+- in React Native, the `{ uri, name, type }` object its pickers give, typed
+  `Fetch.NativeFile`. `uri` and `name` are required: a server only treats a
+  part as a file when it has a file name. `type` is optional, and a file
+  without one is sent as `application/octet-stream`.
+
+Use `Fetch.UploadFile` rather than `Schema.File`. `Schema.File` only takes a
+`File`, not the `{ uri, name, type }` objects React Native's pickers give,
+and `FetchTest` can't read it back from a form.
+
+## Send a file from React Native
+
+In React Native, send a `NativeFile`, not a `Blob`: React Native's `fetch`
+reads a form's files from disk by `uri`, and can't send a `Blob` in a form.
+
+The following example builds a `NativeFile` from an image picker's asset:
+
+```ts
+import type { Fetch } from "@monarcode/effetch";
+
+// From expo-image-picker, for example
+declare const asset: {
+  readonly uri: string;
+  readonly fileName?: string | null;
+  readonly mimeType?: string;
+};
+
+export const photo: Fetch.NativeFile = {
+  uri: asset.uri,
+  name: asset.fileName ?? "photo.jpg",
+  type: asset.mimeType,
+};
+```
+
+## How fields become form parts
+
+Effetch turns the schema's fields into form parts as follows:
+
+- strings as they are; numbers, booleans and bigints as strings; a `Date` as
+  its ISO string;
+- a file as a file part;
+- a list as one part per item, under the same name;
+- `null` and `undefined` left out.
+
+A form can't hold a nested object or a list of lists, so TypeScript rejects
+most schemas that have one, and a value that has one makes the call die. To
+send one, encode it to a string in the schema, such as
+`meta: Schema.fromJsonString(Meta)`.
+
+## Check a file's size
+
+To check a file's size, add a check to `Fetch.UploadFile`. A `NativeFile` has
+no size until it's read, so the check only looks at a `Blob`:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+export const SmallFile = Fetch.UploadFile.check(
+  Schema.makeFilter(
+    (file) => !(file instanceof Blob) || file.size < 10_000_000,
+    { expected: "a file under 10 MB" },
+  ),
+);
+```
+
+## Headers, errors and where it works
+
+The following details cover the request's headers, how a bad body fails, and
+where multipart bodies work.
+
+<Accordions>
+<Accordion title="Details: headers, errors and where it works">
+
+- The request sets no `Content-Type`, so the platform adds the multipart
+  boundary. A `content-type` header from the call, the endpoint or the client
+  is removed, for any `FormData` body.
+- The request sets no `Content-Type` before your plugins run. A plugin's
+  `onRequest` that sets one replaces the boundary, so leave it out for forms.
+- A body that doesn't match the schema, or a value a form can't hold, makes
+  the call die with an `Invalid request body:` defect, as for JSON (see
+  [Logging and defects](/docs/errors/logging-and-defects)). So does a
+  `{ uri, name, type }` file outside React Native, where `FormData` would send
+  `"[object Object]"`, or in a field that isn't a `Fetch.UploadFile`.
+- `Fetch.UploadFile` in an `input` schema without `Fetch.multipart` makes the
+  call die too: a file has no JSON form.
+- It works wherever `input` does: on methods such as `api.post`, on endpoints,
+  and in `api.sse` and `api.ndjson`.
+- `Fetch.multipart` returns the schema, marked. Add checks or annotations to
+  it as you like. A schema built around it, such as with `Schema.NullOr`, is
+  sent as JSON again.
+- A field's encoded value must be a string, number, boolean, bigint, `Date`,
+  file, `null` or `undefined`, or a list of them. A schema such as
+  `Schema.DateTimeUtc` or `Schema.URL`, which encodes to an object, needs a
+  string form first, such as `Schema.DateTimeUtcFromString`.
+- [`FetchTest`](/docs/testing) reads the form back into the body a handler
+  gets, decoded with the schema, with files as `File`s. In Node, test with a
+  `Blob` or `File`, since a `{ uri, name, type }` file only works in React
+  Native.
+- A form loses some of what the schema encodes, so `FetchTest` reads it back
+  as best it can:
+  - A `null` or `undefined` field and an empty list are left out. Such a
+    field comes back missing when it's optional. When it's required, it
+    comes back as `null` if it takes `null`, then as `[]` if it's a list,
+    then as `undefined`.
+  - Every part is a string. In a field that takes `null`, the string
+    `"null"` comes back as `null`, and in
+    `Schema.Union([Schema.String, Schema.Finite])` the string `"12"` comes
+    back as the number `12`.
+- A `FormData` you build yourself still works as a `body` without `input`.
+
+</Accordion>
+</Accordions>
+
+## What's next
+
+- [Send a body](/docs/calls/body): send JSON and other bodies.
+- [Test with a fake backend](/docs/testing): read uploaded forms back in
+  tests with `FetchTest`.
+- [Logging and defects](/docs/errors/logging-and-defects): see why a bad body
+  makes the call die.
