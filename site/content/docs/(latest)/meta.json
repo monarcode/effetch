@@ -1,5 +1,23 @@
 {
 	"title": "Latest",
 	"root": "version",
-	"pages": ["index", "installation"]
+	"pages": [
+		"index",
+		"installation",
+		"getting-started",
+		"upgrading",
+		"clients",
+		"calls",
+		"errors",
+		"plugins",
+		"endpoints",
+		"streaming",
+		"pagination",
+		"structuring-an-app",
+		"testing",
+		"platforms",
+		"coming-from-axios-or-ky",
+		"examples",
+		"reference"
+	]
 }

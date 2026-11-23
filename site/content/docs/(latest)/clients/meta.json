@@ -1,0 +1,10 @@
+{
+	"title": "Clients",
+	"pages": [
+		"index",
+		"configuration",
+		"providing",
+		"derived",
+		"service-or-make"
+	]
+}
