@@ -1,12 +1,15 @@
 import { sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createShikiHighlighter } from "fumadocs-core/highlight/shiki";
+import { defaultShikiFactory } from "fumadocs-core/highlight/shiki/full";
 import { rehypeCodeDefaultOptions } from "fumadocs-core/mdx-plugins";
 import type { MDXPresetOptions } from "fumadocs-mdx/config";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
 import type { Element, Root, RootContent } from "hast";
-import ts from "typescript";
+
+import { exampleCompilerOptions } from "./examples.ts";
 
 /*
  * How pages compile, for the build only: `vite.config.ts` hands these to
@@ -19,25 +22,6 @@ import ts from "typescript";
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 /** The site's own folder, which the type tables' paths start from. */
 const site = fileURLToPath(new URL("../../", import.meta.url));
-
-/**
- * The root `tsconfig.json`'s compiler options, which `check-docs` compiles
- * the examples with, without `paths`: those point at `src`, and the hovers
- * should show what readers get, the built `dist` with the namespace docs
- * the build puts back. Twoslash runs from the root, so
- * `@monarcode/effetch` resolves to `dist` through the package's `exports`.
- */
-function exampleCompilerOptions() {
-	const file = `${root}tsconfig.json`;
-	const { config, error } = ts.readConfigFile(file, ts.sys.readFile);
-	if (error)
-		throw new Error(ts.flattenDiagnosticMessageText(error.messageText, "\n"));
-	const options = { ...config.compilerOptions };
-	// The language service plugin is for editors.
-	delete options.paths;
-	delete options.plugins;
-	return options as Record<string, unknown>;
-}
 
 /**
  * What to do with a type error in an example. `vite build` fails, as
@@ -129,10 +113,66 @@ function classes(node: Element) {
 	return Array.isArray(value) ? value.map(String) : [];
 }
 
+// The ink sheet's neutrals, as DESIGN.md names them.
+const SKIN = "#c4c6ce";
+const STEEL = "#8a8d99";
+const PAPER = "#ecedf1";
+
+/**
+ * The code's colours: the landing page's greys by role, not a syntax theme,
+ * so an example reads as part of the same sheet. Names and values in skin;
+ * keywords, punctuation and comments in steel; strings, numbers and the
+ * names a block declares in paper. Every one is at least 5.4:1 on ink.
+ */
+const inkTheme = {
+	name: "effetch-ink",
+	type: "dark" as const,
+	colors: { "editor.background": "#16171d", "editor.foreground": SKIN },
+	tokenColors: [
+		{
+			scope: [
+				"keyword",
+				"storage",
+				"storage.type",
+				"storage.modifier",
+				"keyword.control",
+				"keyword.operator.new",
+				"keyword.operator.expression",
+				"variable.language",
+				"constant.language",
+				"punctuation",
+				"meta.brace",
+				"keyword.operator",
+				"storage.type.function.arrow",
+				"comment",
+				"punctuation.definition.comment",
+			],
+			settings: { foreground: STEEL },
+		},
+		{
+			scope: [
+				"string",
+				"string.template",
+				"punctuation.definition.string",
+				"constant.numeric",
+				"meta.definition.variable variable.other.constant",
+				"meta.definition.variable variable.other.readwrite",
+				"meta.definition.function entity.name.function",
+				"entity.name.type.class",
+				"entity.name.type.alias",
+				"entity.name.type.interface",
+			],
+			settings: { foreground: PAPER },
+		},
+	],
+};
+
 /** The pages' MDX options; `build` is true for `vite build`. */
 export const mdxOptions = (build: boolean): MDXPresetOptions => ({
 	rehypeCodeOptions: {
 		...rehypeCodeDefaultOptions,
+		// The site is dark only; both slots take the one theme.
+		themes: { light: inkTheme, dark: inkTheme },
 		transformers: [
 			...(rehypeCodeDefaultOptions.transformers ?? []),
 			// Type hovers on every example. A type error fails the build. No
@@ -141,7 +181,7 @@ export const mdxOptions = (build: boolean): MDXPresetOptions => ({
 			transformerTwoslash({
 				twoslashOptions: {
 					cwd: root,
-					compilerOptions: exampleCompilerOptions(),
+					compilerOptions: exampleCompilerOptions(root),
 				},
 				rendererRich: { processHoverInfo },
 				onTwoslashError: twoslashErrors(build),
@@ -180,6 +220,14 @@ export const mdxOptions = (build: boolean): MDXPresetOptions => ({
 				// A table's `path` starts from the site, where the workspace
 				// link `node_modules/@monarcode/effetch` points at the package.
 				options: { basePath: site },
+				// Its types in the pages' code colours, not Shiki's defaults.
+				highlighter: createShikiHighlighter(
+					() => defaultShikiFactory.getOrInit(),
+					{
+						themes: { light: inkTheme, dark: inkTheme },
+						defaultColor: false,
+					},
+				),
 			},
 		],
 	],

@@ -1,6 +1,6 @@
 {
 	"include": ["**/*.ts", "**/*.tsx"],
-	"exclude": ["node_modules", "dist", ".tanstack", "versions"],
+	"exclude": ["node_modules", "dist", ".tanstack", "versions", "landing"],
 	"compilerOptions": {
 		"strict": true,
 		"jsx": "react-jsx",

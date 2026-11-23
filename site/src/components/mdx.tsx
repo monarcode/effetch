@@ -7,6 +7,8 @@ import defaultMdxComponents from "fumadocs-ui/mdx";
 import type { MDXComponents } from "mdx/types";
 import type { ComponentProps } from "react";
 
+import { Callout } from "@/components/docs/callout";
+
 // Every name in an example is a hover target, hundreds a page, so they stay
 // out of the tab order: the code reads the same without its hovers.
 function PopupTrigger(props: ComponentProps<typeof Twoslash.PopupTrigger>) {
@@ -18,6 +20,7 @@ export function getMDXComponents(components?: MDXComponents) {
 		...defaultMdxComponents,
 		...Twoslash,
 		PopupTrigger,
+		Callout,
 		Accordion,
 		Accordions,
 		Step,

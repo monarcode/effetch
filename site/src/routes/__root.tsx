@@ -31,12 +31,22 @@ export const Route = createRootRoute({
 function RootComponent() {
 	return (
 		// The theme script sets the class before the first paint.
-		<html lang="en" suppressHydrationWarning>
+		<html lang="en" className="dark" suppressHydrationWarning>
 			<head>
 				<HeadContent />
 			</head>
 			<body className="flex flex-col min-h-screen">
-				<RootProvider components={{ Link }} search={{ SearchDialog }}>
+				<RootProvider
+					components={{ Link }}
+					search={{ SearchDialog }}
+					// Dark only: the brand is ink and lime.
+					theme={{
+						forcedTheme: "dark",
+						defaultTheme: "dark",
+						enableSystem: false,
+						hotKey: false,
+					}}
+				>
 					<Outlet />
 				</RootProvider>
 				<Scripts />

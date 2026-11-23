@@ -2,3 +2,658 @@
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
 @import "fumadocs-twoslash/twoslash.css";
+@import "@fontsource-variable/recursive/mono.css";
+@import "./docs.css";
+
+/*
+ * The brand: ink #16171D and lime #D5F70D, dark only. Lime is used at its
+ * exact value or not at all: no opacity, tint, blur or glow.
+ *
+ * The landing page is a type specimen (`.spec`): one variable family,
+ * Recursive, on its weight and MONO axes. Sans (MONO 0) sets the specimen
+ * and the prose; mono (MONO 1) sets code and labels. The
+ * signature is the specimen's sample: options remap it on the weight axis.
+ */
+@theme {
+	--font-spec: "Recursive Variable", ui-sans-serif, system-ui, sans-serif;
+	--color-ink: #16171d;
+	--color-lime: #d5f70d;
+	/* The page's type: 15.3:1 on ink. */
+	--color-paper: #ecedf1;
+	/* Secondary text, punctuation, closed parts: 5.4:1. */
+	--color-steel: #8a8d99;
+	/* Code text: 10.5:1. */
+	--color-skin: #c4c6ce;
+	/* Hairline rules. */
+	--color-rule: #2a2c36;
+	/* One family on its MONO axis; docs.css sets the axis. */
+	--font-sans: "Recursive Variable", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "Recursive Variable", ui-monospace, monospace;
+	/* Tailwind's preflight sets these on every code, kbd, samp and pre. */
+	--font-mono--font-variation-settings: "MONO" 1;
+	--font-mono--font-feature-settings: "liga" 0, "calt" 0;
+	/* Square corners everywhere, Fumadocs' included. `rounded-full` keeps
+	   its circle. */
+	--radius-xs: 0px;
+	--radius-sm: 0px;
+	--radius-md: 0px;
+	--radius-lg: 0px;
+	--radius-xl: 0px;
+	--radius-2xl: 0px;
+	--radius-3xl: 0px;
+	--radius-4xl: 0px;
+}
+
+/* Fumadocs' dark theme, set in the specimen's tokens. Every surface is ink:
+   no card, popover or hover fills, and every line is rule grey. Lime is the
+   primary, at its exact value; docs.css overrides each place Fumadocs mixes
+   it with transparency. The sidebar sets its own muted colours, so it
+   repeats them. */
+.dark,
+.dark #nd-sidebar {
+	--color-fd-background: #16171d;
+	--color-fd-foreground: #ecedf1;
+	--color-fd-muted: #16171d;
+	--color-fd-muted-foreground: #8a8d99;
+	--color-fd-popover: #16171d;
+	--color-fd-popover-foreground: #ecedf1;
+	--color-fd-card: #16171d;
+	--color-fd-card-foreground: #ecedf1;
+	--color-fd-border: #2a2c36;
+	--color-fd-primary: #d5f70d;
+	--color-fd-primary-foreground: #16171d;
+	--color-fd-secondary: #16171d;
+	--color-fd-secondary-foreground: #ecedf1;
+	--color-fd-accent: #16171d;
+	--color-fd-accent-foreground: #ecedf1;
+	--color-fd-ring: #d5f70d;
+	--color-fd-overlay: rgb(22 23 29 / 0.86);
+}
+
+html {
+	background-color: #16171d;
+	color-scheme: dark;
+	accent-color: #d5f70d;
+	caret-color: #d5f70d;
+	scrollbar-color: #3a3c48 #16171d;
+}
+::selection {
+	background-color: #d5f70d;
+	color: #16171d;
+}
+
+/* ------------------------------------------------------------------ */
+/* The landing page                                                    */
+/* ------------------------------------------------------------------ */
+
+/* How far the specimen has set in, 0 to 1: weights grow from the hairline
+   to their own as it rises. */
+@property --spec-k {
+	syntax: "<number>";
+	inherits: true;
+	initial-value: 1;
+}
+
+.spec {
+	--ease: cubic-bezier(0.2, 0, 0, 1);
+	--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+	font-family: var(--font-spec);
+	font-variation-settings: "MONO" 0;
+	font-weight: 400;
+	background-color: var(--color-ink);
+	color: var(--color-paper);
+	/* The grid: twelve columns inside a 16px or 48px margin. */
+	--gutter: 16px;
+	--column: 90rem;
+}
+@media (min-width: 48rem) {
+	.spec {
+		--gutter: 48px;
+	}
+}
+.spec-column {
+	width: 100%;
+	max-width: calc(var(--column) + 2 * var(--gutter));
+	margin-inline: auto;
+	padding-inline: var(--gutter);
+}
+.spec-mono,
+.spec-code,
+.spec-label,
+.spec-compiled,
+.spec-switch-code,
+.spec-code-fixed,
+.spec-path-option {
+	font-family: var(--font-spec);
+	font-variation-settings: "MONO" 1;
+	font-variant-ligatures: none;
+}
+
+/* Keyboard focus: one lime outline, set off from the control. */
+.spec :is(a, button, input, [tabindex]):focus-visible {
+	outline: 2px solid var(--color-lime);
+	outline-offset: 3px;
+}
+
+/* A label over a control or a value: mono, small, steel. */
+.spec-label {
+	display: block;
+	font-size: 12px;
+	line-height: 1.4;
+	letter-spacing: 0.02em;
+	color: var(--color-steel);
+}
+
+/* --- Code ------------------------------------------------------------- */
+
+.spec-code {
+	tab-size: 2;
+	font-weight: 400;
+}
+.spec-code .t-text {
+	color: var(--color-skin);
+}
+.spec-code .t-keyword,
+.spec-code .t-punctuation {
+	color: var(--color-steel);
+}
+.spec-code .t-string {
+	color: var(--color-paper);
+}
+/* Lines outside the step in hand: all one steel, at the hairline. */
+.spec-code-quiet,
+.spec-code-quiet [class^="t-"] {
+	color: var(--color-steel);
+	font-weight: 300;
+}
+.spec-code-line {
+	transition:
+		color 300ms var(--ease),
+		font-weight 300ms var(--ease);
+}
+/* Code that wraps at every width, each line's continuation hanging two
+   columns past its indent. */
+.spec-code-flow {
+	white-space: pre-wrap;
+}
+.spec-code-flow .spec-code-line {
+	padding-left: calc((var(--indent) + 2) * 1ch);
+	text-indent: calc((var(--indent) + 2) * -1ch);
+}
+/* Code wraps on phones rather than scrolling out of sight. */
+@media (max-width: 63.99rem) {
+	.spec-code-wrap {
+		white-space: pre-wrap;
+	}
+	.spec-code-wrap .spec-code-line {
+		padding-left: calc((var(--indent) + 2) * 1ch);
+		text-indent: calc((var(--indent) + 2) * -1ch);
+	}
+}
+
+/* --- The signature, set as a specimen ---------------------------------- */
+
+.spec-sig {
+	margin: 0;
+	/* Its own paint area, so a glyph that thins as its weight drops is
+	   repainted whole, with no sliver of the bolder glyph left behind. */
+	contain: paint;
+	padding-block: 0.06em;
+	font-size: var(--spec-size, 64px);
+	line-height: 0.98;
+	letter-spacing: -0.035em;
+	font-weight: 300;
+	color: var(--color-paper);
+	/* Each role's weight; a member closing drops to the hairline, 300. */
+	--w-value: 900;
+	--w-error: 640;
+	--w-context: 420;
+	/* A bar's width, with its space either side. */
+	--spec-bar: 0.74em;
+}
+/* Two grounds a step apart, one per repaint, so the switch repaints the
+   whole signature box without a visible change. */
+.spec-sig[data-repaint="a"] {
+	background-color: #16171d;
+}
+.spec-sig[data-repaint="b"] {
+	background-color: #16171c;
+}
+/* The unseen signatures that hold the live one's box at its tallest. */
+.spec-ghost {
+	visibility: hidden;
+}
+/* A value and its comma, a bar and its error, never part across lines. */
+.spec-pair {
+	white-space: nowrap;
+}
+/* On a phone, an error that breaks before its type argument hangs the
+   argument under the error's name, past its bar. */
+@media (max-width: 39.99rem) {
+	.spec-hold-error {
+		display: inline-block;
+	}
+	.spec-hold-error[data-bar="true"] {
+		padding-left: var(--spec-bar);
+		text-indent: calc(-1 * var(--spec-bar));
+	}
+	.spec-m-in {
+		text-indent: 0;
+	}
+}
+/* From 640px, `Effect<` keeps to its value and an error to its type
+   argument; only a phone's line breaks between them. */
+@media (min-width: 40rem) {
+	.spec-hold {
+		white-space: nowrap;
+	}
+}
+.spec-punct {
+	font-weight: 300;
+	color: var(--color-steel);
+}
+.spec-value {
+	--w: var(--w-value);
+	color: var(--color-lime);
+}
+.spec-error {
+	--w: var(--w-error);
+}
+.spec-context {
+	font-weight: calc(300 + (var(--w-context) - 300) * var(--spec-k));
+	color: var(--color-steel);
+}
+.spec-bar-glyph {
+	display: inline-block;
+	padding-inline: 0.2em 0.24em;
+	font-weight: 300;
+	color: var(--color-steel);
+}
+
+/* A member: present, it takes its width and its weight; closed, its width
+   goes to nothing as its weight drops to the hairline, on one beat. The
+   track's fraction sets the member's width; the text inside keeps its own
+   width and is clipped at the member's edge. */
+.spec-m {
+	display: inline-grid;
+	grid-template-columns: minmax(0, 0fr);
+	vertical-align: baseline;
+	/* Clipped at its right edge, so it closes; never above or below, so
+	   ascenders and descenders stay whole. */
+	clip-path: inset(-0.5em 0 -0.5em -0.5em);
+	transition: grid-template-columns 640ms var(--ease);
+}
+.spec-m[data-on="true"] {
+	grid-template-columns: minmax(0, 1fr);
+}
+.spec-m-in {
+	justify-self: start;
+	width: max-content;
+	/* A wider box than the glyphs, so a bold edge is inside the clip. */
+	padding-inline-end: 0.04em;
+	font-weight: calc(300 + (var(--w, 300) - 300) * var(--spec-k));
+	transition:
+		font-weight 640ms var(--ease),
+		color 400ms var(--ease);
+}
+/* Entering, the width opens first and the weight follows, so a member
+   arrives thin and thickens in place: the specimen's own axis. */
+.spec-m[data-on="true"] > .spec-m-in {
+	transition:
+		font-weight 760ms var(--ease) 140ms,
+		color 400ms var(--ease);
+}
+.spec-m[data-on="false"] > .spec-m-in {
+	padding-inline-end: 0;
+	font-weight: 300;
+	color: var(--color-steel);
+}
+/* A type argument inside an error keeps the error's weight. */
+.spec-error .spec-m:not(.spec-error) {
+	--w: var(--w-error);
+}
+
+/* The specimen sets in from the first paint, in CSS alone: each group
+   rises from the hairline to its weight, one after another. */
+@keyframes spec-set {
+	from {
+		--spec-k: 0;
+		opacity: 0;
+	}
+	40% {
+		opacity: 1;
+	}
+}
+@media (prefers-reduced-motion: no-preference) {
+	.spec-sig[data-entrance="load"] .spec-set {
+		animation: spec-set 1100ms var(--ease-out) backwards;
+		animation-delay: calc(120ms + var(--i) * 110ms);
+	}
+}
+
+/* --- The controls ------------------------------------------------------ */
+
+.spec-controls {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 2rem 1.5rem;
+}
+@media (min-width: 40rem) {
+	.spec-controls {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+.spec-code-block {
+	margin-top: 0.75rem;
+	border-top: 1px solid var(--color-rule);
+	font-size: 14px;
+}
+.spec-code-fixed {
+	display: flex;
+	align-items: center;
+	min-height: 2.25rem;
+	color: var(--color-steel);
+	white-space: pre;
+}
+
+/* A switch, set into its line of code: a track, then the code it turns
+   on. On, the track is lime and the code is paper; off, the code drops to
+   the hairline in steel. */
+.spec-switch {
+	display: flex;
+	width: 100%;
+	min-height: 2.75rem;
+	align-items: center;
+	gap: 0.75rem;
+	padding-left: 2ch;
+	border-bottom: 1px solid var(--color-rule);
+	text-align: left;
+	cursor: pointer;
+}
+.spec-switch:first-of-type {
+	border-top: 1px solid var(--color-rule);
+}
+.spec-switch-track {
+	position: relative;
+	flex: none;
+	width: 28px;
+	height: 16px;
+	border: 1px solid var(--color-steel);
+	transition:
+		background-color 240ms var(--ease),
+		border-color 240ms var(--ease);
+}
+.spec-switch-knob {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 10px;
+	height: 10px;
+	background-color: var(--color-steel);
+	transition:
+		translate 320ms var(--ease-out),
+		background-color 240ms var(--ease);
+}
+.spec-switch-code {
+	font-size: 14px;
+	color: var(--color-steel);
+	font-weight: 300;
+	white-space: nowrap;
+	transition:
+		color 240ms var(--ease),
+		font-weight 320ms var(--ease);
+}
+.spec-switch[aria-checked="true"] .spec-switch-track {
+	background-color: var(--color-lime);
+	border-color: var(--color-lime);
+}
+.spec-switch[aria-checked="true"] .spec-switch-knob {
+	translate: 12px 0;
+	background-color: var(--color-ink);
+}
+.spec-switch[aria-checked="true"] .spec-switch-code {
+	color: var(--color-paper);
+	font-weight: 500;
+}
+.spec-switch[role="switch"]:hover .spec-switch-code {
+	color: var(--color-paper);
+}
+/* params: always on, because the path requires it. */
+.spec-switch-fixed {
+	cursor: default;
+}
+.spec-switch-fixed .spec-switch-track {
+	border-color: var(--color-rule);
+	background-color: var(--color-rule);
+}
+.spec-switch-fixed .spec-switch-knob {
+	translate: 12px 0;
+	background-color: var(--color-steel);
+}
+.spec-switch-fixed .spec-switch-code {
+	color: var(--color-skin);
+	font-weight: 400;
+}
+
+/* Instances: four presets on one ruled row. */
+.spec-presets {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	margin-top: 0.75rem;
+	border: 1px solid var(--color-rule);
+}
+.spec-preset {
+	min-height: 3.25rem;
+	padding: 0.375rem 0.5rem;
+	font-size: 15px;
+	font-weight: 400;
+	color: var(--color-steel);
+	cursor: pointer;
+	transition:
+		color 200ms var(--ease),
+		box-shadow 200ms var(--ease),
+		font-weight 320ms var(--ease);
+}
+.spec-preset + .spec-preset {
+	border-left: 1px solid var(--color-rule);
+}
+.spec-preset:not([aria-pressed="true"]):hover {
+	color: var(--color-paper);
+}
+/* The instance in hand: a lime outline, as the sheet marks its cell, so
+   the one lime fill in view stays the primary action. */
+.spec-preset[aria-pressed="true"] {
+	box-shadow: inset 0 0 0 2px var(--color-lime);
+	color: var(--color-paper);
+	font-weight: 700;
+}
+
+/* What a preset adds, under its name: mono, steel. */
+.spec-preset-adds {
+	display: block;
+	margin-top: 0.125rem;
+	font-family: var(--font-spec);
+	font-variation-settings: "MONO" 1;
+	font-size: 11px;
+	line-height: 1.3;
+	font-weight: 400;
+	color: var(--color-steel);
+}
+
+/* The call and the client the options compile to, exactly as written. */
+.spec-compiled {
+	font-size: 12px;
+	line-height: 1.6;
+	color: var(--color-skin);
+	overflow-wrap: anywhere;
+}
+
+/* --- Typed paths ------------------------------------------------------- */
+
+/* The paths to pick from: one ruled list, mono. */
+.spec-path-list {
+	margin-top: 0.75rem;
+	border-top: 1px solid var(--color-rule);
+}
+.spec-path-option {
+	display: flex;
+	width: 100%;
+	min-height: 2.75rem;
+	align-items: center;
+	padding: 0.5rem 0.75rem;
+	border-bottom: 1px solid var(--color-rule);
+	font-size: 14px;
+	line-height: 1.4;
+	color: var(--color-steel);
+	text-align: left;
+	cursor: pointer;
+	transition:
+		color 200ms var(--ease),
+		box-shadow 200ms var(--ease);
+}
+/* Beside each path, how many parameters it has: its value, as a
+   specimen's control shows its axis value. */
+.spec-path-count {
+	flex: none;
+	margin-left: 1rem;
+	font-size: 12px;
+	color: var(--color-steel);
+}
+.spec-path-option:not([aria-pressed="true"]):hover {
+	color: var(--color-paper);
+}
+/* The path in hand: a lime outline, as the presets mark theirs. */
+.spec-path-option[aria-pressed="true"] {
+	box-shadow: inset 0 0 0 2px var(--color-lime);
+	color: var(--color-paper);
+}
+
+/* The path, set as a specimen: literal segments at the hairline, its
+   parameters at full weight. A line breaks only before a slash. */
+.spec-path {
+	margin: 0;
+	font-size: clamp(30px, 4.2vw, 60px);
+	line-height: 1.02;
+	letter-spacing: -0.035em;
+	font-weight: 300;
+	color: var(--color-paper);
+}
+.spec-seg {
+	white-space: nowrap;
+}
+.spec-literal {
+	color: var(--color-skin);
+	font-weight: 300;
+}
+.spec-param {
+	font-weight: calc(300 + 560 * var(--spec-k));
+}
+/* A new path sets in as the hero does: each segment rises from the
+   hairline to its weight, one after another. */
+@media (prefers-reduced-motion: no-preference) {
+	.spec-path[data-entrance="load"] .spec-seg {
+		animation: spec-set 900ms var(--ease-out) backwards;
+		animation-delay: calc(var(--i) * 90ms);
+	}
+}
+
+/* What TypeScript says about the path, one fact to a ruled row. */
+.spec-facts {
+	margin-top: 2rem;
+	border-bottom: 1px solid var(--color-rule);
+}
+.spec-fact {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 0.5rem 1.5rem;
+	padding-block: 1rem;
+	border-top: 1px solid var(--color-rule);
+}
+@media (min-width: 40rem) {
+	.spec-fact {
+		grid-template-columns: 8.5rem minmax(0, 1fr);
+		align-items: baseline;
+	}
+}
+.spec-names {
+	font-size: clamp(22px, 2.4vw, 32px);
+	line-height: 1.15;
+	letter-spacing: -0.02em;
+}
+.spec-name {
+	font-weight: 760;
+	color: var(--color-paper);
+}
+/* Where TypeScript puts the error: paper, with a steel wave under it. */
+.spec-squiggle {
+	color: var(--color-paper);
+	text-decoration-line: underline;
+	text-decoration-style: wavy;
+	text-decoration-color: var(--color-steel);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.25em;
+}
+
+/* --- The narrowing slider ------------------------------------------------ */
+
+.spec-range {
+	display: block;
+	width: 100%;
+	height: 2.75rem;
+	appearance: none;
+	background: transparent;
+	cursor: pointer;
+}
+.spec-range::-webkit-slider-runnable-track {
+	height: 2px;
+	background: var(--color-rule);
+}
+.spec-range::-moz-range-track {
+	height: 2px;
+	background: var(--color-rule);
+}
+.spec-range::-webkit-slider-thumb {
+	width: 22px;
+	height: 22px;
+	margin-top: -10px;
+	appearance: none;
+	border: 0;
+	border-radius: 999px;
+	background: var(--color-lime);
+}
+.spec-range::-moz-range-thumb {
+	width: 22px;
+	height: 22px;
+	border: 0;
+	border-radius: 999px;
+	background: var(--color-lime);
+}
+
+/* --- The close ----------------------------------------------------------- */
+
+/* The close shows the axis the page has used: the hairline, then the
+   heaviest weight. */
+.spec-closing {
+	font-size: clamp(3rem, 8.2vw, 7.5rem);
+	line-height: 0.96;
+	font-weight: 900;
+	letter-spacing: -0.03em;
+}
+.spec-closing-light {
+	display: block;
+	font-weight: 300;
+	color: var(--color-steel);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.spec-m,
+	.spec-m-in,
+	.spec-code-line,
+	.spec-switch-track,
+	.spec-switch-knob,
+	.spec-switch-code,
+	.spec-preset,
+	.spec-path-option {
+		transition: none;
+	}
+}
