@@ -3,6 +3,7 @@
 @import "fumadocs-ui/css/preset.css";
 @import "fumadocs-twoslash/twoslash.css";
 @import "@fontsource-variable/recursive/mono.css";
+@import "./docs.css";
 
 /*
  * The brand: ink #16171D and lime #D5F70D, dark only. Lime is used at its
@@ -25,32 +26,48 @@
 	--color-skin: #c4c6ce;
 	/* Hairline rules. */
 	--color-rule: #2a2c36;
+	/* One family on its MONO axis; docs.css sets the axis. */
+	--font-sans: "Recursive Variable", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "Recursive Variable", ui-monospace, monospace;
+	/* Tailwind's preflight sets these on every code, kbd, samp and pre. */
+	--font-mono--font-variation-settings: "MONO" 1;
+	--font-mono--font-feature-settings: "liga" 0, "calt" 0;
+	/* Square corners everywhere, Fumadocs' included. `rounded-full` keeps
+	   its circle. */
+	--radius-xs: 0px;
+	--radius-sm: 0px;
+	--radius-md: 0px;
+	--radius-lg: 0px;
+	--radius-xl: 0px;
+	--radius-2xl: 0px;
+	--radius-3xl: 0px;
+	--radius-4xl: 0px;
 }
 
-/* Fumadocs' dark theme, retinted to ink, with lime as its primary. The docs
-   keep their layout until they get their own pass. */
-.dark {
+/* Fumadocs' dark theme, set in the specimen's tokens. Every surface is ink:
+   no card, popover or hover fills, and every line is rule grey. Lime is the
+   primary, at its exact value; docs.css overrides each place Fumadocs mixes
+   it with transparency. The sidebar sets its own muted colours, so it
+   repeats them. */
+.dark,
+.dark #nd-sidebar {
 	--color-fd-background: #16171d;
 	--color-fd-foreground: #ecedf1;
-	--color-fd-muted: #1d1e25;
-	--color-fd-muted-foreground: #9a9ca8;
-	--color-fd-popover: #1b1c23;
-	--color-fd-popover-foreground: #e2e3e8;
-	--color-fd-card: #1c1d24;
-	--color-fd-card-foreground: #f4f4f6;
-	--color-fd-border: hsla(230, 12%, 60%, 0.16);
+	--color-fd-muted: #16171d;
+	--color-fd-muted-foreground: #8a8d99;
+	--color-fd-popover: #16171d;
+	--color-fd-popover-foreground: #ecedf1;
+	--color-fd-card: #16171d;
+	--color-fd-card-foreground: #ecedf1;
+	--color-fd-border: #2a2c36;
 	--color-fd-primary: #d5f70d;
 	--color-fd-primary-foreground: #16171d;
-	--color-fd-secondary: #22232b;
+	--color-fd-secondary: #16171d;
 	--color-fd-secondary-foreground: #ecedf1;
-	--color-fd-accent: hsla(230, 12%, 50%, 0.22);
-	--color-fd-accent-foreground: #eeeff3;
+	--color-fd-accent: #16171d;
+	--color-fd-accent-foreground: #ecedf1;
 	--color-fd-ring: #d5f70d;
-}
-.dark #nd-sidebar {
-	--color-fd-muted: #1d1e25;
-	--color-fd-secondary: #22232b;
-	--color-fd-muted-foreground: #9a9ca8;
+	--color-fd-overlay: rgb(22 23 29 / 0.86);
 }
 
 html {

@@ -1,0 +1,651 @@
+/*
+ * The docs: the specimen's reference volume. Fumadocs keeps the structure,
+ * its notebook layout, sidebar, contents and page, and this file paints it
+ * in the specimen's tokens: Recursive on its MONO axis, paper, skin and
+ * steel on ink, 1px rule hairlines, square corners, no fills or shadows.
+ *
+ * These rules are unlayered, so they beat Fumadocs' utilities. They set
+ * colour, borders, type and inner spacing only, never display, position,
+ * size or transforms, which drive the sidebar's collapse, the phone drawer
+ * and the responsive grid. They target Fumadocs' ids and data attributes,
+ * not its utility classes, where it has them.
+ */
+
+/* --- Type ------------------------------------------------------------- */
+
+body {
+	font-family: var(--font-spec);
+	font-variation-settings: "MONO" 0;
+	font-optical-sizing: auto;
+}
+
+/* Code, keys and anything Fumadocs sets in mono: the same family, MONO 1,
+   with no programming ligatures. The landing page sets its own. */
+:is(code, pre, kbd, samp, .font-mono):not(.spec *) {
+	font-family: var(--font-spec);
+	font-variation-settings: "MONO" 1;
+	font-variant-ligatures: none;
+}
+
+/* Keyboard focus, on every control the docs and their popovers draw. */
+:is(a, button, input, summary, [role="tab"], [tabindex]):focus-visible {
+	outline: 2px solid var(--color-lime);
+	outline-offset: 3px;
+}
+/* A scrolling code block's ring sits inside it, where it can't be cut. */
+:is(pre, .fd-scroll-container):focus-visible {
+	outline-offset: -2px;
+}
+
+/* --- The sidebar ------------------------------------------------------ */
+
+#nd-sidebar {
+	border-inline-end: 1px solid var(--color-rule);
+	background-color: var(--color-ink);
+}
+
+/* Pages and folders: steel, paper on hover, never a fill. */
+:is(#nd-sidebar, #nd-sidebar-mobile) :is(a, button) {
+	color: var(--color-steel);
+	background-color: transparent;
+	font-size: 15px;
+	line-height: 1.35;
+}
+:is(#nd-sidebar, #nd-sidebar-mobile) :is(a, button):hover {
+	color: var(--color-paper);
+	background-color: transparent;
+}
+
+/* The page you're on: paper, set heavier, and a lime dot in the margin
+   beside it, the mark's dot, at the same place at every depth. */
+:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active="true"] {
+	color: var(--color-paper);
+	font-weight: 600;
+	background-color: transparent;
+}
+:is(#nd-sidebar, #nd-sidebar-mobile) a[data-active="true"]::before {
+	content: "";
+	position: absolute;
+	inset: auto;
+	top: calc(50% - 3px);
+	left: -11px;
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	background-color: var(--color-lime);
+}
+/* In a folder, whose box clips the margin, the dot sits on the folder's
+   guide line instead. */
+:is(#nd-sidebar, #nd-sidebar-mobile)
+	a[data-active="true"][class*="before:start-2.5"]::before {
+	left: 8px;
+}
+
+/* The version menu at the sidebar's top: a ruled row, like the search. */
+:is(#nd-sidebar, #nd-sidebar-mobile) button[aria-haspopup] {
+	min-height: 44px;
+	border: 1px solid var(--color-rule);
+	color: var(--color-paper);
+	font-size: 14px;
+}
+:is(#nd-sidebar, #nd-sidebar-mobile) button[aria-haspopup]:hover {
+	border-color: var(--color-steel);
+}
+
+/* The phone drawer: ink, a hairline on its open edge, no shadow, and a
+   plain ink scrim behind it. */
+#nd-sidebar-mobile {
+	border-inline-start: 1px solid var(--color-rule);
+	background-color: var(--color-ink);
+	box-shadow: none;
+}
+[data-sidebar-drawer-overlay],
+#nd-sidebar-mobile ~ [class*="backdrop-blur"],
+.fixed.inset-0.backdrop-blur-xs {
+	backdrop-filter: none;
+	background-color: rgb(22 23 29 / 0.86);
+}
+
+/* --- On this page ------------------------------------------------------ */
+
+#toc-title {
+	font-family: var(--font-spec);
+	font-variation-settings: "MONO" 1;
+	font-size: 12px;
+	letter-spacing: 0.02em;
+	color: var(--color-steel);
+}
+#nd-toc a {
+	color: var(--color-steel);
+	font-size: 14px;
+	line-height: 1.4;
+}
+#nd-toc a:hover {
+	color: var(--color-paper);
+}
+/* The current heading is paper; the lime thumb beside the list marks it. */
+#nd-toc a[data-active="true"] {
+	color: var(--color-paper);
+}
+
+/* The phone's contents row, under the masthead. */
+[data-toc-popover] > * {
+	border-color: var(--color-rule);
+	background-color: var(--color-ink);
+	backdrop-filter: none;
+}
+[data-toc-popover-trigger] {
+	color: var(--color-steel);
+	font-size: 14px;
+}
+/* Its progress ring: the track in rule grey, only the arc in lime. */
+[data-toc-popover-trigger] svg circle:first-child {
+	stroke: var(--color-rule);
+}
+[data-toc-popover-content] a {
+	color: var(--color-steel);
+}
+[data-toc-popover-content] a[data-active="true"] {
+	color: var(--color-paper);
+}
+
+/* --- The page's opening ------------------------------------------------ */
+
+.docs-head {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding-bottom: 24px;
+	margin-bottom: 12px;
+	border-bottom: 1px solid var(--color-rule);
+}
+.docs-head h1 {
+	font-size: 1.625rem;
+	line-height: 1.08;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	color: var(--color-paper);
+	text-wrap: balance;
+}
+.docs-head h1 + p {
+	margin: 0;
+	max-width: 56ch;
+	font-size: 17px;
+	line-height: 1.55;
+	color: var(--color-steel);
+	text-wrap: pretty;
+}
+@media (min-width: 40rem) {
+	.docs-head h1 {
+		font-size: 2.25rem;
+	}
+}
+
+/* Copy Markdown and Open: ruled buttons in steel, like the search. */
+.docs-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 4px;
+}
+.docs-actions :is(button, a) {
+	height: 36px;
+	padding-inline: 12px;
+	border: 1px solid var(--color-rule);
+	background-color: transparent;
+	color: var(--color-steel);
+	font-size: 13px;
+	font-weight: 400;
+	transition:
+		color 150ms,
+		border-color 150ms;
+}
+.docs-actions :is(button, a):hover,
+.docs-actions [data-popup-open] {
+	border-color: var(--color-steel);
+	background-color: transparent;
+	color: var(--color-paper);
+}
+.docs-actions svg {
+	color: currentColor;
+}
+
+/* The trail over a nested page's title. */
+#nd-page > div:has(+ .docs-head) {
+	font-family: var(--font-spec);
+	font-variation-settings: "MONO" 1;
+	font-size: 12px;
+	color: var(--color-steel);
+}
+#nd-page > div:has(+ .docs-head) :is(a, span, p) {
+	color: var(--color-steel);
+}
+#nd-page > div:has(+ .docs-head) a:hover {
+	color: var(--color-paper);
+}
+
+/* --- The reading column ------------------------------------------------ */
+
+#nd-page .prose {
+	--tw-prose-body: var(--color-skin);
+	--tw-prose-headings: var(--color-paper);
+	--tw-prose-lead: var(--color-steel);
+	--tw-prose-links: var(--color-paper);
+	--tw-prose-bold: var(--color-paper);
+	--tw-prose-counters: var(--color-steel);
+	--tw-prose-bullets: var(--color-steel);
+	--tw-prose-hr: var(--color-rule);
+	--tw-prose-quotes: var(--color-skin);
+	--tw-prose-quote-borders: var(--color-rule);
+	--tw-prose-captions: var(--color-steel);
+	--tw-prose-code: var(--color-paper);
+	--tw-prose-th-borders: var(--color-rule);
+	--tw-prose-td-borders: var(--color-rule);
+	--tw-prose-kbd: var(--color-paper);
+	--tw-prose-kbd-shadows: var(--color-rule);
+	font-size: 16px;
+	line-height: 1.75;
+}
+@media (min-width: 64rem) {
+	#nd-page .prose {
+		font-size: 17px;
+	}
+}
+
+/* Prose keeps a reading measure; code, tables and type tables take the
+   column. */
+#nd-page .prose > :is(p, ul, ol, blockquote, h2, h3, h4, h5, h6, dl) {
+	max-width: 68ch;
+}
+
+/* Section openers: a hairline, then the heading, as on the landing page. */
+#nd-page .prose > h2 {
+	margin-top: 56px;
+	margin-bottom: 16px;
+	padding-top: 22px;
+	border-top: 1px solid var(--color-rule);
+	font-size: 1.625rem;
+	line-height: 1.15;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	text-wrap: balance;
+}
+#nd-page .prose > h3 {
+	margin-top: 36px;
+	margin-bottom: 10px;
+	font-size: 1.25rem;
+	line-height: 1.25;
+	font-weight: 600;
+	letter-spacing: -0.012em;
+}
+#nd-page .prose > h4 {
+	font-size: 1.0625rem;
+	font-weight: 600;
+}
+#nd-page .prose :is(h2, h3, h4) a {
+	text-decoration: none;
+}
+
+/* Links: paper, on a lime underline, the one place lime marks text you can
+   follow. Hover thickens it; nothing fades. */
+#nd-page .prose a:not([data-card]),
+.docs-callout a {
+	color: var(--color-paper);
+	font-weight: 500;
+	text-decoration-line: underline;
+	text-decoration-color: var(--color-lime);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 4px;
+	transition: text-decoration-thickness 120ms;
+}
+#nd-page .prose a:not([data-card]):hover,
+.docs-callout a:hover {
+	opacity: 1;
+	text-decoration-thickness: 2px;
+}
+
+#nd-page .prose strong {
+	font-weight: 600;
+}
+#nd-page .prose li::marker {
+	color: var(--color-steel);
+}
+
+/* Inline code: mono paper in a square hairline, no fill. */
+#nd-page .prose :not(pre) > code,
+.docs-callout :not(pre) > code {
+	padding: 0.08em 0.36em;
+	border: 1px solid var(--color-rule);
+	border-radius: 0;
+	background: transparent;
+	color: var(--color-paper);
+	font-size: 0.86em;
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+}
+#nd-page .prose a > code {
+	color: inherit;
+}
+/* A type table's property names are a column, not inline code. */
+#nd-page .prose [id^="type-table-"] code {
+	padding: 0;
+	border: 0;
+	font-size: 13.5px;
+}
+
+/* Tables: ruled rows, no box, headers as labels. */
+#nd-page .prose table {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	font-size: 15px;
+	line-height: 1.6;
+}
+#nd-page .prose th {
+	border-inline-start: 0;
+	border-bottom: 1px solid var(--color-rule);
+	background: transparent;
+	color: var(--color-steel);
+	font-family: var(--font-spec);
+	font-variation-settings: "MONO" 1;
+	font-size: 12px;
+	font-weight: 400;
+	letter-spacing: 0.02em;
+	vertical-align: bottom;
+}
+#nd-page .prose td {
+	border-inline-start: 0;
+	vertical-align: top;
+}
+#nd-page .prose :is(th, td):first-child {
+	padding-inline-start: 0;
+}
+#nd-page .prose :is(th, td) code {
+	white-space: nowrap;
+}
+
+/* --- Code -------------------------------------------------------------- */
+
+/* A block: ink inside a rule hairline, set in mono at the code size. */
+figure.shiki {
+	border: 1px solid var(--color-rule);
+	background-color: var(--color-ink);
+	box-shadow: none;
+}
+figure.shiki pre {
+	font-size: 13.5px;
+	line-height: 1.75;
+}
+@media (max-width: 39.99rem) {
+	figure.shiki pre {
+		font-size: 12.5px;
+	}
+}
+/* The whole program shows: a reader copies what they can see. */
+figure.shiki .fd-scroll-container {
+	max-height: none;
+}
+/* The copy button: steel, paper on hover, no fill. */
+figure.shiki button {
+	color: var(--color-steel);
+	background-color: transparent;
+}
+figure.shiki button:hover {
+	color: var(--color-paper);
+	background-color: var(--color-ink);
+}
+/* A block's title bar: a label over a hairline. */
+figure.shiki > div:first-child:not(:only-child) {
+	border-bottom: 1px solid var(--color-rule);
+	color: var(--color-steel);
+	font-family: var(--font-spec);
+	font-variation-settings: "MONO" 1;
+	font-size: 12px;
+}
+
+/* --- Type hovers ------------------------------------------------------- */
+
+/* A name with a type under it: a steel dotted rule on hover. */
+.twoslash .twoslash-hover {
+	border-bottom-color: transparent;
+}
+.twoslash:hover .twoslash-hover {
+	border-bottom-color: var(--color-rule);
+}
+.twoslash .twoslash-hover:hover {
+	border-bottom-color: var(--color-steel);
+}
+
+/* The popup: ink, ruled, square, no shadow; the type in mono, its docs in
+   the reading face. */
+.twoslash-popup-container,
+.twoslash-completion-list,
+[data-twoslash-popup],
+.fd-twoslash-popover {
+	border: 1px solid var(--color-rule);
+	border-radius: 0;
+	background-color: var(--color-ink);
+	color: var(--color-skin);
+	box-shadow: none;
+}
+.twoslash-popup-arrow {
+	border-color: var(--color-rule);
+	background-color: var(--color-ink);
+}
+.twoslash-popup-code {
+	font-size: 13px !important;
+	line-height: 1.6;
+}
+.twoslash-popup-docs,
+.twoslash-popup-docs-tags {
+	color: var(--color-skin);
+	font-size: 14px;
+	line-height: 1.6;
+}
+.twoslash-popup-docs-tag-name {
+	color: var(--color-steel);
+	font-weight: 400;
+}
+
+/* An error the compiler gives, as the landing page sets one: a steel wavy
+   rule under the code, the message in paper on a hairline. */
+.twoslash .twoslash-error {
+	text-decoration: wavy underline var(--color-steel) 1px;
+	text-underline-offset: 3px;
+}
+.twoslash .twoslash-error-line,
+.twoslash .twoslash-tag-line {
+	border: 1px solid var(--color-rule);
+	border-left-width: 1px;
+	background-color: transparent;
+	color: var(--color-paper);
+}
+
+/* --- Notes ------------------------------------------------------------- */
+
+.docs-callout {
+	margin-block: 28px;
+	padding: 16px 18px;
+	border: 1px solid var(--color-rule);
+	max-width: 68ch;
+}
+.docs-callout-title {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	color: var(--color-paper);
+	font-size: 15px;
+	line-height: 1.4;
+	font-weight: 600;
+}
+.docs-callout-icon {
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+	color: var(--color-steel);
+}
+.docs-callout-body {
+	margin-top: 8px;
+	padding-left: 28px;
+	color: var(--color-skin);
+	font-size: 15px;
+	line-height: 1.65;
+}
+.docs-callout-body > * + * {
+	margin-top: 0.75em;
+}
+/* A warning steps up a tone: a steel rule and a paper icon. */
+.docs-callout[data-kind="warning"],
+.docs-callout[data-kind="error"] {
+	border-color: var(--color-steel);
+}
+.docs-callout[data-kind="warning"] .docs-callout-icon,
+.docs-callout[data-kind="error"] .docs-callout-icon {
+	color: var(--color-paper);
+}
+/* Above the page's title, the note about an older release sits flush. */
+#nd-page > .docs-callout:first-child {
+	margin-top: 0;
+}
+
+/* --- Tabs, accordions, type tables ------------------------------------- */
+
+/* The current tab: paper over a 2px lime rule. */
+[role="tablist"] [role="tab"] {
+	color: var(--color-steel);
+}
+[role="tablist"] [role="tab"]:hover {
+	color: var(--color-paper);
+}
+[role="tablist"] [role="tab"][data-active],
+[role="tablist"] [role="tab"][aria-selected="true"] {
+	border-bottom: 2px solid var(--color-lime);
+	color: var(--color-paper);
+}
+
+/* Accordions: ruled rows, the question in paper, the chevron in steel. */
+#nd-page [data-accordion-value] button {
+	color: var(--color-paper);
+	font-weight: 500;
+}
+#nd-page [data-accordion-value] button svg {
+	color: var(--color-steel);
+}
+
+/* Type tables: each property a ruled row; its name in paper, not lime. */
+#nd-page .not-prose [class*="text-fd-primary"],
+#nd-page [class*="@container"] [class*="text-fd-primary"] {
+	color: var(--color-paper);
+}
+
+/* --- Previous and next ------------------------------------------------- */
+
+/* Two ruled rows: a label, the title in paper, the description in full. */
+.docs-pager {
+	display: grid;
+	gap: 0 24px;
+	margin-top: 40px;
+}
+@media (min-width: 48rem) {
+	.docs-pager {
+		grid-template-columns: 1fr 1fr;
+	}
+	.docs-pager-item[data-direction="next"] {
+		grid-column: 2;
+		text-align: end;
+	}
+}
+.docs-pager-item {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-block: 16px 20px;
+	border-top: 1px solid var(--color-rule);
+	transition: border-color 150ms;
+}
+.docs-pager-item:hover {
+	border-top-color: var(--color-steel);
+}
+.docs-pager-label {
+	font-variation-settings: "MONO" 1;
+	font-size: 12px;
+	letter-spacing: 0.02em;
+	color: var(--color-steel);
+}
+.docs-pager-title {
+	font-size: 17px;
+	font-weight: 600;
+	line-height: 1.3;
+	color: var(--color-paper);
+}
+.docs-pager-description {
+	font-size: 15px;
+	line-height: 1.5;
+	color: var(--color-steel);
+	text-wrap: pretty;
+}
+
+/* --- Search ------------------------------------------------------------ */
+
+#fd-search-dialog-content {
+	border: 1px solid var(--color-rule);
+	background-color: var(--color-ink);
+	box-shadow: none;
+}
+#fd-search-dialog-content input {
+	color: var(--color-paper);
+}
+/* The dialog opens on its field; the caret marks it, not a ring. */
+#fd-search-dialog-content input:focus-visible {
+	outline: none;
+}
+#fd-search-dialog-content input::placeholder {
+	color: var(--color-steel);
+}
+/* The result under the cursor: a lime inset rule, as a pressed control. */
+#fd-search-list [aria-selected="true"] {
+	background-color: transparent;
+	box-shadow: inset 0 0 0 2px var(--color-lime);
+	color: var(--color-paper);
+}
+/* A type table's result: a plain row like the text results, not a box
+   in the box. */
+#fd-search-list .not-prose.border,
+#fd-search-list .grid.border {
+	border-color: transparent;
+	background-color: transparent;
+	padding-inline: 0;
+}
+/* A result's property names, set lime by Fumadocs, in paper. */
+#fd-search-list [class*="text-fd-primary"],
+#fd-search-list [class*="text-fd-primary"] > :first-child {
+	color: var(--color-paper);
+}
+#fd-search-dialog-content ::highlight(fd-search) {
+	color: var(--color-paper);
+	text-decoration: underline var(--color-lime);
+}
+
+/* Popovers: the version menu, Open and search's filter. */
+[data-popup-open] + [role="menu"],
+[role="dialog"]:not(#fd-search-dialog-content),
+[data-side][role="menu"],
+[data-side][data-open] {
+	box-shadow: none;
+}
+
+/* --- Lime at its exact value ------------------------------------------- */
+
+/* Fumadocs mixes its primary with transparency in a few places the docs
+   can reach. Each takes an exact token instead. The current sidebar page's
+   tint is cleared above. */
+.hover\:bg-fd-primary\/80:hover {
+	background-color: var(--color-lime);
+}
+[id^="type-table-"] .line-through {
+	color: var(--color-steel);
+}
+.prose {
+	--tw-prose-kbd-shadows: var(--color-rule);
+}

@@ -2,8 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { staticFunctionMiddleware } from "@tanstack/start-static-server-functions";
 import { useFumadocsLoader } from "fumadocs-core/source/client";
-import { Callout } from "fumadocs-ui/components/callout";
-import { DocsLayout } from "fumadocs-ui/layouts/docs";
+import { DocsLayout } from "fumadocs-ui/layouts/notebook";
 import {
 	DocsBody,
 	DocsDescription,
@@ -11,9 +10,12 @@ import {
 	DocsTitle,
 	MarkdownCopyButton,
 	ViewOptionsPopover,
-} from "fumadocs-ui/layouts/docs/page";
+} from "fumadocs-ui/layouts/notebook/page";
 import { Suspense, use } from "react";
 
+import { Callout } from "@/components/docs/callout";
+import { DocsFooter } from "@/components/docs/footer";
+import { DocsHeader } from "@/components/docs/header";
 import { useMDXComponents } from "@/components/mdx";
 import { docs } from "@/lib/docs";
 import { baseOptions } from "@/lib/layout.shared";
@@ -109,26 +111,27 @@ function Content({
 	const MDX = page.body;
 
 	return (
-		<DocsPage toc={toc}>
+		<DocsPage toc={toc} slots={{ footer: DocsFooter }}>
 			{older && (
-				<Callout type="warn">
+				<Callout type="warn" title="An older release">
 					These docs are for Effetch {older.version}. The latest is{" "}
 					{latestLabel()}:{" "}
-					<Link to={older.latestUrl} className="font-medium underline">
-						read this page there
-					</Link>
-					.
+					<Link to={older.latestUrl}>read this page there</Link>.
 				</Callout>
 			)}
-			<DocsTitle>{page.title}</DocsTitle>
-			<DocsDescription>{page.description}</DocsDescription>
-			<div className="-mt-4 mb-2 flex flex-row items-center gap-2">
-				<MarkdownCopyButton markdownUrl={markdownUrl} />
-				<ViewOptionsPopover
-					markdownUrl={markdownUrl}
-					githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.ref}/site/content/docs/${encodeURI(path)}`}
-				/>
-			</div>
+			{/* The page's opening: its title, the lead and what you can do
+			    with the page, closed by a hairline. */}
+			<header className="docs-head">
+				<DocsTitle>{page.title}</DocsTitle>
+				<DocsDescription>{page.description}</DocsDescription>
+				<div className="docs-actions">
+					<MarkdownCopyButton markdownUrl={markdownUrl} />
+					<ViewOptionsPopover
+						markdownUrl={markdownUrl}
+						githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.ref}/site/content/docs/${encodeURI(path)}`}
+					/>
+				</div>
+			</header>
 			<DocsBody>
 				<MDX components={useMDXComponents()} />
 			</DocsBody>
@@ -142,7 +145,13 @@ function Page() {
 	);
 
 	return (
-		<DocsLayout {...baseOptions()} tree={pageTree}>
+		<DocsLayout
+			{...baseOptions()}
+			// The landing page's masthead, full width over the sidebar and page.
+			nav={{ ...baseOptions().nav, mode: "top" }}
+			slots={{ header: DocsHeader }}
+			tree={pageTree}
+		>
 			{/* For the prerender's crawler, which then writes every `.md` file. */}
 			<Link to={markdownUrl} hidden />
 			<Suspense>

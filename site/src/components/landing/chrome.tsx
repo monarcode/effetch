@@ -22,11 +22,28 @@ export function Wordmark() {
 	);
 }
 
-const navLink =
+/** A masthead link: steel, paper on hover. */
+export const navLink =
 	"inline-flex min-h-11 items-center text-[15px] text-steel transition-colors duration-150 hover:text-paper";
 
-export function Header() {
+/** The masthead's search: a ruled button, with ⌘K from 640px. */
+export function SearchButton({ className = "" }: { className?: string }) {
 	const search = useSearchContext();
+	if (!search.enabled) return null;
+	return (
+		<button
+			type="button"
+			onClick={() => search.setOpenSearch(true)}
+			className={`inline-flex h-11 items-center gap-2.5 border border-rule px-3 text-[15px] text-steel transition-colors duration-150 hover:border-steel hover:text-paper ${className}`}
+		>
+			<Search className="size-4" strokeWidth={1.75} aria-hidden="true" />
+			<span>Search</span>
+			<kbd className="spec-mono text-[12px] max-sm:hidden">⌘K</kbd>
+		</button>
+	);
+}
+
+export function Header() {
 	return (
 		<header className="spec-column">
 			<nav
@@ -59,21 +76,7 @@ export function Header() {
 				<a href={GITHUB} className={`${navLink} max-sm:hidden`}>
 					GitHub
 				</a>
-				{search.enabled && (
-					<button
-						type="button"
-						onClick={() => search.setOpenSearch(true)}
-						className="inline-flex h-11 items-center gap-2.5 border border-rule px-3 text-[15px] text-steel transition-colors duration-150 hover:border-steel hover:text-paper"
-					>
-						<Search
-							className="size-4"
-							strokeWidth={1.75}
-							aria-hidden="true"
-						/>
-						<span>Search</span>
-						<kbd className="spec-mono text-[12px] max-sm:hidden">⌘K</kbd>
-					</button>
-				)}
+				<SearchButton />
 			</nav>
 		</header>
 	);
