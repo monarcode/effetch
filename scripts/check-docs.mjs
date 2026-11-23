@@ -4,6 +4,8 @@ import path from "node:path";
 
 import ts from "typescript";
 
+import { renderReference } from "./reference-docs.mjs";
+
 const root = path.resolve(import.meta.dirname, "..");
 const entries = [
 	"src/index.ts",
@@ -31,6 +33,10 @@ const parsed = ts.getParsedCommandLineOfConfigFile(
 const options = { ...parsed.options, noEmit: true, plugins: [] };
 const problems = [];
 let exportCount = 0;
+// Every export the walk below checks, by the name readers use, such as
+// `Fetch.make`, `bearer` or `Fetch.HttpError.With`. The reference must list
+// each one.
+const documented = new Set();
 
 if (!existsSync(sitePages)) {
 	problems.push(
@@ -143,6 +149,7 @@ const checkDeclaration = (name, node, alias) => {
 		checkNamespace(name, node);
 		return;
 	}
+	documented.add(name);
 	if (isImplementation(node)) {
 		return;
 	}
@@ -257,6 +264,34 @@ const codeBlocks = (file, lines, firstLine) => {
 	}
 	return blocks;
 };
+
+// The reference pages are what `scripts/reference-docs.mjs` renders from the
+// JSDoc, so they can't fall behind it, and they list every export.
+let reference = { files: new Map(), names: [...documented] };
+try {
+	reference = renderReference(program);
+} catch (error) {
+	problems.push(error instanceof Error ? error.message : String(error));
+}
+for (const [file, body] of reference.files) {
+	const onDisk = path.join(root, file);
+	if (!existsSync(onDisk) || readFileSync(onDisk, "utf8") !== body) {
+		problems.push(
+			`${file}: out of date with the JSDoc. Run \`pnpm run docs:reference\`.`,
+		);
+	}
+}
+const listed = new Set(reference.names);
+for (const name of documented) {
+	if (!listed.has(name)) {
+		problems.push(`${name} is missing from the API reference`);
+	}
+}
+for (const name of listed) {
+	if (!documented.has(name)) {
+		problems.push(`the API reference lists ${name}, which isn't exported`);
+	}
+}
 
 const examples = [];
 const publicSources = program

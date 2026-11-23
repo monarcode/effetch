@@ -1,4 +1,11 @@
 {
 	"title": "Reference",
-	"pages": ["index", "limitations"]
+	"pages": [
+		"index",
+		"fetch",
+		"plugins",
+		"fetch-test",
+		"compatibility",
+		"limitations"
+	]
 }

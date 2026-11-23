@@ -58,9 +58,20 @@ to static files. It's a package in the pnpm workspace and isn't published.
   to them, so when a feature changes, update its page, and the README only
   if its quick start or links change. Link between pages with root-relative
   paths (`/docs/errors/status-errors`).
+- Every `ts` block on a page gets Twoslash type hovers, read from the
+  built package in `dist`, and a type error in one fails the site's build.
+  `no-twoslash` in a block's meta turns its hovers off, but the docs check
+  still compiles it, so use it only for an example whose hovers mislead.
+- The API reference pages (`reference/fetch.mdx`, `plugins.mdx` and
+  `fetch-test.mdx`) are generated from the JSDoc by
+  `scripts/reference-docs.mjs`. Don't edit them: after changing a public
+  export or its docs, run `pnpm run docs:reference`. A new export needs a
+  group in that script, and the docs check fails until it has one and the
+  pages match.
 - `pnpm run check` doesn't build the site. After changing `site/`, run
-  `pnpm run build:site`, which prerenders the site into `site/dist/client`.
-  `pnpm --dir site run dev` serves it while you write.
+  `pnpm run build:site`, which builds the package, then prerenders the site
+  into `site/dist/client`. `pnpm --dir site run dev` serves it while you
+  write, once `pnpm run build` has built `dist`.
 
 ## Before declaring any work done
 

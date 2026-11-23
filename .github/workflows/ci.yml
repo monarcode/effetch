@@ -90,7 +90,8 @@ jobs:
          - name: Install dependencies
            run: pnpm install --frozen-lockfile
 
-         # Prerenders every page, so it catches MDX syntax errors and broken
-         # pages, which `check` doesn't build.
-         - name: Build the docs site
+         # Builds the package, which the hovers and type tables read, then
+         # prerenders every page. That catches MDX syntax errors, broken pages
+         # and type errors in examples, which `check` doesn't build.
+         - name: Build the package and the docs site
            run: pnpm run build:site
