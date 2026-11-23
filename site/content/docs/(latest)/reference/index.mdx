@@ -1,94 +1,41 @@
 ---
 title: Entry points
-description: Find which entry point exports what, and which page covers each export.
+description: Find which entry point exports what, and the reference page that lists it.
 ---
 
-This page lists what each of Effetch's entry points exports, and which page
-of these docs covers it. For the known limits, see
-[Limitations](/docs/reference/limitations).
+This page lists Effetch's entry points and what each one exports. Each has a
+reference page that lists every export, with the first paragraph of its docs
+and a link to the guide that covers it.
 
-Every export is documented, with an example, in the type declarations your
-editor shows.
+## The entry points
 
-## @monarcode/effetch
+Effetch has three entry points:
 
-`@monarcode/effetch` exports the `Fetch` namespace.
+| Import                       | What it exports                                                                      | Reference                               |
+| ---------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------- |
+| `@monarcode/effetch`         | The `Fetch` namespace: clients, calls, errors, plugins, endpoints, streams and pages | [Fetch](/docs/reference/fetch)          |
+| `@monarcode/effetch/plugins` | The built-in plugins: `bearer`, `retry`, `timeout`, `logger` and `consoleLogger`     | [Plugins](/docs/reference/plugins)      |
+| `@monarcode/effetch/test`    | The `FetchTest` namespace: a fake backend for tests                                  | [FetchTest](/docs/reference/fetch-test) |
 
-The exports, and the pages that cover them:
+Two more subpaths export the same members without their namespace, for the
+declaration files TypeScript writes. In your own code, import from the
+entry points above, as [Installation](/docs/installation#import-effetch)
+explains.
 
-- `Service`, `ServiceClass` (and `ServiceClass.Any`), `isService`:
-  [declaring a client](/docs/clients).
-- `make`, `ClientConfig`, `Client`: [setting up a client](/docs/clients)
-  and [making calls](/docs/calls).
-- `endpoint`, `UnboundEndpoint`, `UnboundDefinition`, `AnyUnboundEndpoint`:
-  [defining endpoints](/docs/endpoints/defining).
-- `Endpoints`, `EndpointsClass`:
-  [sharing endpoints as a service](/docs/endpoints/services).
-- `BindMethod`, `BindOptions`, `BindAllMethod`, `EndpointDefinitions`,
-  `EndpointEntry`, `BoundEndpoint`, `BoundEndpoints`:
-  [other ways to bind endpoints](/docs/endpoints/calling).
-- `Endpoint`, `EndpointMethod`, `EndpointDefinition`, `EndpointOptions`,
-  `EndpointBody`, `EndpointArgs`, `EndpointRoute`, `ValidRoute`,
-  `RouteMethod`, `RoutePath`: [endpoints](/docs/endpoints).
-- `QuerySchema`, `EndpointQuery`:
-  [typed query parameters](/docs/endpoints/typed-query).
-- `EndpointUrlOptions`, `EndpointUrlArgs`:
-  [building an endpoint's URL](/docs/endpoints/urls).
-- `multipart`, `UploadFile`, `UploadFileSchema`, `NativeFile`,
-  `MultipartSchema`, `MultipartFields`, `MultipartValue`:
-  [upload files](/docs/calls/uploads).
-- `text`, `bytes`, `TextSchema`, `BytesSchema`:
-  [read text or bytes](/docs/calls/responses#read-text-or-bytes).
-- `NetworkError`, `HttpError` (and `HttpError.With`), `DecodeError`,
-  `FetchError`, `isFetchError`: [errors](/docs/errors).
-- `StatusError`, `StatusErrorMap`, `StatusErrorSchema`,
-  `StatusErrorServices`: [errors by status](/docs/errors/status-errors).
-- `catchStatus`, `optional`, `CaughtStatus`:
-  [catch a status](/docs/errors/catching#catch-a-status).
-- `SseEvent`, `StreamElement`, `StreamFormat`, `StreamMethod`,
-  `StreamOptions`: [streaming responses](/docs/streaming).
-- `paginate`, `PaginateOptions`, `PageEndpoint`, `PageRequest`, `PageOf`,
-  `PageResponse`: [pagination](/docs/pagination).
-- `plugin`, `Plugin` (and the `Plugin.*` helper types), `PluginContext`,
-  `PluginExitContext`:
-  [writing plugins](/docs/plugins/writing).
-- Option and result types, for wrapping the client in your own functions:
-  `RequestOptions`, `NoBodyRequestOptions`, `BaseOptions`, `BodyOptions`,
-  `ParamsOption`, `QueryInput`, `QueryOf`, `QueryValue`, `AnySchema`,
-  `Args`, `Success`, `ResponseMode`, `CallError`, `CallServices`,
-  `CallEffect`,
-  `NoBodyMethod`, `BodyMethod`, `RequestMethod`, `PathParamNames`,
-  `PathParams`, `PathParamValue`. `CallEffect` types a function that
-  returns a call; to take a call as an argument, accept any
-  `Effect.Effect<A, E, R>`.
+Every export is also documented, with an example, in the type declarations
+your editor shows: hover a name, or go to its definition.
 
-## @monarcode/effetch/plugins
+## Types for your own functions
 
-`@monarcode/effetch/plugins` exports the built-in [plugins](/docs/plugins).
+To wrap the client in a function of your own, type it with the option and
+result types under [Calls](/docs/reference/fetch#calls), such as
+`Fetch.RequestOptions` and `Fetch.CallEffect`. `CallEffect` types a function
+that returns a call. To take a call as an argument, accept any
+`Effect.Effect<A, E, R>`.
 
-The exports:
+## What's next
 
-- `bearer`, `BearerOptions`, `BearerPlugin`, `TokenSource`, `TokenValue`,
-  `RefreshSource`.
-- `logger`, `LoggerOptions`, `LoggerPlugin`.
-- `consoleLogger`, `ConsoleLoggerOptions`, `ConsoleLoggerSettings`,
-  `ConsoleLoggerPlugin`, `ConsoleLoggerDetail`, `ConsoleLoggerRedact`,
-  `ConsoleLoggerCall`, `ConsoleLoggerColor`.
-- `retry`, `RetryOptions`, `RetryPlugin`, `RetryBudgetOptions`,
-  `RetryBudgetPlugin`.
-- `timeout`, `TimeoutOptions`, `TimeoutPlugin`, `TimeoutError`.
-
-## @monarcode/effetch/test
-
-`@monarcode/effetch/test` exports the `FetchTest` namespace, covered in
-[testing](/docs/testing).
-
-The exports:
-
-- `layer`, `LayerOptions`, `Handler`, `HandlerServices`.
-- `respond`, `RespondRequest`, `RespondResult`, `TestEvent`, `RespondOptions`,
-  `RespondServices`, `RouteParams`, `RequestBody`, `RequestQuery`,
-  `QueryParams`, `TestEndpoint`.
-- `reply`, `Reply`, `ReplyOptions`.
-- `fail`, `FailBody`, `FailServices`.
-- `requests`, `Recorder`, `SentRequest`.
+- [Compatibility](/docs/reference/compatibility): the Effect versions,
+  runtimes and TypeScript settings Effetch supports.
+- [Limitations](/docs/reference/limitations): the known limits of paths,
+  plugins and streams.

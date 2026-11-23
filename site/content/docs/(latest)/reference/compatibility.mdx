@@ -1,0 +1,63 @@
+---
+title: Compatibility
+description: The Effect versions, runtimes and TypeScript settings Effetch supports and is tested with.
+---
+
+Check this page before you upgrade Effect, or to see whether your runtime
+and TypeScript settings are supported.
+
+## Effect
+
+Effetch has one peer dependency, `effect`, in the range `^4.0.0`. Install it
+next to Effetch, as [Installation](/docs/installation) shows.
+
+CI tests two versions in the range:
+
+- The full check (types, tests, the build and the installed package) runs
+  with the `effect` version pinned in Effetch's own `devDependencies`,
+  which can be older than the newest 4.x.
+- A second job typechecks, tests and builds with `effect` 4.0.0, the oldest
+  version in the range.
+
+## Runtimes
+
+Effetch runs wherever Effect's `HttpClient` does: browsers, React Native
+(with Hermes and Metro), Node.js 20 and newer, Bun and Deno. Its code uses
+no Node.js modules or globals, and joins URLs as strings rather than with
+the `URL` constructor.
+
+Effetch sends requests through the `HttpClient` you provide, so what your
+runtime needs depends on that client. `FetchHttpClient.layer` uses the
+global `fetch`. For what differs in browsers and React Native, see
+[Platform notes](/docs/platforms).
+
+CI runs the tests and the installed package on Node.js 24.
+
+## Modules
+
+The package is ESM only, and marks itself as free of side effects
+(`"sideEffects": false`), so bundlers drop what you don't import. Its
+`exports` map has a `types` and a `default` condition for each entry point.
+
+## TypeScript
+
+Effetch needs TypeScript 5.4 or newer. With `skipLibCheck: false`, Effect's
+own declarations need TypeScript 5.7 or newer.
+
+CI checks the types with TypeScript 6.0.3:
+
+- A project that installs the packed package compiles under `NodeNext` and
+  `Bundler` resolution, with `skipLibCheck: false`, and emits declaration
+  files that name Effetch's types.
+- Are the Types Wrong checks that the types resolve under Node.js's ESM
+  resolution and bundlers'.
+- Effetch's tests, examples and the examples in these docs compile with
+  `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` on. The
+  installed-package project compiles with them off.
+
+## What's next
+
+- [Limitations](/docs/reference/limitations): the known limits of paths,
+  plugins and streams.
+- [Platform notes](/docs/platforms): set up Effetch for browsers and React
+  Native.

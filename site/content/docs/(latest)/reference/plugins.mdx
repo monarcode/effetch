@@ -1,0 +1,235 @@
+---
+title: "Plugins"
+description: "Every export of @monarcode/effetch/plugins: the built-in plugins and their options."
+---
+
+{/* Written by scripts/reference-docs.mjs from the JSDoc. Run `pnpm run docs:reference` after changing it; don't edit this page. */}
+
+`@monarcode/effetch/plugins` exports the built-in plugins, their options and the types they return:
+
+```ts
+import {
+  bearer,
+  consoleLogger,
+  logger,
+  retry,
+  timeout,
+  TimeoutError,
+} from "@monarcode/effetch/plugins";
+```
+
+## Bearer tokens [#bearer-tokens]
+
+Guide: [Refresh a token](/docs/plugins/token-refresh).
+
+### bearer [#bearer]
+
+Sends `Authorization: <scheme> <token>` with every request.
+
+### BearerOptions [#beareroptions]
+
+Options for [`bearer`](#bearer).
+
+- `token`: where the token comes from (see [`TokenSource`](#tokensource)). It's resolved for every request, inside that request's fiber, and never cached, so a refreshed or cleared token takes effect on the next request.
+- `scheme`: the word before the token. Defaults to `"Bearer"`.
+- `refresh`: where a new token comes from when the server answers `401` to a request that `bearer` sent a token with (see [`RefreshSource`](#refreshsource)). The request is then sent once more, with the new token. Without `refresh`, a `401` is returned as it is.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/plugins/bearer.d.ts"
+  name="BearerOptions"
+/>
+
+### BearerPlugin [#bearerplugin]
+
+The plugin made by [`bearer`](#bearer): it fails with `E` and needs `R`, the errors and services of the `token` and `refresh` Effects. Calls can only skip it (`plugins: { bearer: false }`).
+
+### RefreshSource [#refreshsource]
+
+Where [`bearer`](#bearer) gets a new token when the server answers `401`:
+
+- a function of the request that was refused, as it was sent, returning the new token or a promise of it;
+- an Effect, whose error and services become the plugin's (and so the client's).
+
+### TokenSource [#tokensource]
+
+Where [`bearer`](#bearer) gets the token, for every request:
+
+- a string, for a token that never changes;
+- a function of the request, returning the token or a promise of it;
+- an Effect, whose error and services become the plugin's (and so the client's).
+
+### TokenValue [#tokenvalue]
+
+What a token source gives: the token, or `null`, `undefined` or `""` to send the request without an `Authorization` header.
+
+## Retries [#retries]
+
+Guide: [Retry-After and a time limit](/docs/plugins/retry-after).
+
+### retry [#retry]
+
+Retries a call that failed with a `NetworkError` or got a retryable status, for the configured methods only (idempotent ones by default, so a `POST` is never sent twice).
+
+### RetryBudgetOptions [#retrybudgetoptions]
+
+Options for [`retry`](#retry) with a time limit for the whole call: [`RetryOptions`](#retryoptions), plus `budget`.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/plugins/retry.d.ts"
+  name="RetryBudgetOptions"
+/>
+
+### RetryBudgetPlugin [#retrybudgetplugin]
+
+The plugin made by [`retry`](#retry) with a `budget`. It fails with `TimeoutError` when the budget runs out during an attempt. Calls can override `times` and `budget`, or skip it.
+
+### RetryOptions [#retryoptions]
+
+Options for [`retry`](#retry).
+
+- `times`: how many times to retry, after the first attempt. Defaults to `2`. Calls can override it.
+- `schedule`: the delays between attempts. Defaults to an exponential backoff from 200ms, with jitter. `times` still caps the retries.
+- `methods`: the methods that are retried. Defaults to the idempotent ones: `GET`, `HEAD`, `OPTIONS`, `PUT` and `DELETE`.
+- `statuses`: the response statuses that are retried. Defaults to `408`, `429`, `500`, `502`, `503` and `504`.
+- `retryAfter`: whether to wait as long as a retried response's `Retry-After` header asks, in place of the schedule's next delay. `true` caps the wait at 1 minute, and `{ max }` at `max`. Defaults to `false`.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/plugins/retry.d.ts"
+  name="RetryOptions"
+/>
+
+### RetryPlugin [#retryplugin]
+
+The plugin made by [`retry`](#retry). It adds no errors; calls can override `times` or skip it.
+
+## Time limits [#time-limits]
+
+Guide: [Choose a time limit](/docs/plugins#choose-a-time-limit).
+
+### timeout [#timeout]
+
+Fails the call with a [`TimeoutError`](#timeouterror), and aborts the request, when the response headers don't arrive within `duration`.
+
+### TimeoutError [#timeouterror]
+
+No response arrived within the [`timeout`](#timeout) plugin's duration. The request was aborted.
+
+- `url` is the request URL without its query string.
+- `duration` is the limit that was exceeded, formatted (`"10s"`).
+
+### TimeoutOptions [#timeoutoptions]
+
+Options for [`timeout`](#timeout), and what a call can override: `plugins: { timeout: { duration } }`.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/plugins/timeout.d.ts"
+  name="TimeoutOptions"
+/>
+
+### TimeoutPlugin [#timeoutplugin]
+
+The plugin made by [`timeout`](#timeout): it adds [`TimeoutError`](#timeouterror), and calls can override its `duration` or skip it.
+
+## Logging [#logging]
+
+Guide: [Built-in plugins](/docs/plugins#what-each-plugin-does).
+
+### logger [#logger]
+
+Logs one entry per call with Effect's logger: the method, the URL, the status and how long the response took, e.g. `GET https://api.example.com/todos 200 (35ms)`, or `… failed (35ms)` with the failure's cause.
+
+### LoggerOptions [#loggeroptions]
+
+Options for [`logger`](#logger).
+
+- `level`: the log level of every entry, `"Debug"` (the default) or `"Info"`. Effect's default logger hides Debug entries unless the minimum log level allows them.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/plugins/logger.d.ts"
+  name="LoggerOptions"
+/>
+
+### LoggerPlugin [#loggerplugin]
+
+The plugin made by [`logger`](#logger). Calls can only skip it (`plugins: { logger: false }`).
+
+## Console logging [#console-logging]
+
+Guide: [Log to the console](/docs/plugins/console-logging).
+
+### consoleLogger [#consolelogger]
+
+Prints each call to the console while you develop: one line per call, opening a group with its URL, headers, bodies and error.
+
+### ConsoleLoggerCall [#consoleloggercall]
+
+The call `ConsoleLoggerOptions.filter` decides on.
+
+- `route`: the call's method and unfilled path, such as `"GET /users/:id"`.
+- `request`: the request that was sent, after every plugin changed it. Without a response, it's the request as the call built it, before plugins ran.
+- `response`: the response, or `undefined` when there was none.
+- `exit`: the call's outcome.
+- `durationMs`: how long the call took, in milliseconds.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/plugins/consoleLogger.d.ts"
+  name="ConsoleLoggerCall"
+/>
+
+### ConsoleLoggerColor [#consoleloggercolor]
+
+How [`consoleLogger`](#consolelogger) colors its output.
+
+- `"auto"`: `"css"` where there's a `document` (browsers), else `false`.
+- `"css"`: `%c` styles, for browser devtools and React Native DevTools.
+- `"ansi"`: terminal escape codes, for Node, Bun and Deno.
+- `false`: plain text.
+
+### ConsoleLoggerDetail [#consoleloggerdetail]
+
+How much [`consoleLogger`](#consolelogger) prints for each call.
+
+- `"summary"`: one line, such as `✗ POST /users/:id/roles  400 Bad Request  120 ms  → InvalidRole`.
+- `"headers"`: that line opens a group holding the full URL, the request and response headers, and the error.
+- `"full"`: the request and response bodies too.
+
+### ConsoleLoggerOptions [#consoleloggeroptions]
+
+Options for [`consoleLogger`](#consolelogger). All are optional.
+
+- `enabled`: `false` makes the plugin do nothing, keeping its type, so it can stay in the plugin list in production. Defaults to `true`.
+- `detail`: `"summary"`, `"headers"` or `"full"` (the default). See [`ConsoleLoggerDetail`](#consoleloggerdetail).
+- `only`: `"all"` calls (the default), or `"errors"` for failed ones only. An interrupted call isn't a failed one.
+- `collapsed`: whether groups start collapsed. Defaults to `true`, and to `false` in React Native: Metro's terminal drops `console.groupCollapsed` and everything logged inside it. Node, Bun and Deno print collapsed groups expanded.
+- `slow`: calls that take at least this long are flagged with `⚠` and `(slow)`. Defaults to `false`, flagging none.
+- `maxBodyLength`: body text longer than this many characters is cut. A JSON body within it is printed as an object, for devtools to expand; a longer one as its cut text. Defaults to `10_000`.
+- `redact`: names to redact on top of the defaults, or `false` to redact nothing. See [`ConsoleLoggerRedact`](#consoleloggerredact).
+- `filter`: prints only the calls it returns `true` for.
+- `color`: see [`ConsoleLoggerColor`](#consoleloggercolor). Defaults to `"auto"`.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/plugins/consoleLogger.d.ts"
+  name="ConsoleLoggerOptions"
+/>
+
+### ConsoleLoggerPlugin [#consoleloggerplugin]
+
+The plugin made by [`consoleLogger`](#consolelogger). Calls can skip it (`plugins: { consoleLogger: false }`) or override its [`ConsoleLoggerSettings`](#consoleloggersettings).
+
+### ConsoleLoggerRedact [#consoleloggerredact]
+
+Names to redact on top of [`consoleLogger`](#consolelogger)'s defaults. Strings match a name ignoring case, `-` and `_`, so `"accessToken"` also matches `access_token` and `Access-Token`. A `RegExp` is tested against the name as it is.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/plugins/consoleLogger.d.ts"
+  name="ConsoleLoggerRedact"
+/>
+
+### ConsoleLoggerSettings [#consoleloggersettings]
+
+The options of [`consoleLogger`](#consolelogger) that calls can override, with `plugins: { consoleLogger: { ... } }`. See [`ConsoleLoggerOptions`](#consoleloggeroptions) for what each does.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/plugins/consoleLogger.d.ts"
+  name="ConsoleLoggerSettings"
+/>

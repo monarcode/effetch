@@ -7,15 +7,20 @@ import { getSlugs } from "fumadocs-core/source";
 import { fumadocsMdx } from "fumadocs-mdx/vite";
 import { defineConfig } from "vite";
 
+import { mdxOptions } from "./src/lib/mdx-options.ts";
+
 // Every docs page, so the prerender doesn't depend on the sidebar linking to
 // each one.
 const docsPages: { path: string }[] = [];
 for await (const entry of glob("**/*.mdx", { cwd: "content/docs" }))
 	docsPages.push({ path: ["/docs", ...getSlugs(entry)].join("/") });
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
 	plugins: [
-		fumadocsMdx(),
+		// The pages' MDX options run here, in the build, never in the browser.
+		fumadocsMdx({
+			globalOptions: { mdxOptions: mdxOptions(command === "build") },
+		}),
 		tailwindcss(),
 		tanstackStart({
 			// Static files only: every page is prerendered to HTML at build time.
@@ -33,4 +38,4 @@ export default defineConfig({
 	resolve: {
 		tsconfigPaths: true,
 	},
-});
+}));

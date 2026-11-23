@@ -1,0 +1,169 @@
+---
+title: "FetchTest"
+description: "Every member of the FetchTest namespace: the fake backend for tests and the requests it records."
+---
+
+{/* Written by scripts/reference-docs.mjs from the JSDoc. Run `pnpm run docs:reference` after changing it; don't edit this page. */}
+
+`@monarcode/effetch/test` exports one name, the `FetchTest` namespace. Its members:
+
+```ts
+import { FetchTest } from "@monarcode/effetch/test";
+```
+
+## Fake backend [#fake-backend]
+
+Guide: [Test with a fake backend](/docs/testing).
+
+### FetchTest.fail [#fail]
+
+Makes a handler that answers every request to `endpoint` with the error status `status`, for [`layer`](#layer). To answer some requests with an error and others with data, return a [`reply`](#reply) from [`respond`](#respond) instead.
+
+### FetchTest.layer [#layer]
+
+Makes a fake backend: an `HttpClient` layer that answers requests with `handlers`, without a network. Provide it where `FetchHttpClient.layer` goes, under a real client with its plugins, so a test runs the same code as production, schemas included.
+
+- **Matching.** A request is answered by the handler whose route matches its method and path. Without `options.baseUrl`, a route matches the end of the path, so `GET /todos/:id` answers `https://api.test/v1/todos/1`. When several routes match, the longest wins, then the one with the most literal segments (`/todos/count` before `/todos/:id`), then the one listed first. A route with an absolute URL matches that URL only.
+- **No match.** A request no handler matches is a defect. Its message lists the routes the backend has, and the ones that match the path with another method.
+- **Recording.** The layer also provides the [`Recorder`](#recorder), with a new record each time it's built. Read it with [`requests`](#requests).
+- **Services.** The layer needs the services its handlers need. A handler runs with the services the layer was built with, and those of the call it answers, which win when both have one.
+
+### FetchTest.reply [#reply]
+
+Makes a response that a [`respond`](#respond) handler sends as it is, for any status: a `201` with a `location` header, a `404` for a missing item, a `500`. The body isn't checked against the endpoint's schemas.
+
+### FetchTest.respond [#respond]
+
+Makes a handler that answers `endpoint`'s requests with `handler`, for [`layer`](#layer).
+
+### FetchTest.FailBody [#failbody]
+
+The body [`fail`](#fail) takes for endpoint `EP` and status `S`: a value of the `statusErrors` schemas for `S`, or of the `error` schema.
+
+- On a bound endpoint, `statusErrors` has the endpoint's and the client's schemas, but not their statuses, so the body may be a value of any of them. Its `error` is always set, `Schema.Unknown` by default, which takes anything.
+- On a definition without `error`, a status without `statusErrors` takes any body, as the client's `defaultError` isn't known.
+
+### FetchTest.FailServices [#failservices]
+
+The services a [`fail`](#fail) handler for endpoint `EP` needs: those of encoding its `statusErrors` and `error` schemas.
+
+### FetchTest.Handler [#handler]
+
+One route of the fake backend, made by [`respond`](#respond) or [`fail`](#fail). Pass a list of them to [`layer`](#layer).
+
+- `R`: the services it needs to run, which the layer then needs.
+
+### FetchTest.HandlerServices [#handlerservices]
+
+The services handler `H` needs to run: `R` for a `Handler<R>`. For a union of handlers, the union of their services, which is what [`layer`](#layer) needs.
+
+### FetchTest.LayerOptions [#layeroptions]
+
+Options for [`layer`](#layer).
+
+- `baseUrl`: where the routes start, such as `"https://api.test/v1"`. With it, a request matches a route only when its URL is the `baseUrl`, then the route's path. Without it, a route matches the end of a request's path, whatever comes before it, so the fake backend works under any client's `baseUrl`.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/test/FetchTest.d.ts"
+  name="LayerOptions"
+/>
+
+### FetchTest.QueryParams [#queryparams]
+
+The query parameters of a request, as they were in the URL (decoded): a `string` per key, or a list of strings for a key that was repeated.
+
+### FetchTest.Reply [#reply-type]
+
+A response sent as it is, made by [`reply`](#reply). A [`respond`](#respond) handler returns one to answer with another status, such as `201` or `404`.
+
+### FetchTest.ReplyOptions [#replyoptions]
+
+Options for a [`reply`](#reply) or a [`fail`](#fail) handler.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/test/FetchTest.d.ts"
+  name="ReplyOptions"
+/>
+
+### FetchTest.RespondOptions [#respondoptions]
+
+Options for the responses of a [`respond`](#respond) handler that aren't a [`Reply`](#reply-type).
+
+- `status`: the status, from 200 to 599. Defaults to `200`, or to `204` when there's no body to send.
+- `headers`: sent with the response, over its content type.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/test/FetchTest.d.ts"
+  name="RespondOptions"
+/>
+
+### FetchTest.RespondRequest [#respondrequest]
+
+What a [`respond`](#respond) handler is called with, for one request to route `R`, whose endpoint has the `input` schema `I` and the query schema `QS`.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/test/FetchTest.d.ts"
+  name="RespondRequest"
+/>
+
+### FetchTest.RespondResult [#respondresult]
+
+What a [`respond`](#respond) handler succeeds with, for an endpoint with the `output` schema `O` and the stream format `St`, or a [`Reply`](#reply-type):
+
+- without `St`: a value of `output`'s `Type`, encoded with `output` before it's sent. Without `output`, the value is sent by its runtime type (see [`reply`](#reply)).
+- `"sse"`: a list of [`TestEvent`](#testevent)s, sent as Server-Sent Events. An `event` or `id` with a line break can't be sent, and the call dies.
+- `"ndjson"`: a list of values of `output`'s `Type` (anything that has a JSON form without `output`), sent one per line. With `Fetch.text()`, a value with a line break, or a blank one, can't be sent as one line, and the call dies.
+
+### FetchTest.RespondServices [#respondservices]
+
+The services a [`respond`](#respond) handler for endpoint `EP` needs, besides its own: those of encoding `output`, and of decoding `input` and the query schema.
+
+### FetchTest.RouteParams [#routeparams]
+
+The path params a handler gets for route `R`: one key per `:param`, each a `string`, as it was in the URL (decoded).
+
+### FetchTest.TestEndpoint [#testendpoint]
+
+An endpoint the fake backend can answer for: one made by `Fetch.endpoint`, `client.endpoint` or `client.bind`. The fake backend reads its route and its schemas.
+
+### FetchTest.TestEvent [#testevent]
+
+One event a [`respond`](#respond) handler sends to an SSE endpoint (one with `stream: "sse"`): its `data`, of `output`'s `Type` (a `string` without `output`), and optionally its `event` name and `id`.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/test/FetchTest.d.ts"
+  name="TestEvent"
+/>
+
+## Recorded requests [#recorded-requests]
+
+Guide: [Check what was sent](/docs/testing/requests).
+
+### FetchTest.Recorder [#recorder]
+
+The service that keeps the requests the fake backend received, in the order it received them. [`layer`](#layer) provides it, with a new, empty record each time the layer is built. Read it with [`requests`](#requests).
+
+### FetchTest.requests [#requests]
+
+The requests the fake backend received so far, oldest first.
+
+### FetchTest.RequestBody [#requestbody]
+
+The body a handler gets for route `R`, whose endpoint has the `input` schema `I`:
+
+- `undefined` for a route whose method takes no body, such as `GET`;
+- the decoded body, typed by `I`, with an `input` schema;
+- `unknown` otherwise: the JSON value for a JSON body, the text for a text or form body, the bytes for other bytes, the `FormData` or stream as it was sent, and `undefined` without a body.
+
+### FetchTest.RequestQuery [#requestquery]
+
+The query a handler gets: decoded with the endpoint's query schema `QS` when it has one, as the call gave it, and the raw [`QueryParams`](#queryparams) otherwise.
+
+### FetchTest.SentRequest [#sentrequest]
+
+A request the fake backend received, as the [`Recorder`](#recorder) keeps it.
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/test/FetchTest.d.ts"
+  name="SentRequest"
+/>

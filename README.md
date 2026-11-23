@@ -57,7 +57,7 @@ export const getTodo = (id: number) =>
 
 ## Documentation
 
-The guides are at
+The guides and the API reference are at
 **[effetch.pages.dev/docs](https://effetch.pages.dev/docs)**.
 
 ## Install
@@ -151,7 +151,9 @@ Calling an API from a web page on another origin? Read
 - [Platform notes](https://effetch.pages.dev/docs/platforms): browsers and React Native.
 - [Coming from axios or ky](https://effetch.pages.dev/docs/coming-from-axios-or-ky).
 - [Upgrade from 0.1.0-rc.3](https://effetch.pages.dev/docs/upgrading).
-- [Reference](https://effetch.pages.dev/docs/reference): the entry points, and
+- [Reference](https://effetch.pages.dev/docs/reference): every export of
+  `Fetch`, the plugins and `FetchTest`, with
+  [Compatibility](https://effetch.pages.dev/docs/reference/compatibility) and
   [Limitations](https://effetch.pages.dev/docs/reference/limitations).
 
 ## Examples
@@ -190,19 +192,22 @@ pnpm install
 pnpm run check
 ```
 
-| Script                | What it does                                                                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm run build`      | Builds `dist/` (ESM and `.d.ts`) with tsdown.                                                                                                          |
-| `pnpm test`           | Runs the tests and type tests with Vitest.                                                                                                             |
-| `pnpm run typecheck`  | Typechecks `src`, `test` and `examples`.                                                                                                               |
-| `pnpm run lint`       | Lints with oxlint (`lint:effect` runs the Effect language service).                                                                                    |
-| `pnpm run format`     | Formats with oxfmt (`format:check` only checks).                                                                                                       |
-| `pnpm run check:docs` | Checks every public export has a description, `@example` and `@since`, and compiles every example in the JSDoc, this README and the docs site's pages. |
-| `pnpm run smoke`      | Packs the package, installs it in a fresh project, typechecks and runs a consumer, and checks go-to-definition, hovers and completions.                |
-| `pnpm run check`      | All of the above, plus publint and attw. CI runs it on every push to `main` and every pull request.                                                    |
-| `pnpm run build:site` | Prerenders the docs site in `site/` to `site/dist/client`. `check` doesn't build the site; CI does.                                                    |
+| Script                    | What it does                                                                                                                                                                                              |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm run build`          | Builds `dist/` (ESM and `.d.ts`) with tsdown.                                                                                                                                                             |
+| `pnpm test`               | Runs the tests and type tests with Vitest.                                                                                                                                                                |
+| `pnpm run typecheck`      | Typechecks `src`, `test` and `examples`.                                                                                                                                                                  |
+| `pnpm run lint`           | Lints with oxlint (`lint:effect` runs the Effect language service).                                                                                                                                       |
+| `pnpm run format`         | Formats with oxfmt (`format:check` only checks).                                                                                                                                                          |
+| `pnpm run check:docs`     | Checks every public export has a description, `@example` and `@since`, compiles every example in the JSDoc, this README and the docs site's pages, and checks the site's API reference matches the JSDoc. |
+| `pnpm run smoke`          | Packs the package, installs it in a fresh project, typechecks and runs a consumer, and checks go-to-definition, hovers and completions.                                                                   |
+| `pnpm run check`          | All of the above, plus publint and attw. CI runs it on every push to `main` and every pull request.                                                                                                       |
+| `pnpm run build:site`     | Builds the package, then prerenders the docs site in `site/` to `site/dist/client`, failing on a type error in an example. `check` doesn't build the site; CI does.                                       |
+| `pnpm run docs:reference` | Writes the site's API reference pages from the JSDoc. Run it after changing a public export or its docs.                                                                                                  |
 
-To work on the docs site, run `pnpm --dir site run dev`.
+To work on the docs site, run `pnpm run build`, then `pnpm --dir site run dev`.
+The site's type hovers and tables read the built package, so build again
+after changing `src/`.
 
 The pre-commit hook runs `lint` and `format:check`.
 

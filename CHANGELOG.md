@@ -9,6 +9,12 @@ All notable changes to `@monarcode/effetch`, newest first.
 - Documentation site at [effetch.pages.dev/docs](https://effetch.pages.dev/docs),
   with a page for each guide that was in the README, and search. The
   package's `homepage` points to it.
+- The site's examples show each name's type and docs on hover, and its
+  [API reference](https://effetch.pages.dev/docs/reference) lists every
+  export of `Fetch`, the plugins and `FetchTest`, with tables of the option
+  types. A [Compatibility](https://effetch.pages.dev/docs/reference/compatibility)
+  page lists the supported Effect versions, runtimes and TypeScript
+  settings.
 
 ### Changed
 
