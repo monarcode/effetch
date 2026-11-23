@@ -31,10 +31,6 @@ Declares a client as a service class: one class that is the client's service key
 
 A client made by [`make`](#make). Every call returns an Effect that needs no services, apart from those its schemas require (the call's or endpoint's own, and the client's `defaultError` and `statusErrors`), and that can fail with the plugins' errors and the `statusErrors` that apply, on top of Effetch's own.
 
-- `Ps`: the plugins the client was made with.
-- `EB`: the client's `defaultError` schema.
-- `SE`: the client's `statusErrors` map, or `undefined` without one.
-
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/Client.d.ts"
   name="Client"
@@ -43,12 +39,6 @@ A client made by [`make`](#make). Every call returns an Effect that needs no ser
 ### Fetch.ClientConfig [#clientconfig]
 
 Configuration for [`make`](#make).
-
-- `baseUrl`: prepended to every path that isn't already an absolute `http://` or `https://` URL. A string, or an Effect (a `Config` works) that's run once, when the client is made. It can't contain a query string or a fragment: pass those with each call's `query` option.
-- `headers`: sent with every request. A header passed to a call replaces the client's one of the same name. `content-type` and `content-length` are ignored here: they come from each request's body (set `content-type` on a call to override it). When a call has an `output` schema, Effetch sends an `Accept` header that matches it (`application/json`, or text for `Fetch.text()`), unless an `accept` header is set here or on the call.
-- `defaultError`: the schema for non-2xx response bodies of calls that don't pass their own `error` option. A call's `error` replaces it.
-- `statusErrors`: turns error responses into your own errors, by status, for every call (see [`StatusErrorMap`](#statuserrormap)). An endpoint's or a call's own `statusErrors` are tried first.
-- `plugins`: hooks into every call (see [`Plugin`](#plugin-type)). `plugins[0]` is the outermost layer: its `onRequest` runs first and its `onResponse` last. Names must be unique. Pass the list inline: annotating it as `Plugin.Any[]` erases the plugins' types.
 
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/Client.d.ts"
@@ -78,13 +68,6 @@ The rest arguments after the path: the options object `T` is required when path 
 ### Fetch.BaseOptions [#baseoptions]
 
 Options shared by every method.
-
-- `O`: the `output` schema, or `undefined` for the raw response.
-- `EB`: the `error` schema for non-2xx bodies.
-- `Ps`: the client's plugins, for the `plugins` override map.
-- `Q`: the type of `query`, checked with [`QueryOf`](#queryof). Defaults to [`QueryInput`](#queryinput).
-- `SE`: the call's `statusErrors` map, or `undefined` without one.
-- `M`: the call's [`ResponseMode`](#responsemode), or `undefined` without one.
 
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/Options.d.ts"
@@ -330,12 +313,6 @@ Defines a plugin. Returns its argument unchanged; it exists to infer `Name`, the
 
 A plugin hooks into every call a client makes.
 
-- `onRequest` can change the request, or fail. Plugins run it in array order. It sees the full URL and the client's default headers.
-- `onResponse` can change the response, or fail. It runs in reverse order and sees every response, non-2xx included: the library checks the status and decodes `output` only after the whole plugin chain.
-- `onError` observes any failure of the call (after status check and decoding) and can't change the outcome.
-- `onExit` observes the end of every call, success included, with its outcome, its response and how long it took (see [`PluginExitContext`](#pluginexitcontext)). It can't change the outcome either.
-- `wrap` wraps the rest of the chain, for retries, timeouts and the like. It can add errors (`E`) but can't remove the ones from further in.
-
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/Plugin.d.ts"
   name="Plugin"
@@ -405,10 +382,6 @@ The `wrap` hook: wraps the rest of the chain (`client`). Its error and service t
 
 What a plugin hook receives besides the request or response.
 
-- `request`: in `onRequest`, the request it receives. In `onResponse`, the request this plugin passed on (plugins after it may have changed it further; `response.request` is the one that was sent). In `onError` and `onExit`, the request as the call built it, before any plugin ran.
-- `options`: the plugin's `defaults` merged with this call's override, `{ ...defaults, ...override }`, where `undefined` values in the override keep the default. `undefined` for a plugin without `defaults`.
-- `route`: the call's method and path as written, before its params are filled in, such as `"GET /users/:id"`. It's the same for every call to that path, whether made with a method like `get` or an endpoint, so logs and metrics can be grouped by it. `undefined` for requests sent through `client.httpClient`.
-
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/Plugin.d.ts"
   name="PluginContext"
@@ -467,9 +440,6 @@ The signature of `client.bind`: turns an [`UnboundEndpoint`](#unboundendpoint) i
 
 What `client.bind` takes besides the definition: headers and plugin overrides for every call of the bound endpoint.
 
-- `headers`: sent with every call, over the definition's headers. A call's own header of the same name wins.
-- `plugins`: per-plugin overrides, as in a call's `plugins` option, checked against the client's plugins. A call's own override for a plugin wins, and when both give options, they're merged.
-
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/Endpoint.d.ts"
   name="BindOptions"
@@ -498,16 +468,6 @@ The `body` option of an endpoint call: not allowed on `GET`, `HEAD`, `OPTIONS` a
 ### Fetch.EndpointDefinition [#endpointdefinition]
 
 What an endpoint is defined with, besides its route. Everything is optional.
-
-- `output`: decodes the 2xx body, read as JSON, or as text or bytes with `Fetch.text()` and `Fetch.bytes()`. Without it, the endpoint succeeds with the raw `HttpClientResponse`.
-- `error`: decodes non-2xx bodies into `HttpError.body`, replacing the client's `defaultError`.
-- `statusErrors`: turns error responses into your own errors, by status (see [`StatusErrorMap`](#statuserrormap)). Tried before the client's.
-- `input`: encodes `body` before it's sent as JSON, and makes `body` required on every call. Not allowed on `GET`, `HEAD`, `OPTIONS` and `TRACE` endpoints, which take no body.
-- `headers`: sent with every call, over the client's headers. A call's own header of the same name wins. Unlike the client's headers, these can set `content-type`.
-- `plugins`: per-plugin overrides for every call, as in a call's `plugins` option. A call's own override for a plugin wins, and when both give options, they're merged.
-- `responseMode`: what every call succeeds with (see [`ResponseMode`](#responsemode)). A call's own `responseMode` wins.
-- `query`: a schema for the query parameters (see [`QuerySchema`](#queryschema)). Each call's `query` is then typed by it, and encoded with it.
-- `stream`: `"sse"` or `"ndjson"` makes every call return a `Stream` of the body's values (see [`StreamFormat`](#streamformat)).
 
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/Endpoint.d.ts"
@@ -599,10 +559,6 @@ Guide: [Streaming responses](/docs/streaming).
 
 One Server-Sent Event, as `api.sse` and SSE endpoints give it (see [`StreamElement`](#streamelement)).
 
-- `event`: the event's name, `"message"` when the server sends none.
-- `id`: the last event ID the server sent, which carries over to the events after it, or `undefined`.
-- `data`: the event's data, decoded with `output`: as JSON, or as text with `Fetch.text()`. Without `output`, the text as it was sent.
-
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/Streams.d.ts"
   name="SseEvent"
@@ -666,10 +622,6 @@ What `next` gets as the response of a page of endpoint `EP`: the response when t
 ### Fetch.PaginateOptions [#paginateoptions]
 
 How [`paginate`](#paginate) goes from page to page, with a state `S`, such as a page number or a cursor.
-
-- `start`: the state of the first page.
-- `request(state)`: the options of the call for that page.
-- `next(page, state, response)`: the state of the next page, or `Option.none()` when this is the last one. `response` is the page's response when the endpoint's `responseMode` is `"decoded-and-response"` (see [`PageResponse`](#pageresponse)).
 
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/Paginate.d.ts"

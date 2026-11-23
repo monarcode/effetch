@@ -54,12 +54,14 @@ function twoslashErrors(build: boolean) {
 }
 
 /**
- * A hover's docs: their first paragraph, with a list right after it, which
- * finishes its sentence.
+ * A hover's docs: their first paragraph, and a list after it when the
+ * paragraph doesn't end a sentence, as one ending in a colon doesn't.
  */
 function firstParagraph(docs: string) {
 	const [first = "", next = ""] = docs.split(/\n\s*\n/);
-	return /^\s*- /.test(next) ? `${first}\n\n${next}` : first;
+	return !/[.!?]\s*$/.test(first) && /^\s*- /.test(next)
+		? `${first}\n\n${next}`
+		: first;
 }
 
 /**

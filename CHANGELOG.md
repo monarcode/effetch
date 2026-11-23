@@ -15,6 +15,11 @@ All notable changes to `@monarcode/effetch`, newest first.
   types. A [Compatibility](https://effetch.pages.dev/docs/reference/compatibility)
   page lists the supported Effect versions, runtimes and TypeScript
   settings.
+- Each page of the site is also served as Markdown, from the page's
+  "Copy Markdown" button and its view options, and
+  [llms.txt](https://effetch.pages.dev/llms.txt) and
+  [llms-full.txt](https://effetch.pages.dev/llms-full.txt) list the pages
+  for LLMs.
 
 ### Changed
 

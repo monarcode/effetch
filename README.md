@@ -204,6 +204,7 @@ pnpm run check
 | `pnpm run check`          | All of the above, plus publint and attw. CI runs it on every push to `main` and every pull request.                                                                                                       |
 | `pnpm run build:site`     | Builds the package, then prerenders the docs site in `site/` to `site/dist/client`, failing on a type error in an example. `check` doesn't build the site; CI does.                                       |
 | `pnpm run docs:reference` | Writes the site's API reference pages from the JSDoc. Run it after changing a public export or its docs.                                                                                                  |
+| `pnpm run docs:snapshot`  | Freezes an older release line's docs into the site, such as `pnpm run docs:snapshot 0.1` when `0.2` starts.                                                                                               |
 
 To work on the docs site, run `pnpm run build`, then `pnpm --dir site run dev`.
 The site's type hovers and tables read the built package, so build again

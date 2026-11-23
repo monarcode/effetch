@@ -23,7 +23,8 @@
 		"coverage",
 		".smoke",
 		".tanstack",
-		"routeTree.gen.ts"
+		"routeTree.gen.ts",
+		"site/versions"
 	],
 	"sortImports": {
 		"customGroups": [
