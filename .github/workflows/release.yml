@@ -107,3 +107,26 @@ jobs:
                 --title "v$RELEASE_VERSION" \
                 "${KIND[@]}" \
                 --notes-file "$RUNNER_TEMP/release/release-notes.md"
+
+   # Cloudflare Pages deploys the `site` branch as the live docs, so the docs
+   # change with the release that publishes their API. A job of its own, so a
+   # failure can be rerun without publishing again. Forced, because a docs
+   # fix cherry-picked onto `site` between releases has been merged to `main`
+   # first, so a release made after it includes it.
+   docs-site:
+      needs: publish
+      runs-on: ubuntu-latest
+      timeout-minutes: 5
+      permissions:
+         contents: write
+      steps:
+         - name: Move the docs site to the release
+           env:
+              GH_TOKEN: ${{ github.token }}
+              RELEASE_COMMIT: ${{ github.sha }}
+           run: |
+              if ! gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/site" \
+                -f sha="$RELEASE_COMMIT" -F force=true; then
+                echo "::error::The package is published, but the docs site wasn't moved. Rerun this job, or run: git push --force origin $RELEASE_COMMIT:refs/heads/site"
+                exit 1
+              fi

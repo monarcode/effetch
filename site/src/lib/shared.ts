@@ -14,14 +14,25 @@ export function pageMeta(title: string, description: string) {
 export const NOT_FOUND_PATH = "/404";
 export const NOT_FOUND_MARK = "effetch-not-found";
 
+/** Set by `vite.config.ts` from the build's environment. */
+declare const __SOURCE_REF__: string;
+declare const __SITE_URL__: string;
+
 export const gitConfig = {
 	user: "monarcode",
 	repo: "effetch",
-	branch: "main",
+	/**
+	 * The commit the site was built from, so a page's GitHub link shows the
+	 * source it was built from: on the live site, the release's.
+	 */
+	ref: __SOURCE_REF__,
 };
 
-/** Where the site is served. Link previews and `llms.txt` need full URLs. */
-export const SITE_URL = "https://effetch.pages.dev";
+/**
+ * Where this build is served: the live site, or a preview's own address.
+ * `llms.txt` and the pages' Markdown need full URLs.
+ */
+export const SITE_URL = __SITE_URL__;
 
 /** The URL of a page's Markdown, for LLMs and the copy button. */
 export function getPageMarkdownUrl(page: { slugs: string[] }) {

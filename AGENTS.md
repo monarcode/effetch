@@ -77,6 +77,9 @@ to static files. It's a package in the pnpm workspace and isn't published.
   `/llms.txt` and `/llms-full.txt` list the current line's pages. Link
   between pages with root-relative paths, which the Markdown turns into
   full URLs.
+- The live docs deploy from the `site` branch, which the Release workflow
+  moves to each released commit; `main` and pull requests deploy as
+  previews. Don't push `site` yourself.
 - `pnpm run check` doesn't build the site. After changing `site/`, run
   `pnpm run build:site`, which builds the package, then prerenders the site
   into `site/dist/client`. `pnpm --dir site run dev` serves it while you
