@@ -2,3 +2,95 @@
 title: Test errors and statuses
 description: Make the fake backend fail or answer with another status.
 ---
+
+This page shows how to make the [fake backend](/docs/testing) answer with an
+error, or with another status, so you can test how your code
+handles each one.
+
+## Fail every request to an endpoint
+
+To answer every request to an endpoint with an error, use `FetchTest.fail`,
+with a status and an optional body. The body is encoded with the endpoint's
+`statusErrors` schema for that status, then its `error` schema, so the client
+decodes it back into your domain error:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+  message: Schema.String,
+}) {}
+
+const getTodo = Fetch.endpoint("GET /todos/:id", {
+  statusErrors: { 404: TodoNotFound },
+});
+
+export const Backend = FetchTest.layer([
+  // The call fails with a TodoNotFound.
+  FetchTest.fail(getTodo, 404, new TodoNotFound({ message: "No todo 9" })),
+]);
+```
+
+## Answer with another status
+
+A handler answers with another status by returning
+`FetchTest.reply(status, body)`, such as a `404` for one id and the todo for
+the others. A reply's body is sent as it is, as a call's `body` without
+`input` is:
+
+- no body
+- a string as text
+- bytes as bytes
+- a `Blob`, `FormData` or `URLSearchParams` as it is
+- anything else as JSON
+
+For a `2xx` with a typed body, such as a `201`, pass `{ status: 201 }` as
+`respond`'s third argument instead.
+
+The following backend answers `404` for every todo but the first, and `201`
+with a `location` header when a todo is created:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
+const createTodo = Fetch.endpoint("POST /todos", {
+  input: Schema.Struct({ title: Schema.String }),
+  output: Todo,
+});
+
+export const Backend = FetchTest.layer([
+  FetchTest.respond(getTodo, ({ params }) =>
+    Effect.succeed(
+      params.id === "1"
+        ? { id: 1, title: "Write docs" }
+        : FetchTest.reply(404, { message: `No todo ${params.id}` }),
+    ),
+  ),
+  FetchTest.respond(
+    createTodo,
+    ({ body }) => Effect.succeed({ id: 2, ...body }),
+    {
+      status: 201,
+      headers: { location: "/todos/2" },
+    },
+  ),
+]);
+```
+
+## What's next
+
+- [Errors by status](/docs/errors/status-errors): declare the domain errors
+  that `FetchTest.fail` encodes.
+- [Check what was sent](/docs/testing/requests): assert on the requests your
+  code sent.
+- [Use a hand-written HttpClient](/docs/testing/http-client): fake a network
+  failure, which the fake backend doesn't do.

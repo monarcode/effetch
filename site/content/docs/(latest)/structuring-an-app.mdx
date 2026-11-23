@@ -2,3 +2,241 @@
 title: Structure an app
 description: Lay out clients and endpoints in a small app, a feature-sliced app and an app with several backends.
 ---
+
+This page shows where clients and endpoints can live as your app grows, from
+a single client to several backends.
+
+A client is declared once, and endpoints are bound to it once, in a layer.
+Where each piece lives depends on the size of your app. These are patterns,
+not rules: Effetch works the same way whichever you pick.
+
+## A small app
+
+Keep the client in one file, and each area's endpoints in its own file, as a
+`Fetch.Endpoints` class. One layer puts them together:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const NewUser = Schema.Struct({ name: Schema.String });
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+// api.ts
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [bearer({ token: "token" })],
+}) {}
+
+// users.ts
+export class Users extends Fetch.Endpoints<Users>()("Users", Api, {
+  get: Fetch.endpoint("GET /users/:id", { output: User }),
+  create: Fetch.endpoint("POST /users", { input: NewUser, output: User }),
+  login: [
+    Fetch.endpoint("POST /auth/login", { output: User }),
+    { plugins: { bearer: false } },
+  ],
+}) {}
+
+// todos.ts
+export class Todos extends Fetch.Endpoints<Todos>()("Todos", Api, {
+  list: Fetch.endpoint("GET /todos", { output: Schema.Array(Todo) }),
+}) {}
+
+// layer.ts
+export const AppLayer = Layer.mergeAll(Users.layer, Todos.layer).pipe(
+  Layer.provideMerge(Api.layer),
+  Layer.provide(FetchHttpClient.layer),
+);
+
+// anywhere
+export const program = Effect.gen(function* () {
+  const users = yield* Users;
+  const api = yield* Api; // for one-off calls
+  const user = yield* users.get({ params: { id: 1 } });
+  yield* api.post("/users/:id/ping", { params: { id: user.id } });
+  return user;
+});
+```
+
+The plugin override on `login` is checked against `Api`'s plugins, and every
+endpoint's errors are typed with `Api`'s `defaultError` and `statusErrors`.
+
+### Endpoints made with client.endpoint
+
+To make endpoints with `client.endpoint` instead, write each area as a
+function of the client, typed `Effect.Success<typeof Api>`, so overrides and
+errors are still checked against your plugins and `defaultError`:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [bearer({ token: "token" })],
+}) {}
+
+export const users = (api: Effect.Success<typeof Api>) => ({
+  get: api.endpoint("GET /users/:id", { output: User }),
+  login: api.endpoint("POST /auth/login", {
+    output: User,
+    plugins: { bearer: false },
+  }),
+});
+```
+
+## A feature-sliced app
+
+When your app is split into feature modules, each with its own schemas, the
+client becomes shared infrastructure that knows nothing about the modules.
+Each module defines its endpoints next to its schemas, with no client, and
+binds them to the client in its data layer:
+
+```text
+src/
+├── infrastructure/http/
+│   └── app-api-client.ts  the client: base URL, error body, plugins
+├── modules/
+│   ├── todos/
+│   │   ├── contract/      schemas, and endpoints defined with Fetch.endpoint
+│   │   ├── data/          the endpoints, bound to AppApiClient
+│   │   ├── application/   workflows that take more than one call
+│   │   └── public.ts
+│   └── wallet/
+└── runtime.ts             modules, on top of clients, on top of HttpClient
+```
+
+<Callout>
+  **This layout is a personal preference,** the one Effetch's author uses in
+  their own apps, and Effetch doesn't depend on it. Rename, merge or split the
+  folders to suit your project. What carries over is that modules import the
+  client, never the other way around, and that endpoints are bound once, in a
+  layer.
+</Callout>
+
+The following code shows each file of the layout, with the `todos` module:
+
+```ts
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+// infrastructure/http/app-api-client.ts: how to reach the backend, nothing else
+export class AppApiClient extends Fetch.Service<AppApiClient>()(
+  "AppApiClient",
+  { baseUrl: Config.String("APP_API_URL") },
+) {}
+
+// modules/todos/contract/todos.ts: schemas and endpoints, no client
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+const NewTodo = Schema.Struct({ title: Schema.String });
+
+export const listTodos = Fetch.endpoint("GET /todos", {
+  output: Schema.Array(Todo),
+});
+export const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
+export const createTodo = Fetch.endpoint("POST /todos", {
+  input: NewTodo,
+  output: Todo,
+});
+
+// modules/todos/data/todo.api.ts: the endpoints, bound, as the module's service
+export class TodoApi extends Fetch.Endpoints<TodoApi>()(
+  "TodoApi",
+  AppApiClient,
+  {
+    list: listTodos,
+    get: getTodo,
+    create: createTodo,
+  },
+) {}
+
+// runtime.ts
+export const AppLayer = TodoApi.layer.pipe(
+  Layer.provideMerge(AppApiClient.layer),
+  Layer.provide(FetchHttpClient.layer),
+);
+
+// anywhere
+export const program = Effect.gen(function* () {
+  const todos = yield* TodoApi;
+  const todo = yield* todos.create({ body: { title: "Write docs" } });
+  return yield* todos.get({ params: { id: todo.id } });
+});
+```
+
+### Why this layout scales
+
+This scales well as the app grows:
+
+- **The client file stays the same size,** however many endpoints the app
+  has, and it never imports a module: dependencies point from the modules to
+  the infrastructure.
+- **A module with 20 endpoints has 20 definitions** in its own `contract/`
+  folder, beside their schemas, and 20 one-line entries in its
+  `Fetch.Endpoints` class in `data/`. When they serve separate concerns,
+  split them into several services, each in its own file.
+- **Every module's data service is its endpoints,** as `TodoApi` is here: one
+  line per operation, and every type inferred, so every module's `data/`
+  folder looks the same.
+- **An operation that isn't one HTTP call** (it combines calls, reshapes a
+  response or adds a domain error) is a workflow over those endpoints, in the
+  module's `application/` folder.
+- **Declare a service's interface by hand only when you need another
+  implementation,** such as an offline one or a fake for UI work, and
+  implement it with the endpoints.
+
+### client.endpoint in this layout
+
+`client.endpoint` fits this layout too: make the endpoints in `data/`, and
+import only the schemas from `contract/`. Define them with `Fetch.endpoint`
+when something should read the routes and schemas without a client.
+[`examples/app`](https://github.com/monarcode/effetch/tree/main/examples/app)
+is a complete app in this layout, with two modules and two backends: `todos`
+declares its definitions with `Fetch.Endpoints`, and `wallet` uses
+`client.endpoint`.
+
+## Several backends
+
+Declare one client per backend, each with its own id, `baseUrl`,
+`defaultError` and plugins. Each module uses the client of the backend it
+talks to, and one `HttpClient` layer serves them all.
+
+Keep the following in mind:
+
+- Plugins are values: one `bearer` can serve several clients.
+- `ctx.route` has no host. A plugin that groups by route and is shared by
+  several clients should take the backend's name, so each client gets its own
+  instance.
+- Catch a backend's `HttpError` next to its calls, where `body` has that
+  backend's error shape.
+
+[`examples/backends.ts`](https://github.com/monarcode/effetch/blob/main/examples/backends.ts)
+does this in one file, and
+[`examples/app`](https://github.com/monarcode/effetch/tree/main/examples/app)
+across modules.
+
+## What's next
+
+- [Share endpoints as a service](/docs/endpoints/services): see everything
+  a `Fetch.Endpoints` class gives you.
+- [Declare a client](/docs/clients): declare one client per backend, with
+  its own base URL, errors and plugins.
+- [Test with a fake backend](/docs/testing): serve your endpoints from a
+  fake backend in tests.

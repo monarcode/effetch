@@ -1,4 +1,4 @@
 {
 	"title": "Endpoints",
-	"pages": ["index", "defining", "calling", "services", "typed-query", "urls"]
+	"pages": ["index", "defining", "services", "calling", "typed-query", "urls"]
 }

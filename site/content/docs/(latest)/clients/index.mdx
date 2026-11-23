@@ -2,3 +2,78 @@
 title: Declare a client
 description: Declare a client as an Effect service with Fetch.Service.
 ---
+
+This page shows how to declare a client with `Fetch.Service` and use it
+anywhere in your app.
+
+A client holds everything a backend's calls have in common: where the
+backend lives, the headers every request needs, the shape of its errors and
+the plugins every call goes through. You declare it once and share it with
+the rest of your app.
+
+## Declare the client
+
+`Fetch.Service` declares a client as an Effect service, in one class:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+// Anywhere in your app
+export const program = Effect.gen(function* () {
+  const api = yield* Api;
+  return yield* api.get("/todos/:id", { params: { id: 1 }, output: Todo });
+});
+```
+
+## What the class gives you
+
+The class gives you three things:
+
+- **`Api` is the service.** `yield* Api` gives the client, typed from the
+  config.
+- **`Api.layer` builds the client.** It needs an `HttpClient`, plus
+  whatever the `baseUrl` Effect and the plugins need. Every layer that
+  depends on it in one layer graph gets the same client.
+- **`Api.config` is the config you passed**, frozen. You can read it when
+  the module loads, before any layer is built, for example to get the
+  `defaultError` and `statusErrors` schemas.
+
+## Type the client
+
+Your client's type is `Effect.Success<typeof Api>`. It includes your
+plugins and your `defaultError`. Use it wherever you need to type a client,
+such as a function parameter.
+
+`Fetch.Client` is the type of a client without plugins, and yours won't fit
+it.
+
+## Call from anywhere
+
+Calls need nothing from the environment. The client holds on to the
+`HttpClient`, the base URL and any services its plugins need. Its calls
+only need the services of their own schemas, if any, so they run anywhere:
+in a service, in a query function, or with `Effect.runPromise`.
+
+## Give each client its own id
+
+Two classes with the same id are the same service, so give each client its
+own id. `Fetch.isService(value)` tells a class made by `Fetch.Service`
+apart from any other value.
+
+## What's next
+
+- [Client configuration](/docs/clients/configuration): look up the options
+  the config takes.
+- [Provide the client](/docs/clients/providing): give `Api.layer` the
+  `HttpClient` it needs, and run your program.
+- [Fetch.Service or Fetch.make](/docs/clients/service-or-make): find out
+  when to build a client without the class.

@@ -2,3 +2,97 @@
 title: Catch errors
 description: Handle an error by its tag, or one status.
 ---
+
+This page shows how to handle a call's errors: by their tag, or by the
+response's status. For the errors themselves, see
+[Call errors](/docs/errors).
+
+## Catch errors by tag
+
+To handle a call's errors, catch them by tag with `Effect.catchTags`:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+const ApiError = Schema.Struct({ code: Schema.String });
+
+export const todo = (id: number) =>
+  api.get("/todos/:id", { params: { id }, output: Todo, error: ApiError }).pipe(
+    Effect.catchTags({
+      HttpError: (error) =>
+        error.status === 404
+          ? Effect.succeed(undefined)
+          : Effect.fail(error.body?.code ?? `HTTP ${error.status}`),
+      NetworkError: () => Effect.fail("You're offline"),
+      DecodeError: (error) => Effect.fail(error.message),
+    }),
+  );
+```
+
+Each handler gets the error with its fields. You don't have to handle them
+all: the ones you leave out stay in the type, for code further up to handle.
+For a single error, `Effect.catchTag` does the same.
+
+`Fetch.FetchError` is the union of the three errors, and `Fetch.isFetchError`
+tells them apart from other values.
+
+## Catch a status
+
+To handle one or more statuses, use `Fetch.catchStatus`. For the common "a
+404 means there's nothing there", `Fetch.optional` succeeds with
+`Option.none()` on a 404 and `Option.some(value)` otherwise.
+
+The following example uses both:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+// Option<Todo>: none for a 404.
+export const findTodo = (id: number) =>
+  api.get("/todos/:id", { params: { id }, output: Todo }).pipe(Fetch.optional);
+
+// "signed out" for a 401 or a 403.
+export const me = api
+  .get("/me")
+  .pipe(
+    Fetch.catchStatus([401, 403], (error) =>
+      Effect.succeed(`signed out (${error.status})`),
+    ),
+  );
+```
+
+Keep the following in mind when you catch a status:
+
+- The handler gets the `HttpError`, with `status` narrowed to the statuses you
+  gave, and what it returns joins the call's type.
+- `HttpError` stays in the error type, since other statuses still fail with
+  it.
+- Both work on endpoint calls too, and `catchStatus` also takes the effect
+  first: `Fetch.catchStatus(effect, 404, handler)`.
+- A status that [`statusErrors`](/docs/errors/status-errors) maps fails with
+  your error, not an `HttpError`, so `catchStatus` and `optional` never see
+  it. Catch your error by its tag instead.
+- The handler's `error.body` is `unknown`. For the typed body of an `error`
+  schema, use `Effect.catchTag("HttpError", …)`.
+
+## What's next
+
+- [Typed error bodies](/docs/errors/error-bodies): type `error.body` with a
+  schema.
+- [Errors by status](/docs/errors/status-errors): fail with your own error
+  for a status, and catch it by its tag.
+- [Test errors and statuses](/docs/testing/errors): check your handlers against a fake
+  backend.

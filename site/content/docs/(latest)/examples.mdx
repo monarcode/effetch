@@ -2,3 +2,36 @@
 title: Examples
 description: Find a complete program that uses Effetch, typechecked with the package.
 ---
+
+The repository's
+[`examples/`](https://github.com/monarcode/effetch/tree/main/examples) folder
+has complete programs, typechecked with the package so they always match the
+current API. Use them to see a whole feature in context.
+
+The folder has these programs:
+
+- [`basic.ts`](https://github.com/monarcode/effetch/blob/main/examples/basic.ts):
+  a client in a service, the methods, and handling each error.
+- [`builtins.ts`](https://github.com/monarcode/effetch/blob/main/examples/builtins.ts):
+  the built-in plugins, and changing them for one call.
+- [`plugins.ts`](https://github.com/monarcode/effetch/blob/main/examples/plugins.ts):
+  writing plugins, from auth with a service to a `wrap` with its own error.
+- [`endpoints.ts`](https://github.com/monarcode/effetch/blob/main/examples/endpoints.ts):
+  the same app as `builtins.ts`, with endpoints.
+- [`backends.ts`](https://github.com/monarcode/effetch/blob/main/examples/backends.ts):
+  two backends in one file, with shared plugins.
+- [`status-errors.ts`](https://github.com/monarcode/effetch/blob/main/examples/status-errors.ts):
+  your own errors by status, for every call, per endpoint and for one call.
+- [`streams.ts`](https://github.com/monarcode/effetch/blob/main/examples/streams.ts):
+  Server-Sent Events, newline-delimited JSON, and a list paged through by its
+  `Link` header.
+- [`testing.ts`](https://github.com/monarcode/effetch/blob/main/examples/testing.ts):
+  tests for the `app/` todos module, against a fake backend made from its
+  endpoints.
+- [`app/`](https://github.com/monarcode/effetch/tree/main/examples/app): a
+  feature-sliced app, with clients as shared infrastructure and each module
+  defining its own endpoints.
+
+The examples'
+[README](https://github.com/monarcode/effetch/blob/main/examples/README.md)
+walks through each one.

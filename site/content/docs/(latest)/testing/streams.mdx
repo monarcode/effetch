@@ -1,4 +1,60 @@
 ---
 title: Test stream endpoints
-description: Fake a streamed response.
+description: Fake a streamed response with a list of events or values.
 ---
+
+This page shows how to answer a [stream endpoint](/docs/streaming) from the
+[fake backend](/docs/testing), so you can test code that reads Server-Sent
+Events or newline-delimited JSON.
+
+## Answer with a list
+
+A handler for a stream endpoint returns a list, and `FetchTest` sends it as
+the stream's body:
+
+- For `stream: "sse"`, the list holds events, each with its `data` and an
+  optional `event` and `id`.
+- For `stream: "ndjson"`, the list holds values.
+
+Each value is encoded with the endpoint's `output`. The following backend
+sends two events for a job:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+const JobEvent = Schema.Struct({ percent: Schema.Finite });
+
+const jobEvents = Fetch.endpoint("GET /jobs/:id/events", {
+  output: JobEvent,
+  stream: "sse",
+});
+
+export const Backend = FetchTest.layer([
+  FetchTest.respond(jobEvents, ({ params }) =>
+    Effect.succeed([
+      { data: { percent: 50 } },
+      { event: "done", id: params.id, data: { percent: 100 } },
+    ]),
+  ),
+]);
+```
+
+## Test slow or broken streams
+
+The whole body is sent at once. To test how your code handles values that
+arrive slowly, or a body that breaks off, use
+[a hand-written `HttpClient`](/docs/testing/http-client) whose `Response`
+has a `ReadableStream` body.
+
+## What's next
+
+- [Streaming responses](/docs/streaming): how stream endpoints read events
+  and values, and how a stream fails.
+- [Use a hand-written HttpClient](/docs/testing/http-client): send a body
+  that arrives slowly or breaks off.
+- [Check what was sent](/docs/testing/requests): assert on the requests your
+  code sent.

@@ -2,3 +2,24 @@
 title: Call options
 description: Look up an option a call accepts.
 ---
+
+Every method takes the path and an object of options. This page lists every
+option a call accepts.
+
+## Options
+
+The following options control how a call builds its request and reads its
+response:
+
+| Option         | What it does                                                                                                                                                                                                                                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `params`       | Values for the path's `:params`. Required, with exactly those names, when the path has any; not allowed otherwise. Values are URI-encoded.                                                                                                                                                                     |
+| `query`        | An object of query parameters. Arrays repeat the key, and `null` and `undefined` are dropped.                                                                                                                                                                                                                  |
+| `headers`      | Headers for this call. They win over the client's, and over the body's `content-type`.                                                                                                                                                                                                                         |
+| `body`         | Sent by its type: `HttpBody`, string, `ArrayBuffer` and typed arrays, `Blob`/`File`, `FormData` and `URLSearchParams` as they are, anything else as JSON.                                                                                                                                                      |
+| `input`        | A schema `body` is encoded with. `body` is then typed by it. Sent as JSON, or as `multipart/form-data` when wrapped in `Fetch.multipart` (see [Upload files](/docs/calls/uploads)).                                                                                                                            |
+| `output`       | A schema the 2xx body is decoded with: read as JSON, or as text with `Fetch.text()` and bytes with `Fetch.bytes()`. The call then sends a matching `Accept` header (unless you set `accept`). Without it, the call succeeds with the raw `HttpClientResponse`. See [Read the response](/docs/calls/responses). |
+| `responseMode` | `"decoded-and-response"` makes the call succeed with `[value, response]`, to read the status and headers too. Defaults to `"decoded"`, the value alone.                                                                                                                                                        |
+| `error`        | A schema for the body of error responses, replacing the client's `defaultError`.                                                                                                                                                                                                                               |
+| `statusErrors` | Your own errors for error responses, by status. See [Errors by status](/docs/errors/status-errors).                                                                                                                                                                                                            |
+| `plugins`      | Plugin overrides for this call (see [Change plugins for one call](/docs/plugins/per-call)).                                                                                                                                                                                                                    |

@@ -1,4 +1,30 @@
 ---
 title: Plugin order
-description: Learn the order plugins run in.
+description: Learn the order plugins run in, and why logger, retry, timeout and bearer go in that order.
 ---
+
+The order of a client's `plugins` list decides what each plugin sees. This
+page explains how plugins nest, and why the order used in
+[Built-in plugins](/docs/plugins) is the one to use.
+
+## How plugins nest
+
+The first plugin is the outermost: it runs first on the way out, and last on
+the way back.
+
+## The recommended order
+
+List the built-in plugins as `logger`, `retry`, `timeout`, `bearer`, as in
+the example in [Built-in plugins](/docs/plugins). With that order:
+
+- `logger` sees the whole call, retries included (`consoleLogger` sees the
+  whole call wherever it is);
+- each retry gets its own timeout, and asks for the token again;
+- a timed-out attempt isn't retried;
+- `retry`'s `budget` covers every attempt and wait, while `timeout` covers
+  one attempt;
+- a `401` that `bearer` refreshes is sent again inside the same attempt, so
+  it shares that attempt's timeout.
+
+For when each hook runs in that order, see the hooks table in
+[Write a plugin](/docs/plugins/writing).

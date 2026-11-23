@@ -2,3 +2,53 @@
 title: Client configuration
 description: Look up an option a client accepts.
 ---
+
+This page lists the options you can pass when you declare a client. The
+config of `Fetch.Service` takes the same options as `Fetch.make` (see
+[Fetch.Service or Fetch.make](/docs/clients/service-or-make)).
+
+## Example
+
+Here's a client with all of the options:
+
+```ts
+import * as Config from "effect/Config";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
+
+const ApiError = Schema.Struct({ code: Schema.String, message: Schema.String });
+
+class SessionExpired extends Schema.TaggedError<SessionExpired>()(
+  "SessionExpired",
+  { message: Schema.String },
+) {}
+
+const session: { accessToken?: string } = {};
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: Config.String("API_URL"),
+  headers: { "x-client": "web" },
+  defaultError: ApiError,
+  statusErrors: { 401: SessionExpired },
+  plugins: [
+    logger(),
+    retry(),
+    timeout({ duration: "10 seconds" }),
+    bearer({ token: () => session.accessToken }),
+  ],
+}) {}
+```
+
+## Options
+
+Every option is optional:
+
+| Option         | What it's for                                                                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`      | Where the API lives. It's put in front of every path that isn't a full `http(s)://` URL. Pass a string, or an Effect that's run once when the client is built, such as a `Config`. It can't contain a query string or a fragment. |
+| `headers`      | Headers sent with every request. A call's header with the same name wins. `content-type` and `content-length` are ignored here, since they come from each body.                                                                   |
+| `defaultError` | A schema for the body of the API's error responses (see [Typed error bodies](/docs/errors/error-bodies)).                                                                                                                         |
+| `statusErrors` | Your own errors for error responses, by status, for every call (see [Errors by status](/docs/errors/status-errors)).                                                                                                              |
+| `plugins`      | Behavior every call goes through, outermost first (see [Built-in plugins](/docs/plugins)).                                                                                                                                        |

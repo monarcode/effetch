@@ -2,3 +2,203 @@
 title: Streaming responses
 description: Read Server-Sent Events or newline-delimited JSON as a Stream, and handle how a stream fails or stops.
 ---
+
+Some APIs send their answer a piece at a time: progress feeds,
+notifications, exports, the answers of language models. `api.sse` and
+`api.ndjson` give such a body as an Effect `Stream`, one value at a time,
+as it arrives. This page shows how to read both formats, define stream
+endpoints, and handle a stream that fails or that you stop.
+
+## Read Server-Sent Events
+
+`api.sse` reads a `text/event-stream` body. Each value is an event, with
+its `event` name (`"message"` when the server sends none), its `id`, and its
+`data`, decoded with `output`:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const JobEvent = Schema.Struct({ percent: Schema.Finite });
+
+export const followJob = (id: number) =>
+  api.sse("/jobs/:id/events", { params: { id }, output: JobEvent }).pipe(
+    Stream.takeUntil((event) => event.data.percent === 100),
+    Stream.runForEach((event) => Effect.log(`${event.data.percent}%`)),
+  );
+```
+
+The following rules apply to an SSE call:
+
+- `output` decodes each event's `data` as JSON. Without it, or with
+  `Fetch.text()`, `data` is the text as it was sent.
+- `method` defaults to `"GET"`. APIs that stream the answer to a request
+  take `"POST"` and a `body`:
+
+  ```ts
+  import * as Schema from "effect/Schema";
+
+  import type { Fetch } from "@monarcode/effetch";
+
+  declare const api: Fetch.Client;
+
+  const Prompt = Schema.Struct({ prompt: Schema.String });
+  const Delta = Schema.Struct({ text: Schema.String });
+
+  export const complete = (prompt: string) =>
+    api.sse("/completions", {
+      method: "POST",
+      input: Prompt,
+      body: { prompt },
+      output: Delta,
+    });
+  ```
+
+- The request sends `Accept: text/event-stream`, unless the call or the
+  client sets an `accept` header.
+- Events are parsed by the
+  [WHATWG rules](https://html.spec.whatwg.org/multipage/server-sent-events.html):
+  comment lines are ignored, a multi-line `data` is joined with `\n`, and an
+  `id` carries over to the events after it. The stream doesn't reconnect,
+  and ignores `retry:` lines.
+- A response whose `Content-Type` is set to another type than
+  `text/event-stream`, such as a login page from a proxy, fails the stream
+  with a `DecodeError`.
+
+<Callout>
+  `api.sse` parses events with Effect's `encoding/Sse` module, which Effect
+  marks unstable.
+</Callout>
+
+### Stop at a sentinel
+
+`output` decodes every event, so an event whose data doesn't match it
+fails the stream, after the events before it. When the server ends with a
+sentinel that isn't JSON, such as `data: [DONE]`, leave `output` out, stop
+at the sentinel, then decode the rest:
+
+```ts
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Delta = Schema.fromJsonString(Schema.Struct({ text: Schema.String }));
+
+export const deltas = (prompt: string) =>
+  api.sse("/completions", { method: "POST", body: { prompt } }).pipe(
+    Stream.takeWhile((event) => event.data !== "[DONE]"),
+    Stream.mapEffect((event) => Schema.decodeUnknownEffect(Delta)(event.data)),
+  );
+```
+
+## Read newline-delimited JSON
+
+`api.ndjson` reads an `application/x-ndjson` body (also called JSON Lines):
+one JSON value per line, decoded with `output`:
+
+```ts
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Row = Schema.Struct({ id: Schema.Finite, email: Schema.String });
+
+export const countRows = api
+  .ndjson("/export/users", { output: Row })
+  .pipe(Stream.runCount);
+```
+
+The following rules apply to an NDJSON call:
+
+- Without `output`, each value is the parsed JSON, typed `unknown`.
+  `Fetch.text()` gives each line's text instead.
+- Blank lines are skipped, and the last line needs no line end.
+- The request sends `Accept: application/x-ndjson`, unless an `accept`
+  header is set.
+
+## Define a stream endpoint
+
+An [endpoint](/docs/endpoints) defined with `stream: "sse"` or
+`stream: "ndjson"` returns a `Stream` from its calls, however it's bound:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import { Fetch } from "@monarcode/effetch";
+
+const JobEvent = Schema.Struct({ percent: Schema.Finite });
+
+const jobEvents = Fetch.endpoint("GET /jobs/:id/events", {
+  output: JobEvent,
+  stream: "sse",
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+export class JobApi extends Fetch.Endpoints<JobApi>()("JobApi", Api, {
+  events: jobEvents,
+}) {}
+
+export const lastEvent = (id: number) =>
+  Effect.gen(function* () {
+    const jobs = yield* JobApi;
+    return yield* jobs.events({ params: { id } }).pipe(Stream.runLast);
+  });
+```
+
+## How a stream fails
+
+A stream's request runs as any call does, up to the response's headers:
+
+- Plugins run once. `retry` and `timeout` apply to getting the response,
+  not to reading the body.
+- When no response arrives, the stream fails with a `NetworkError`.
+- An error status fails it with an `HttpError`, or a
+  [`statusErrors`](/docs/errors/status-errors) error, before it gives any
+  value.
+- A `204 No Content` or `205 Reset Content` gives an empty stream.
+
+Then the body is read as it arrives. The values before a failure are given
+first. A value that doesn't match `output`, or a body that breaks off,
+fails the stream with a `DecodeError`, which names the event or the line:
+`Line 3 doesn't match the output schema`.
+
+For plugins, the call ends when the response's headers arrive. Their
+`onExit` hooks, and so `logger` and `consoleLogger`, report it then, with
+the time to the headers, and a `DecodeError` while reading the body doesn't
+reach them. Handle it on the stream, with `Stream.catchTag("DecodeError", …)`
+or `Stream.tapError`.
+
+## Stop a stream
+
+Interrupting the stream, or taking only part of it, as with `Stream.take`,
+aborts the request. Nothing else is needed to close the connection.
+
+## Options a stream doesn't take
+
+A stream can't take `responseMode`, or an `output` made with
+`Fetch.bytes()`. A call that passes one dies, and a definition with one
+throws when it's made.
+
+## What's next
+
+- [Pagination](/docs/pagination): follow a list's pages as a `Stream`.
+- [Test stream endpoints](/docs/testing/streams): answer a stream endpoint
+  from a fake backend.
+- [Errors by status](/docs/errors/status-errors): fail a stream with your
+  own error for a status.

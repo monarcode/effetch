@@ -2,3 +2,36 @@
 title: Limitations
 description: Check a known limit before you rely on it.
 ---
+
+This page lists the known limits of Effetch's paths, plugins and streams.
+Check one before you rely on the behavior it describes.
+
+## Paths
+
+Paths and their parameters have these limits:
+
+- A path parameter is a whole segment: `/files/:name.json` has one parameter
+  called `name.json`.
+- Path parameters can't be optional. Define one endpoint per path, or pass
+  the value in `query`.
+- Paths shouldn't contain `?` or `#`. Pass query parameters with `query`.
+
+## Plugins
+
+Plugins have these limits:
+
+- `timeout`, and the duration `logger` logs, cover the time until the
+  response headers arrive, not downloading the body. `consoleLogger`'s
+  duration, and an `onExit` hook's `durationMs`, include decoding the body.
+- Two plugins with the same name are only caught when the client is made.
+
+## Streams
+
+Streamed responses have these limits:
+
+- Streams don't reconnect: `api.sse` ignores `retry:` lines and the
+  `Last-Event-ID` header. Repeat the call, with the last `id` in a header,
+  to pick up where a stream stopped.
+- For a stream, plugins see the call end when the response's headers
+  arrive: they don't see the body being read, or a `DecodeError` while
+  reading it, and `timeout` doesn't bound it.

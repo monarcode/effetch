@@ -2,3 +2,49 @@
 title: Retry-After and a time limit
 description: Honor a Retry-After header without going past a deadline.
 ---
+
+Overloaded or slow servers can ask you to wait, or take too long to answer.
+This page shows how to make `retry` wait as a server asks, and how to limit
+the time a whole call may take.
+
+## Retry options for overloaded or slow servers
+
+`retry` has two options for servers that are overloaded or slow:
+
+- `retryAfter`: when a retried response has a `Retry-After` header, wait as
+  long as it asks (`Retry-After: 120`, or an HTTP date) in place of the
+  schedule's delay. `true` waits up to 1 minute, and `{ max }` up to `max`.
+  It's off by default, so a server can't make calls wait.
+- `budget`: how long the whole call may take, every attempt and wait
+  included. No retry is made when its wait would end at or after the budget:
+  the call ends with its last response or `NetworkError`. When the budget runs
+  out during an attempt, the attempt is aborted, and the call fails with
+  `TimeoutError`. Calls can override it.
+
+## Limit each attempt and the whole call
+
+For "10 seconds per attempt, 30 seconds in all", use both `timeout` and a
+budget:
+
+```ts
+import { Fetch } from "@monarcode/effetch";
+import { retry, timeout } from "@monarcode/effetch/plugins";
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [
+    retry({ times: 5, retryAfter: true, budget: "30 seconds" }),
+    timeout({ duration: "10 seconds" }),
+  ],
+}) {}
+
+// Per call: api.get("/report", { plugins: { retry: { budget: "2 minutes" } } })
+```
+
+## What's next
+
+- [Change plugins for one call](/docs/plugins/per-call): give one call a
+  longer budget or timeout.
+- [Plugin order](/docs/plugins/order): see why `timeout` goes after `retry`.
+- [Built-in plugins](/docs/plugins): see every option `retry` and `timeout`
+  take.

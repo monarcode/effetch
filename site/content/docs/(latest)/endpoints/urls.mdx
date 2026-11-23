@@ -1,4 +1,69 @@
 ---
 title: Build an endpoint's URL
-description: Get an endpoint's URL without sending a request.
+description: Get the URL a call to an endpoint would go to, without sending a request.
 ---
+
+This page shows you how to get the URL an endpoint call would go to, as a
+string, for a link, an `<img>` source, or a cache key.
+
+## Get the URL
+
+`endpoint.url(options)` returns the URL a call with the same `params` and
+`query` would go to. It works on a definition and on a bound endpoint:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+const getFile = Fetch.endpoint("GET /files/:name", {
+  query: Schema.Struct({ download: Schema.optional(Schema.Boolean) }),
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+// "/files/report.pdf?download=true"
+export const path = getFile.url({
+  params: { name: "report.pdf" },
+  query: { download: true },
+});
+
+export const link = Effect.gen(function* () {
+  const api = yield* Api;
+  // "https://api.example.com/files/report.pdf?download=true"
+  return api.bind(getFile).url({
+    params: { name: "report.pdf" },
+    query: { download: true },
+  });
+});
+```
+
+## What the URL contains
+
+The URL contains the following:
+
+- On a bound endpoint, the URL starts with the client's `baseUrl`.
+- On a definition from `Fetch.endpoint`, which has no client, it's the path
+  alone, unless the route is a full URL. That makes it a stable cache key
+  for one backend, whichever client calls it.
+- The URL is built before plugins run, so anything a plugin adds, such as a
+  token in the query, isn't in it.
+
+## When url throws
+
+`url` throws when a path parameter is missing or the query doesn't match the
+schema, as a call would die. It encodes the query synchronously, so on an
+endpoint whose query schema needs services to encode, calling it doesn't
+compile.
+
+## What's next
+
+- [Typed query parameters](/docs/endpoints/typed-query): see how the query
+  is encoded.
+- [Write a plugin](/docs/plugins/writing): read the route a call goes to
+  from a plugin.
+- [Call an endpoint](/docs/endpoints/calling): send the request the URL
+  describes.

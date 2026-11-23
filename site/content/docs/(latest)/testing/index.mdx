@@ -2,3 +2,139 @@
 title: Test with a fake backend
 description: Test calls against a fake backend made from your endpoints.
 ---
+
+This tutorial builds a fake backend from your endpoints and runs a call
+against it, so you can test your code without a network.
+
+Effetch never touches the network itself: it sends every request through the
+`HttpClient` you provide. In tests, `@monarcode/effetch/test` gives you a fake
+one, made from your endpoints, so your code runs as it does in production:
+the real client, with its plugins, `defaultError` and `statusErrors`.
+
+## Build a fake backend from your endpoints
+
+`FetchTest.layer` takes a list of handlers, one per route, and is an
+`HttpClient` layer. Provide it where `FetchHttpClient.layer` goes.
+
+<Callout type="warn">
+  A client whose `layer` is
+  [overridden](/docs/clients/providing#build-the-httpclient-into-the-layer) to
+  provide its own `HttpClient` ignores the fake backend, so test with a layer
+  that doesn't.
+</Callout>
+
+The following example defines three endpoints, answers each one from the fake
+backend, and gets a todo through the real client:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+const Todo = Schema.Struct({
+  id: Schema.Finite,
+  title: Schema.String,
+  due: Schema.Date,
+});
+const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
+
+class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+  message: Schema.String,
+}) {}
+
+const getTodo = Fetch.endpoint("GET /todos/:id", {
+  output: Todo,
+  statusErrors: { 404: TodoNotFound },
+});
+const createTodo = Fetch.endpoint("POST /todos", {
+  input: NewTodo,
+  output: Todo,
+});
+const listTodos = Fetch.endpoint("GET /todos", { output: Schema.Array(Todo) });
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.test",
+}) {}
+
+class TodoApi extends Fetch.Endpoints<TodoApi>()("TodoApi", Api, {
+  get: getTodo,
+  create: createTodo,
+  list: listTodos,
+}) {}
+
+const Backend = FetchTest.layer([
+  FetchTest.respond(getTodo, ({ params }) =>
+    // params are strings, as they are in the URL
+    Effect.succeed({
+      id: Number(params.id),
+      title: "Write docs",
+      due: new Date(0),
+    }),
+  ),
+  FetchTest.respond(createTodo, ({ body }) =>
+    Effect.succeed({ id: 2, ...body }),
+  ),
+  FetchTest.fail(listTodos, 503),
+]);
+
+const TestLayer = TodoApi.layer.pipe(
+  Layer.provide(Api.layer),
+  Layer.provide(Backend),
+);
+
+export const test = Effect.gen(function* () {
+  const todos = yield* TodoApi;
+  const todo = yield* todos.get({ params: { id: 1 } });
+  // todo.due is a Date again: it went over the wire as a string
+  return todo;
+}).pipe(Effect.provide(TestLayer));
+```
+
+## What a handler gets and returns
+
+What a handler gets and returns is typed by its endpoint, and checked as a
+real backend would check it:
+
+- **`params`** has the route's params, as strings.
+- **`body`** is decoded with the endpoint's `input` schema, so `body.due` is a
+  `Date` here. A [multipart](/docs/calls/uploads) body is read back from the
+  form, with its files as `File`s.
+- **`query`** is decoded with the endpoint's
+  [query schema](/docs/endpoints/typed-query), if it has one, and is the raw
+  query, as strings, otherwise.
+- **The result** has `output`'s type, and is encoded with `output` before
+  it's sent, so a `Date` goes over the wire as a string, as in production.
+  With [`Fetch.text()` or `Fetch.bytes()`](/docs/calls/responses), it's sent
+  as text or bytes.
+
+A body, query or result that doesn't match its schema is a defect that names
+the route: it's a bug in the code under test, or in the test. Handlers work
+the same for definitions made with `Fetch.endpoint`, endpoints made with
+`client.endpoint` or `client.bind`, and a `Fetch.Endpoints` class's
+`definitions`.
+
+### Handlers that use services
+
+A handler can use services, such as a clock or a store of fake data. The
+layer then needs them, and runs its handlers with the services it was built
+with, and those of the call they answer, which win when both have one.
+
+## Run the test
+
+`FetchTest` doesn't depend on a test runner: a test is an Effect, so run it
+with `it.effect` from `@effect/vitest`, or with `Effect.runPromise` in Jest,
+Bun or Deno.
+
+## What's next
+
+- [Test errors and statuses](/docs/testing/errors): make the fake backend
+  fail, or answer with another status.
+- [Check what was sent](/docs/testing/requests): assert on the requests your
+  code sent, and see how routes match them.
+- [Test stream endpoints](/docs/testing/streams): answer a stream endpoint
+  with a list of events or values.
+- [Use a hand-written HttpClient](/docs/testing/http-client): fake a network
+  failure or a slow response.

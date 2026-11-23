@@ -2,3 +2,112 @@
 title: Pagination
 description: Page through a list with Fetch.paginate, with the cursor in the body or in a header.
 ---
+
+Lists are often split into pages: you ask for the first, and the response
+says how to get the next. `Fetch.paginate` follows those pages for you, as a
+`Stream` of pages. This page shows how to page through a list, with the next
+page's state in the body or in a header.
+
+## Page through a list
+
+`Fetch.paginate` calls a bound endpoint for the first page, then for the
+next one, until `next` says there's none:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import { Fetch } from "@monarcode/effetch";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+const listTodos = Fetch.endpoint("GET /todos", {
+  query: Schema.Struct({ page: Schema.Finite }),
+  output: Schema.Array(Todo),
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+class TodoApi extends Fetch.Endpoints<TodoApi>()("TodoApi", Api, {
+  list: listTodos,
+}) {}
+
+export const allTodos = Effect.gen(function* () {
+  const todos = yield* TodoApi;
+  return yield* Fetch.paginate(todos.list, {
+    start: 1,
+    request: (page) => ({ query: { page } }),
+    next: (page, number) =>
+      page.length === 0 ? Option.none() : Option.some(number + 1),
+  }).pipe(Stream.flattenIterable, Stream.runCollect);
+});
+```
+
+`Fetch.paginate` takes three options:
+
+- `start` is the state of the first page, such as a page number or a
+  cursor.
+- `request(state)` gives the page's call options: `params`, `query`, `body`
+  and `headers`, typed by the endpoint.
+- `next(page, state, response)` gives the next page's state, or
+  `Option.none()` after the last page.
+
+Each page is one value of the stream, so a page that's a list stays a list.
+`Stream.flattenIterable` gives its items one by one.
+
+## How pages are fetched
+
+The stream is lazy: it sends a page's call only when the page is needed, so
+`Stream.take(1)` sends one. A call that fails fails the stream with the
+call's error.
+
+`Fetch.paginate` takes a bound endpoint, from `Fetch.Endpoints`,
+`client.bind`, `client.bindAll` or `client.endpoint`. A definition made by
+`Fetch.endpoint` needs binding first, and a stream endpoint can't be paged.
+
+## Read the cursor from a header
+
+When the next page's cursor is in a header, such as a `Link` header, define
+the endpoint with `responseMode: "decoded-and-response"`. `next` then gets
+each page's response:
+
+```ts
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Item = Schema.Struct({ id: Schema.Finite });
+
+const listItems = Fetch.endpoint("GET /items", {
+  output: Schema.Array(Item),
+  responseMode: "decoded-and-response",
+});
+
+// The cursor is percent-encoded in the URL, and `query` encodes it again.
+const nextCursor = (link: string | undefined) =>
+  Option.fromNullishOr(
+    /[?&]cursor=([^&>]+)[^>]*>;\s*rel="next"/.exec(link ?? "")?.[1],
+  ).pipe(Option.flatMap(Option.liftThrowable(decodeURIComponent)));
+
+export const allItems = Fetch.paginate(api.bind(listItems), {
+  start: undefined as string | undefined,
+  request: (cursor) => (cursor === undefined ? {} : { query: { cursor } }),
+  next: (_items, _cursor, response) => nextCursor(response.headers.link),
+});
+```
+
+## What's next
+
+- [Call an endpoint](/docs/endpoints/calling): bind an endpoint so
+  `Fetch.paginate` can call it.
+- [Typed query parameters](/docs/endpoints/typed-query): type the page or
+  cursor that `request` sends.
+- [Streaming responses](/docs/streaming): read a body that arrives a piece at
+  a time.

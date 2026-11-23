@@ -610,7 +610,8 @@ export const isHttp = (u: unknown): u is HttpError => u instanceof HttpError;
 export type Api = Http.Client;
 export type Remote = import("@monarcode/effetch").Client;
 TS
-# The command the README documents, without reaching the registry.
+# The command the upgrade guide (/docs/upgrading) documents, without reaching
+# the registry.
 npx --offline -p @monarcode/effetch effetch-migrate legacy >/dev/null
 if grep -q '\* as Http from\|{ HttpError, make' legacy/api.ts; then
 	echo "✗ effetch-migrate left rc.3-style imports in legacy/api.ts:" >&2

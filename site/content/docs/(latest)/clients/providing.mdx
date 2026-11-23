@@ -2,3 +2,73 @@
 title: Provide the client
 description: Give a program the HttpClient that the client's layer needs.
 ---
+
+This page shows how to give `Api.layer` the `HttpClient` it needs, so you
+can run a program that uses your client.
+
+## Provide an HttpClient where you run the program
+
+`Api.layer` needs an `HttpClient`. Provide one where you run your program,
+usually next to the other layers of your app:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+
+import { Fetch } from "@monarcode/effetch";
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+export const ApiLive = Api.layer.pipe(Layer.provide(FetchHttpClient.layer));
+
+export const program = Effect.gen(function* () {
+  const api = yield* Api;
+  return yield* api.get("/health");
+});
+
+export const runnable = program.pipe(Effect.provide(ApiLive));
+```
+
+Keeping the `HttpClient` out of `Api.layer` is what lets tests swap in a
+fake one.
+
+## Build the HttpClient into the layer
+
+If you'd rather have `Api.layer` provide the `HttpClient` too, override the
+layer in the class:
+
+```ts
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+
+import { Fetch } from "@monarcode/effetch";
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {
+  static override readonly layer = super.layer.pipe(
+    Layer.provide(FetchHttpClient.layer),
+  );
+}
+```
+
+An override can need less than the original layer, but not more, and can't
+add an error.
+
+<Callout type="warn">
+  The override builds the real `HttpClient` into `Api.layer`, so a test can no
+  longer swap in a fake one: `FetchTest.layer` provided under it is ignored, and
+  requests go to the network. If you test with `Api.layer`, keep it as it is and
+  export a separate `ApiLive`, as in the first example.
+</Callout>
+
+## What's next
+
+- [Test with a fake backend](/docs/testing): provide a fake `HttpClient`
+  instead of the real one.
+- [Derive a client](/docs/clients/derived): make a second client from the
+  first one's config.
+- [Methods](/docs/calls): make calls with the client.

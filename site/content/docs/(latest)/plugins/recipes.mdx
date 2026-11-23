@@ -2,3 +2,101 @@
 title: Plugin recipes
 description: Copy a plugin that signs out on a 401, or one that sets a deadline with its own error.
 ---
+
+These plugins solve common problems, and you can copy them into your app.
+Each one shows a different part of the plugin API: hooks that need a service
+and add an error, and a `wrap` with an option calls can override.
+
+## Sign out on a 401
+
+The classic plugin: send the session's token, and when the API answers `401`,
+sign out and fail with a typed `SessionExpired`. To renew the token instead,
+see [Refresh a token](/docs/plugins/token-refresh).
+
+The plugin reads the token from a `Session` service in `onRequest`, and
+signs out in `onResponse`:
+
+```ts
+import * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+
+import { Fetch } from "@monarcode/effetch";
+
+export class SessionExpired extends Data.TaggedError("SessionExpired")<{}> {}
+
+export class Session extends Context.Service<
+  Session,
+  {
+    readonly accessToken: Effect.Effect<string | undefined>;
+    readonly signOut: Effect.Effect<void>;
+  }
+>()("Session") {}
+
+export const auth = Fetch.plugin({
+  name: "auth",
+  onRequest: (request) =>
+    Effect.gen(function* () {
+      const session = yield* Session;
+      const token = yield* session.accessToken;
+      return token === undefined
+        ? request
+        : HttpClientRequest.bearerToken(request, token);
+    }),
+  onResponse: (response) =>
+    Effect.gen(function* () {
+      if (response.status !== 401) {
+        return response;
+      }
+      const session = yield* Session;
+      yield* session.signOut;
+      return yield* new SessionExpired();
+    }),
+});
+
+// Api.layer now needs Session; calls fail with SessionExpired too.
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [auth],
+}) {}
+```
+
+## Set a deadline with its own error
+
+A `wrap` that adds its own error, with an option calls can override:
+
+```ts
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+
+import { Fetch } from "@monarcode/effetch";
+
+export class TooSlow extends Data.TaggedError("TooSlow")<{
+  readonly url: string;
+}> {}
+
+export const deadline = Fetch.plugin({
+  name: "deadline",
+  defaults: { millis: 5000 },
+  wrap: (client, options) =>
+    HttpClient.transform(client, (response, request) =>
+      Effect.gen(function* () {
+        const { millis } = yield* options;
+        return yield* Effect.timeoutOrElse(response, {
+          duration: millis,
+          orElse: () => Effect.fail(new TooSlow({ url: request.url })),
+        });
+      }),
+    ),
+});
+```
+
+## What's next
+
+- [Write a plugin](/docs/plugins/writing): learn the hooks these recipes use.
+- [Refresh a token](/docs/plugins/token-refresh): renew the token on a `401`
+  in place of signing out.
+- [Catch errors](/docs/errors/catching): handle `SessionExpired` and
+  `TooSlow` where you make the call.

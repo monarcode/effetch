@@ -2,3 +2,132 @@
 title: Read the response
 description: Decode the body with a schema, or read text, bytes or the whole response.
 ---
+
+Decode a response body with a schema, read it as text or bytes, or read the
+status and headers next to the decoded body.
+
+## Decode the body with a schema
+
+Give a call an `output` schema, and the response body is decoded with it. The
+call succeeds with the decoded value, or fails with `DecodeError` if the body
+doesn't match. It also sends `Accept: application/json`, unless you set an
+`accept` header yourself.
+
+Without `output`, the call succeeds with the raw `HttpClientResponse`. That's
+handy when you only care that the call worked, or want to read the body
+yourself:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+// No output: succeeds with the HttpClientResponse.
+export const remove = api.del("/todos/:id", { params: { id: 1 } });
+
+// Nothing to decode: an empty body (204, HEAD) decodes as JSON null.
+export const archive = api.post("/todos/:id/archive", {
+  params: { id: 1 },
+  output: Schema.Void,
+});
+```
+
+<Callout title="Use Schema.Finite for numbers">
+  Use `Schema.Finite` rather than `Schema.Number` for numbers. Responses are
+  decoded with Effect's JSON codec, where `Schema.Number` also decodes the
+  strings `"NaN"`, `"Infinity"` and `"-Infinity"`, and encodes those values back
+  to strings. `Schema.Finite` accepts every JSON number and rejects the rest.
+</Callout>
+
+## Read text or bytes
+
+`output` reads the body as JSON. For other bodies, wrap the schema:
+
+- `Fetch.text()` reads the body as a string, as it was sent.
+- `Fetch.text(schema)` reads a single value, such as a count or a status: it
+  trims the text, then decodes it with a schema whose encoded side is a
+  string, such as `Schema.NumberFromString`.
+- `Fetch.bytes()` reads the body as a `Uint8Array`, a copy of the body, for
+  images, PDFs and other binary bodies.
+
+The call sends a matching `Accept` header: `text/*, */*;q=0.1` for text, and
+`*/*` for bytes, unless you set one.
+
+The following program reads a CSV export as text, a count as a number, and a
+PDF as bytes:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+export const program = Effect.gen(function* () {
+  const csv = yield* api.get("/export.csv", { output: Fetch.text() });
+  const count = yield* api.get("/todos/count", {
+    output: Fetch.text(Schema.NumberFromString),
+  });
+  const pdf = yield* api.get("/invoices/:id", {
+    params: { id: 7 },
+    output: Fetch.bytes(),
+  });
+  // In a browser, Node, Bun or Deno. React Native's Blob doesn't take arrays.
+  return { csv, count, pdf: new Blob([pdf], { type: "application/pdf" }) };
+});
+```
+
+They work wherever `output` does, endpoints included.
+
+- An empty body is `""` for `Fetch.text()` and a `Uint8Array` of length 0 for
+  `Fetch.bytes()`. For `Fetch.text(schema)`, it fails with `DecodeError`, as
+  for JSON.
+- A body that can't be read, or doesn't match the schema, fails with
+  `DecodeError`.
+- Error responses are still read as JSON for `error` and `statusErrors`.
+- Pass the schema they return to `output` as it is. A schema built around it,
+  such as with `Schema.NullOr`, is read as JSON again.
+
+## Read the body and the response
+
+To read the status or headers next to the decoded body, such as a total count
+or an `ETag`, set `responseMode: "decoded-and-response"`. The call succeeds
+with a pair:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+export const page = Effect.gen(function* () {
+  const [todos, response] = yield* api.get("/todos", {
+    query: { page: 1 },
+    output: Schema.Array(Todo),
+    responseMode: "decoded-and-response",
+  });
+  return { todos, total: Number(response.headers["x-total-count"]) };
+});
+```
+
+- It's allowed on calls, on endpoint definitions, and on each call of an
+  endpoint, where the call's own mode wins.
+- Without `output`, both items are the response.
+- The body has already been read: use the decoded value.
+- The default, `"decoded"`, gives the decoded body alone.
+
+## What's next
+
+- [Call errors](/docs/errors): handle `DecodeError` and the other ways a call
+  fails.
+- [Errors by status](/docs/errors/status-errors): turn error responses into
+  your own errors.
+- [Streaming responses](/docs/streaming): read Server-Sent Events and
+  newline-delimited JSON.

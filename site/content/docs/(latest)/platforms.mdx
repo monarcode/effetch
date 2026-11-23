@@ -2,3 +2,62 @@
 title: Platform notes
 description: Set up Effetch for browsers and React Native.
 ---
+
+This page covers what to know, and what to set up, when you run Effetch in a
+browser or in React Native.
+
+Effetch has no platform-specific imports or builds, and runs wherever Effect's
+`HttpClient` does: browsers, React Native, Node 20 or newer, Bun and Deno.
+Two platforms need a little setup.
+
+## Browsers
+
+Effect's `HttpClient` adds `traceparent` and `b3` tracing headers to every
+request. Cross-origin calls to APIs that don't allow those headers then fail
+the CORS preflight. Turn propagation off in the layer that makes the client,
+and it applies to all its calls:
+
+```ts
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+
+import { Fetch } from "@monarcode/effetch";
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+export const ApiLive = Api.layer.pipe(
+  Layer.provide(Layer.succeed(HttpClient.TracerPropagationEnabled)(false)),
+  Layer.provide(FetchHttpClient.layer),
+);
+```
+
+In a browser, a relative path without a `baseUrl` is resolved against the
+page's URL.
+
+## React Native
+
+React Native differs from the other platforms in these ways:
+
+- Effetch doesn't use `URL` itself. Effect's `HttpClient` does, including
+  `searchParams`. Expo provides a standard `URL`. In a React Native app
+  without Expo, install a polyfill such as `react-native-url-polyfill`.
+- Effetch and Effect use package `exports` (`effect/http/HttpClient`,
+  `@monarcode/effetch/plugins`). Metro resolves them by default from React
+  Native 0.79 (Expo SDK 53). On older versions, set
+  `resolver.unstable_enablePackageExports = true` in `metro.config.js`.
+- `FetchHttpClient.layer` uses the global `fetch`.
+- React Native's `fetch` doesn't stream response bodies, so `api.sse`,
+  `api.ndjson` and stream endpoints fail with a `DecodeError` there. In
+  Expo, provide the `fetch` from `expo/fetch`, which streams, as
+  `FetchHttpClient.Fetch`:
+  `Layer.succeed(FetchHttpClient.Fetch)(expoFetch as typeof globalThis.fetch)`.
+- To upload a file a picker gave you, send its `{ uri, name, type }` in a
+  `Fetch.UploadFile` field (see [Upload files](/docs/calls/uploads)).
+  React Native's `FormData` reads the file from disk by `uri`, and can't send
+  a `Blob`.
+- Metro's terminal drops `console.groupCollapsed` and everything inside it,
+  so `consoleLogger` doesn't collapse its groups in React Native (see the
+  details in [Log to the console](/docs/plugins/console-logging)).

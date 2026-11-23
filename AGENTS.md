@@ -54,6 +54,10 @@ to static files. It's a package in the pnpm workspace and isn't published.
   skips it. It compiles `ts` only, so a JSX example needs the check
   extended first.
 - Pages are `.mdx` only: the site and the docs check read no other files.
+- The guides live on the site, once. The README is an overview that links
+  to them, so when a feature changes, update its page, and the README only
+  if its quick start or links change. Link between pages with root-relative
+  paths (`/docs/errors/status-errors`).
 - `pnpm run check` doesn't build the site. After changing `site/`, run
   `pnpm run build:site`, which prerenders the site into `site/dist/client`.
   `pnpm --dir site run dev` serves it while you write.

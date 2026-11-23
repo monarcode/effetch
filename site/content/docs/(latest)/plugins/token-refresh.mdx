@@ -1,4 +1,73 @@
 ---
 title: Refresh a token
-description: Refresh an expired token and replay the call.
+description: Renew an expired access token with the bearer plugin and send the request again.
 ---
+
+To renew an expired access token without failing the call, give `bearer` a
+`refresh`. This page shows how to set it up and how refreshing behaves.
+
+## Add a refresh function
+
+When a request that `bearer` signed gets a `401`, `bearer` asks `refresh` for
+a new token, then sends the request again with it. Pass `refresh` next to
+`token`:
+
+```ts
+import { Fetch } from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+declare const tokens: {
+  readonly access: () => string | undefined;
+  readonly renew: () => Promise<string | undefined>;
+};
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [
+    bearer({ token: () => tokens.access(), refresh: () => tokens.renew() }),
+  ],
+}) {}
+```
+
+The new token is used for that request only. Store it where `token` reads it,
+so later requests send it too. To sign out instead, see the
+[Sign out on a 401](/docs/plugins/recipes#sign-out-on-a-401) recipe.
+
+## How refreshing behaves
+
+<Accordions>
+<Accordion title="Details: how refreshing behaves">
+
+- `refresh` is a function of the refused request, as it was sent, sync or
+  async, or an Effect. Like `token`, an Effect's error and services become
+  the client's.
+- Calls refused with the same token share one refresh, so the token is
+  renewed once, and they all get its token or its error. Calls refused with
+  different tokens, such as other users' on a server, get their own.
+- A call that times out or is interrupted while it waits doesn't cancel the
+  refresh for the others.
+- The request is sent again once. If the new token is refused too, the call
+  ends with that `401`.
+- When `refresh` gives `null`, `undefined` or `""`, such as when the session
+  has ended, the call ends with the `401`, and nothing more is sent.
+- A request with its own `Authorization` header, sent without a token, or
+  with a stream body, which can't be sent twice, isn't refreshed. Neither is
+  a call that skips `bearer`.
+- Make the refresh call itself skip `bearer`: `plugins: { bearer: false }`.
+  Calls made inside an Effect `refresh` never refresh, but a function that
+  runs the client with `Effect.runPromise` can't be told apart: a `401` to
+  it would wait for the refresh it's part of.
+- Every method is sent again, a `POST` included: a `401` means the server
+  didn't act on the request.
+
+</Accordion>
+</Accordions>
+
+## What's next
+
+- [Plugin recipes](/docs/plugins/recipes): sign out and fail with a typed
+  error on a `401`, in place of refreshing.
+- [Change plugins for one call](/docs/plugins/per-call): make the refresh
+  call skip `bearer`.
+- [Plugin order](/docs/plugins/order): see how a refreshed request shares its
+  attempt's timeout.

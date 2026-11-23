@@ -2,3 +2,70 @@
 title: Send a body
 description: Send JSON, form data, text or bytes, encoded with a schema or as is.
 ---
+
+Send a request body with `post`, `put`, `patch` or `del`. Effetch sends the
+`body` according to its type, and an `input` schema types and encodes it.
+
+## Send JSON or a form
+
+The following calls send a body encoded with an `input` schema, a plain JSON
+body, and a `FormData` you build yourself:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({
+  id: Schema.Finite,
+  title: Schema.String,
+  done: Schema.Boolean,
+  due: Schema.Date,
+});
+const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
+
+export const create = api.post("/todos", {
+  input: NewTodo,
+  body: { title: "Write docs", due: new Date() },
+  output: Todo,
+});
+
+export const complete = api.patch("/todos/:id", {
+  params: { id: 1 },
+  body: { done: true },
+  output: Todo,
+});
+
+export const upload = (file: Blob) => {
+  const form = new FormData();
+  form.append("file", file);
+  return api.post("/uploads", { body: form });
+};
+```
+
+## How a body is sent
+
+A `body` is sent according to its type:
+
+- an `HttpBody`, a string, an `ArrayBuffer` or typed array, a `Blob` or
+  `File`, `FormData` and `URLSearchParams` are sent as they are;
+- anything else is sent as JSON.
+
+## Encode the body with a schema
+
+Add an `input` schema, and `body` is typed by it and encoded with it before
+it's sent as JSON. In `create`, `due` is a `Date` in your code and an ISO
+string on the wire.
+
+To send a typed body as a form instead, such as a file upload, see
+[Upload files](/docs/calls/uploads).
+
+## What's next
+
+- [Upload files](/docs/calls/uploads): send a typed body as
+  `multipart/form-data`.
+- [Read the response](/docs/calls/responses): decode what the server sends
+  back.
+- [Call options](/docs/calls/options): look up every option a call takes.

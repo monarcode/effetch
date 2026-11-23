@@ -2,3 +2,81 @@
 title: Check what was sent
 description: Assert on the requests your code sent, and learn how they're matched.
 ---
+
+This page shows how to read the requests the [fake backend](/docs/testing)
+received, so you can assert on what your code sent, and explains how the
+fake backend matches each request to a handler.
+
+## Read the recorded requests
+
+The layer also provides `FetchTest.Recorder`, which keeps every request it
+received, with a new record each time the layer is built.
+`FetchTest.requests` reads it. Under a client's layer, `Layer.provide` would
+hide it, so use `Layer.provideMerge`:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+import { Fetch } from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.test",
+}) {}
+
+const deleteTodo = Fetch.endpoint("DELETE /todos/:id");
+
+const Backend = FetchTest.layer([
+  FetchTest.respond(deleteTodo, () => Effect.void),
+]);
+
+export const test = Effect.gen(function* () {
+  const api = yield* Api;
+  yield* api.bind(deleteTodo)({ params: { id: 1 } });
+  const [sent] = yield* FetchTest.requests;
+  // sent.method: "DELETE", sent.url: "https://api.test/todos/1",
+  // sent.route: "DELETE /todos/:id", sent.params: { id: "1" }
+  return sent;
+}).pipe(Effect.provide(Api.layer.pipe(Layer.provideMerge(Backend))));
+```
+
+Each recorded request has its `method`, `url`, the `route` and `params` it
+matched, its raw `query`, its `headers`, and its `body`, read back as JSON,
+text or bytes.
+
+## How requests are matched
+
+The fake backend picks a handler for each request by these rules:
+
+- **Method and path.** A route matches a request with the same method, whose
+  path ends with the route's path. So `GET /todos/:id` answers
+  `https://api.test/v1/todos/1`, whatever the client's `baseUrl`. To match
+  the whole URL instead, pass the `baseUrl` to the layer:
+  `FetchTest.layer(handlers, { baseUrl: "https://api.test/v1" })`.
+- **The root route,** `GET /`, matches the path `/` alone, since every path
+  with a trailing slash ends with it. Under a `baseUrl` with a path, pass
+  that `baseUrl` to the layer.
+- **The best match wins.** When several routes match, the one with the most
+  segments wins, then the one with the most literal segments, so
+  `GET /todos/count` wins over `GET /todos/:id`. After that, the one listed
+  first wins.
+- **Absolute routes** such as `POST https://uploads.example.com/files` match
+  that URL only.
+- **No match is a defect,** whose message lists the backend's routes, and the
+  ones that match the path with another method:
+
+  ```text
+  FetchTest: no handler for POST https://api.test/todos/1.
+  GET /todos/:id matches its path, but not its method.
+  The handlers are:
+    - GET /todos/:id
+  ```
+
+## What's next
+
+- [Test errors and statuses](/docs/testing/errors): make the fake backend
+  fail, or answer with another status.
+- [Use a hand-written HttpClient](/docs/testing/http-client): fake what the
+  fake backend doesn't do, such as a network failure.
+- [Entry points](/docs/reference): every export of `FetchTest`.
