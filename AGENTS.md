@@ -68,6 +68,15 @@ to static files. It's a package in the pnpm workspace and isn't published.
   export or its docs, run `pnpm run docs:reference`. A new export needs a
   group in that script, and the docs check fails until it has one and the
   pages match.
+- Older release lines in `site/content/docs/<line>/` are snapshots of
+  released docs, with that release's types in `site/versions/<line>/`.
+  Don't edit them, and don't update them when the API changes: the docs
+  check and Twoslash skip them. `pnpm run docs:snapshot <line>` writes one;
+  its header comment says when and how.
+- Each page is also served as Markdown (`/docs/<page>.md`), and
+  `/llms.txt` and `/llms-full.txt` list the current line's pages. Link
+  between pages with root-relative paths, which the Markdown turns into
+  full URLs.
 - `pnpm run check` doesn't build the site. After changing `site/`, run
   `pnpm run build:site`, which builds the package, then prerenders the site
   into `site/dist/client`. `pnpm --dir site run dev` serves it while you

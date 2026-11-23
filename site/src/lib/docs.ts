@@ -8,5 +8,10 @@ import { defineDocs } from "fumadocs-mdx/macro";
 export const docs = defineDocs({
 	dir: "content/docs",
 	// Pages are MDX only: the docs check and the prerender list read `.mdx`.
-	docs: { files: ["**/*.mdx"], async: true },
+	docs: {
+		files: ["**/*.mdx"],
+		async: true,
+		// Each page's Markdown, for `llms.txt` and the `.md` routes.
+		postprocess: { includeProcessedMarkdown: true },
+	},
 });

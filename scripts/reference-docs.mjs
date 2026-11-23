@@ -314,7 +314,7 @@ ${importLine}
 			entry,
 			...entry.members,
 		])) {
-			body += `\n### ${entry.name} [#${entry.id}]\n\n${summaryOf(entry.declaration, page, checker, targets)}\n`;
+			body += `\n### ${entry.name} [#${entry.id}]\n\n${summaryOf(entry, page, checker, targets)}\n`;
 			if (entry.table) {
 				const declared = entry.source
 					.replace(/^src\//, "")
@@ -327,10 +327,14 @@ ${importLine}
 }
 
 /**
- * A declaration's first paragraph, with a list it introduces. A link to an
- * export on the reference becomes a link to its entry; others become code.
+ * An entry's first paragraph, and the list after it, such as a type's
+ * values or a function's behavior. An entry with a type table keeps the list
+ * only when the paragraph leads into it ("…, and"), since the table lists the
+ * properties. A link to an export on the reference becomes a link to its
+ * entry; others become code.
  */
-function summaryOf(node, page, checker, targets) {
+function summaryOf(entry, page, checker, targets) {
+	const node = entry.declaration;
 	const doc = ts.getJSDocCommentsAndTags(node).filter(ts.isJSDoc).at(-1);
 	const comment = doc?.comment;
 	let text = "";
@@ -347,8 +351,9 @@ function summaryOf(node, page, checker, targets) {
 	}
 	const blocks = text.trim().split(/\n\s*\n/);
 	const kept = [blocks[0] ?? ""];
-	// A list right after the first paragraph finishes its sentence.
-	if (/^\s*- /.test(blocks[1] ?? "")) kept.push(blocks[1]);
+	const unfinished = !/[.!?]\s*$/.test(blocks[0] ?? "");
+	if ((unfinished || !entry.table) && /^\s*- /.test(blocks[1] ?? ""))
+		kept.push(blocks[1]);
 	return kept.map(toMarkdown).join("\n\n");
 }
 

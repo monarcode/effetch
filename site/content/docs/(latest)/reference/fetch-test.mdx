@@ -61,8 +61,6 @@ The services handler `H` needs to run: `R` for a `Handler<R>`. For a union of ha
 
 Options for [`layer`](#layer).
 
-- `baseUrl`: where the routes start, such as `"https://api.test/v1"`. With it, a request matches a route only when its URL is the `baseUrl`, then the route's path. Without it, a route matches the end of a request's path, whatever comes before it, so the fake backend works under any client's `baseUrl`.
-
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/test/FetchTest.d.ts"
   name="LayerOptions"
@@ -88,9 +86,6 @@ Options for a [`reply`](#reply) or a [`fail`](#fail) handler.
 ### FetchTest.RespondOptions [#respondoptions]
 
 Options for the responses of a [`respond`](#respond) handler that aren't a [`Reply`](#reply-type).
-
-- `status`: the status, from 200 to 599. Defaults to `200`, or to `204` when there's no body to send.
-- `headers`: sent with the response, over its content type.
 
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/test/FetchTest.d.ts"

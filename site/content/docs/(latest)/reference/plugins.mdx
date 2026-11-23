@@ -30,10 +30,6 @@ Sends `Authorization: <scheme> <token>` with every request.
 
 Options for [`bearer`](#bearer).
 
-- `token`: where the token comes from (see [`TokenSource`](#tokensource)). It's resolved for every request, inside that request's fiber, and never cached, so a refreshed or cleared token takes effect on the next request.
-- `scheme`: the word before the token. Defaults to `"Bearer"`.
-- `refresh`: where a new token comes from when the server answers `401` to a request that `bearer` sent a token with (see [`RefreshSource`](#refreshsource)). The request is then sent once more, with the new token. Without `refresh`, a `401` is returned as it is.
-
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/plugins/bearer.d.ts"
   name="BearerOptions"
@@ -87,12 +83,6 @@ The plugin made by [`retry`](#retry) with a `budget`. It fails with `TimeoutErro
 
 Options for [`retry`](#retry).
 
-- `times`: how many times to retry, after the first attempt. Defaults to `2`. Calls can override it.
-- `schedule`: the delays between attempts. Defaults to an exponential backoff from 200ms, with jitter. `times` still caps the retries.
-- `methods`: the methods that are retried. Defaults to the idempotent ones: `GET`, `HEAD`, `OPTIONS`, `PUT` and `DELETE`.
-- `statuses`: the response statuses that are retried. Defaults to `408`, `429`, `500`, `502`, `503` and `504`.
-- `retryAfter`: whether to wait as long as a retried response's `Retry-After` header asks, in place of the schedule's next delay. `true` caps the wait at 1 minute, and `{ max }` at `max`. Defaults to `false`.
-
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/plugins/retry.d.ts"
   name="RetryOptions"
@@ -142,8 +132,6 @@ Logs one entry per call with Effect's logger: the method, the URL, the status an
 
 Options for [`logger`](#logger).
 
-- `level`: the log level of every entry, `"Debug"` (the default) or `"Info"`. Effect's default logger hides Debug entries unless the minimum log level allows them.
-
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/plugins/logger.d.ts"
   name="LoggerOptions"
@@ -164,12 +152,6 @@ Prints each call to the console while you develop: one line per call, opening a 
 ### ConsoleLoggerCall [#consoleloggercall]
 
 The call `ConsoleLoggerOptions.filter` decides on.
-
-- `route`: the call's method and unfilled path, such as `"GET /users/:id"`.
-- `request`: the request that was sent, after every plugin changed it. Without a response, it's the request as the call built it, before plugins ran.
-- `response`: the response, or `undefined` when there was none.
-- `exit`: the call's outcome.
-- `durationMs`: how long the call took, in milliseconds.
 
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/plugins/consoleLogger.d.ts"
@@ -196,16 +178,6 @@ How much [`consoleLogger`](#consolelogger) prints for each call.
 ### ConsoleLoggerOptions [#consoleloggeroptions]
 
 Options for [`consoleLogger`](#consolelogger). All are optional.
-
-- `enabled`: `false` makes the plugin do nothing, keeping its type, so it can stay in the plugin list in production. Defaults to `true`.
-- `detail`: `"summary"`, `"headers"` or `"full"` (the default). See [`ConsoleLoggerDetail`](#consoleloggerdetail).
-- `only`: `"all"` calls (the default), or `"errors"` for failed ones only. An interrupted call isn't a failed one.
-- `collapsed`: whether groups start collapsed. Defaults to `true`, and to `false` in React Native: Metro's terminal drops `console.groupCollapsed` and everything logged inside it. Node, Bun and Deno print collapsed groups expanded.
-- `slow`: calls that take at least this long are flagged with `⚠` and `(slow)`. Defaults to `false`, flagging none.
-- `maxBodyLength`: body text longer than this many characters is cut. A JSON body within it is printed as an object, for devtools to expand; a longer one as its cut text. Defaults to `10_000`.
-- `redact`: names to redact on top of the defaults, or `false` to redact nothing. See [`ConsoleLoggerRedact`](#consoleloggerredact).
-- `filter`: prints only the calls it returns `true` for.
-- `color`: see [`ConsoleLoggerColor`](#consoleloggercolor). Defaults to `"auto"`.
 
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/plugins/consoleLogger.d.ts"

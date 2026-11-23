@@ -75,6 +75,7 @@
 		"typecheck": "tsc --noEmit",
 		"check:docs": "node scripts/check-docs.mjs",
 		"docs:reference": "node scripts/reference-docs.mjs",
+		"docs:snapshot": "node scripts/snapshot-docs.mjs",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"check:package": "publint --strict && attw --pack . --profile esm-only",
