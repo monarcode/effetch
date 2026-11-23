@@ -1,12 +1,23 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { HomeLayout } from "fumadocs-ui/layouts/home";
+import { createFileRoute } from "@tanstack/react-router";
 
-import { baseOptions } from "@/lib/layout.shared";
+import { Header } from "@/components/landing/chrome";
+import {
+	Closing,
+	Compare,
+	Footer,
+	Hero,
+	Narrowing,
+	Paths,
+	Specifications,
+} from "@/components/landing/sections";
+import { SpecimenProvider } from "@/components/landing/specimen";
+import { loadLanding } from "@/lib/landing";
 import { pageMeta } from "@/lib/shared";
 
-const TAGLINE = "Typed HTTP calls for Effect, without the boilerplate.";
+import { version } from "../../../package.json";
 
 export const Route = createFileRoute("/")({
+	loader: () => loadLanding(),
 	head: () => ({
 		meta: pageMeta(
 			"Effetch: typed HTTP calls for Effect",
@@ -16,26 +27,29 @@ export const Route = createFileRoute("/")({
 	component: Home,
 });
 
-// A placeholder until the landing page is designed.
 function Home() {
+	const { specimen, paths, byHand, withEffetch, narrowing } =
+		Route.useLoaderData();
 	return (
-		<HomeLayout {...baseOptions()}>
-			<main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 py-16">
-				<h1 className="text-4xl font-semibold">Effetch</h1>
-				<p className="mt-3 text-lg text-fd-muted-foreground">{TAGLINE}</p>
-				<pre className="mt-6 overflow-x-auto rounded-md border bg-fd-card px-4 py-3 text-sm">
-					<code>pnpm add @monarcode/effetch effect</code>
-				</pre>
-				<div className="mt-6">
-					<Link
-						to="/docs/$"
-						params={{ _splat: "" }}
-						className="rounded-md bg-fd-primary px-4 py-2 text-sm font-medium text-fd-primary-foreground"
-					>
-						Read the docs
-					</Link>
-				</div>
+		<div className="spec flex min-h-svh flex-col">
+			<a
+				href="#main"
+				className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:border focus:border-rule focus:bg-ink focus:px-4 focus:py-2"
+			>
+				Skip to content
+			</a>
+			<Header />
+			<main id="main" className="flex-1">
+				<SpecimenProvider specimen={specimen}>
+					<Hero />
+				</SpecimenProvider>
+				<Compare byHand={byHand} withEffetch={withEffetch} />
+				<Paths paths={paths} />
+				<Narrowing example={narrowing} />
+				<Specifications version={version} />
+				<Closing />
 			</main>
-		</HomeLayout>
+			<Footer />
+		</div>
 	);
 }

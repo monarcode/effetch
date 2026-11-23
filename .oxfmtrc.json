@@ -24,7 +24,8 @@
 		".smoke",
 		".tanstack",
 		"routeTree.gen.ts",
-		"site/versions"
+		"site/versions",
+		"site/landing"
 	],
 	"sortImports": {
 		"customGroups": [

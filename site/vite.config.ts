@@ -58,4 +58,10 @@ export default defineConfig(({ command }) => ({
 	resolve: {
 		tsconfigPaths: true,
 	},
+	// The landing page reads its types with Twoslash while it prerenders.
+	// TypeScript locates its own files from where it's installed, so it
+	// stays out of the server bundle.
+	ssr: {
+		external: ["fumadocs-twoslash", "typescript"],
+	},
 }));

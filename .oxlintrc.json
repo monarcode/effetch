@@ -12,7 +12,8 @@
 		"**/.smoke/**",
 		"**/.tanstack/**",
 		"**/routeTree.gen.ts",
-		"site/versions/**"
+		"site/versions/**",
+		"site/landing/**"
 	],
 	"rules": {
 		"no-unused-vars": "off",

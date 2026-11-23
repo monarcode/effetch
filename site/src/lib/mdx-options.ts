@@ -6,7 +6,8 @@ import type { MDXPresetOptions } from "fumadocs-mdx/config";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
 import type { Element, Root, RootContent } from "hast";
-import ts from "typescript";
+
+import { exampleCompilerOptions } from "./examples.ts";
 
 /*
  * How pages compile, for the build only: `vite.config.ts` hands these to
@@ -19,25 +20,6 @@ import ts from "typescript";
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 /** The site's own folder, which the type tables' paths start from. */
 const site = fileURLToPath(new URL("../../", import.meta.url));
-
-/**
- * The root `tsconfig.json`'s compiler options, which `check-docs` compiles
- * the examples with, without `paths`: those point at `src`, and the hovers
- * should show what readers get, the built `dist` with the namespace docs
- * the build puts back. Twoslash runs from the root, so
- * `@monarcode/effetch` resolves to `dist` through the package's `exports`.
- */
-function exampleCompilerOptions() {
-	const file = `${root}tsconfig.json`;
-	const { config, error } = ts.readConfigFile(file, ts.sys.readFile);
-	if (error)
-		throw new Error(ts.flattenDiagnosticMessageText(error.messageText, "\n"));
-	const options = { ...config.compilerOptions };
-	// The language service plugin is for editors.
-	delete options.paths;
-	delete options.plugins;
-	return options as Record<string, unknown>;
-}
 
 /**
  * What to do with a type error in an example. `vite build` fails, as
@@ -141,7 +123,7 @@ export const mdxOptions = (build: boolean): MDXPresetOptions => ({
 			transformerTwoslash({
 				twoslashOptions: {
 					cwd: root,
-					compilerOptions: exampleCompilerOptions(),
+					compilerOptions: exampleCompilerOptions(root),
 				},
 				rendererRich: { processHoverInfo },
 				onTwoslashError: twoslashErrors(build),
