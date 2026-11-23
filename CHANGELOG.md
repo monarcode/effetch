@@ -20,6 +20,8 @@ All notable changes to `@monarcode/effetch`, newest first.
   [llms.txt](https://effetch.pages.dev/llms.txt) and
   [llms-full.txt](https://effetch.pages.dev/llms-full.txt) list the pages
   for LLMs.
+- Releases update the documentation site: the live docs show the newest
+  release's API, and `main` deploys as a preview.
 
 ### Changed
 

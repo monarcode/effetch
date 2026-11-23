@@ -21,8 +21,19 @@ const { version } = JSON.parse(
 	readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ) as { version: string };
 
+// The live site, or, on a Cloudflare Pages preview (`main` and pull
+// requests), the preview's own address, so its Markdown links stay on it.
+const PRODUCTION = "https://effetch.pages.dev";
+const preview =
+	process.env.CF_PAGES_BRANCH && process.env.CF_PAGES_BRANCH !== "site";
+const siteUrl = (preview && process.env.CF_PAGES_URL) || PRODUCTION;
+
 export default defineConfig(({ command }) => ({
-	define: { __PACKAGE_VERSION__: JSON.stringify(version) },
+	define: {
+		__PACKAGE_VERSION__: JSON.stringify(version),
+		__SOURCE_REF__: JSON.stringify(process.env.CF_PAGES_COMMIT_SHA || "main"),
+		__SITE_URL__: JSON.stringify(siteUrl),
+	},
 	plugins: [
 		// The pages' MDX options run here, in the build, never in the browser.
 		fumadocsMdx({

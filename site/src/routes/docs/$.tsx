@@ -126,7 +126,7 @@ function Content({
 				<MarkdownCopyButton markdownUrl={markdownUrl} />
 				<ViewOptionsPopover
 					markdownUrl={markdownUrl}
-					githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/site/content/docs/${encodeURI(path)}`}
+					githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.ref}/site/content/docs/${encodeURI(path)}`}
 				/>
 			</div>
 			<DocsBody>
