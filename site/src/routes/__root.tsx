@@ -8,6 +8,7 @@ import { RootProvider } from "fumadocs-ui/provider/tanstack";
 
 import { Link } from "@/components/link";
 import SearchDialog from "@/components/search";
+import { TOUCH_ICON_PATH } from "@/lib/og";
 
 import appCss from "@/styles/app.css?url";
 
@@ -17,12 +18,17 @@ export const Route = createRootRoute({
 			{ charSet: "utf-8" },
 			{ name: "viewport", content: "width=device-width, initial-scale=1" },
 			{ title: "Effetch" },
+			// The default; `pageHead` sets each page's own.
 			{ property: "og:type", content: "website" },
 			{ property: "og:site_name", content: "Effetch" },
+			{ property: "og:locale", content: "en_US" },
+			// The browser's chrome in the page's ink.
+			{ name: "theme-color", content: "#16171d" },
 		],
 		links: [
 			{ rel: "stylesheet", href: appCss },
 			{ rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+			{ rel: "apple-touch-icon", href: TOUCH_ICON_PATH },
 		],
 	}),
 	component: RootComponent,

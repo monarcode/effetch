@@ -13,6 +13,7 @@ import {
 	HOME_IMAGE_PATH,
 	IMAGE_AS_BASE64,
 	pageImagePath,
+	TOUCH_ICON_PATH,
 } from "./src/lib/og.ts";
 
 // The link-preview images. The prerender writes each response as text,
@@ -73,17 +74,28 @@ export default defineConfig(({ command }) => ({
 		}),
 		tailwindcss(),
 		tanstackStart({
-			// Static files only: every page is prerendered to HTML at build time.
-			prerender: { enabled: true, crawlLinks: true },
+			// Static files only: every page is prerendered to HTML at build time,
+			// as `docs/calls/body.html` rather than `docs/calls/body/index.html`.
+			// Cloudflare Pages serves the file at `/docs/calls/body`, the URL every
+			// link uses; a folder's `index.html` would redirect it to a URL with a
+			// trailing slash.
+			prerender: {
+				enabled: true,
+				crawlLinks: true,
+				autoSubfolderIndex: false,
+			},
 			// Routes no page links to, so the crawler doesn't find them.
 			pages: [
 				...docsPages,
 				{ path: HOME_IMAGE_PATH, prerender: imagePrerender },
+				{ path: TOUCH_ICON_PATH, prerender: imagePrerender },
 				{ path: "/api/search" },
 				{ path: "/llms.txt" },
 				{ path: "/llms-full.txt" },
+				{ path: "/robots.txt" },
+				{ path: "/sitemap.xml" },
 				// Written to `404.html` at the output's root.
-				{ path: "/404", prerender: { autoSubfolderIndex: false } },
+				{ path: "/404" },
 			],
 		}),
 		react(),

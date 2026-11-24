@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { Header } from "@/components/landing/chrome";
+import { GITHUB, Header } from "@/components/landing/chrome";
 import {
 	Closing,
 	Compare,
@@ -13,19 +13,38 @@ import {
 import { SpecimenProvider } from "@/components/landing/specimen";
 import { loadLanding } from "@/lib/landing";
 import { HOME_IMAGE_PATH } from "@/lib/og";
-import { pageMeta } from "@/lib/shared";
+import { pageHead, SITE_URL, websiteJsonLd } from "@/lib/shared";
 
 import { version } from "../../../package.json";
 
+const DESCRIPTION =
+	"Schema-driven HTTP calls on Effect v4's HttpClient: path params, object queries, decoded responses, typed errors and plugins.";
+
 export const Route = createFileRoute("/")({
 	loader: () => loadLanding(),
-	head: () => ({
-		meta: pageMeta(
-			"Effetch: typed HTTP calls for Effect",
-			"Schema-driven HTTP calls on Effect v4's HttpClient: path params, object queries, decoded responses, typed errors and plugins.",
-			HOME_IMAGE_PATH,
-		),
-	}),
+	head: () =>
+		pageHead({
+			title: "Effetch: typed HTTP calls for Effect",
+			description: DESCRIPTION,
+			path: "/",
+			type: "website",
+			image: HOME_IMAGE_PATH,
+			jsonLd: [
+				// The site's name, for search results.
+				websiteJsonLd(),
+				{
+					"@context": "https://schema.org",
+					"@type": "SoftwareSourceCode",
+					name: "Effetch",
+					description: DESCRIPTION,
+					url: `${SITE_URL}/`,
+					codeRepository: GITHUB,
+					programmingLanguage: "TypeScript",
+					license: "https://opensource.org/licenses/MIT",
+					version,
+				},
+			],
+		}),
 	component: Home,
 });
 

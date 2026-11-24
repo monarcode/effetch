@@ -1,26 +1,76 @@
 export const docsRoute = "/docs";
 
+/** The site's structured-data node, which every page's data refers to. */
+export function websiteJsonLd() {
+	return {
+		"@context": "https://schema.org",
+		"@type": "WebSite",
+		"@id": `${SITE_URL}/#website`,
+		name: "Effetch",
+		url: `${SITE_URL}/`,
+	};
+}
+
+/** What {@link pageHead} needs to describe a page. */
+export interface PageHeadInput {
+	title: string;
+	description: string;
+	/** The page's path, such as `/docs/calls/body`: its canonical URL. */
+	path: string;
+	/** `article` for a docs page, `website` for the landing page. */
+	type: "website" | "article";
+	/** The path of its link-preview image (see `lib/og.ts`). */
+	image?: string | undefined;
+	/** The path of the page as Markdown, for LLMs and agents. */
+	markdown?: string | undefined;
+	/** Its structured data, for search engines. */
+	jsonLd?: readonly object[] | undefined;
+}
+
 /**
- * A page's title and description, for the browser and for link previews,
- * and the path of its preview image (see `lib/og.ts`).
+ * A page's head: its title and description, for the browser, search
+ * engines and link previews, with the canonical URL each of them should
+ * use. Full URLs throughout, since these are read away from the site.
  */
-export function pageMeta(title: string, description: string, image?: string) {
-	return [
-		{ title },
-		{ name: "description", content: description },
-		{ property: "og:title", content: title },
-		{ property: "og:description", content: description },
-		...(image
-			? [
-					// Link previews need the image's full URL.
-					{ property: "og:image", content: `${SITE_URL}${image}` },
-					{ property: "og:image:width", content: "1200" },
-					{ property: "og:image:height", content: "630" },
-					{ property: "og:image:alt", content: title },
-					{ name: "twitter:card", content: "summary_large_image" },
-				]
-			: []),
-	];
+export function pageHead(page: PageHeadInput) {
+	const url = SITE_URL + page.path;
+	return {
+		meta: [
+			{ title: page.title },
+			{ name: "description", content: page.description },
+			{ property: "og:title", content: page.title },
+			{ property: "og:description", content: page.description },
+			{ property: "og:url", content: url },
+			{ property: "og:type", content: page.type },
+			...(page.image
+				? [
+						{ property: "og:image", content: SITE_URL + page.image },
+						{ property: "og:image:width", content: "1200" },
+						{ property: "og:image:height", content: "630" },
+						{ property: "og:image:alt", content: page.title },
+						{ name: "twitter:card", content: "summary_large_image" },
+					]
+				: []),
+		],
+		// Written into the page as is, so `<` is escaped: a string can't end
+		// the script.
+		scripts: (page.jsonLd ?? []).map((data) => ({
+			type: "application/ld+json",
+			children: JSON.stringify(data).replace(/</g, "\\u003c"),
+		})),
+		links: [
+			{ rel: "canonical", href: url },
+			...(page.markdown
+				? [
+						{
+							rel: "alternate",
+							type: "text/markdown",
+							href: SITE_URL + page.markdown,
+						},
+					]
+				: []),
+		],
+	};
 }
 
 /** The route prerendered to `404.html`, and the meta tag that marks it. */

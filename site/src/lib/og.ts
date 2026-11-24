@@ -7,6 +7,12 @@
 /** The size every link preview is drawn at: the Open Graph standard. */
 export const OG_SIZE = { width: 1200, height: 630 } as const;
 
+/** The home-screen icon iOS uses, which can't be an SVG. */
+export const TOUCH_ICON_PATH = "/apple-touch-icon.png";
+
+/** Its size, as iOS asks for it. */
+export const TOUCH_ICON_SIZE = { width: 180, height: 180 } as const;
+
 /** The landing page's image. */
 export const HOME_IMAGE_PATH = "/og/home.png";
 

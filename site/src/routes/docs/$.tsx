@@ -25,11 +25,12 @@ import {
 	gitConfig,
 	LATEST,
 	latestLabel,
-	pageMeta,
+	pageHead,
+	SITE_URL,
 	versionOfPath,
 } from "@/lib/shared";
 // Used only by the server function's handler, which the client build drops.
-import { source } from "@/lib/source";
+import { pageFolders, source } from "@/lib/source";
 
 export const Route = createFileRoute("/docs/$")({
 	component: Page,
@@ -39,22 +40,67 @@ export const Route = createFileRoute("/docs/$")({
 		await docs.getPage(data.path)?.preload();
 		return data;
 	},
-	head: ({ loaderData }) => ({
-		meta: loaderData
-			? [
-					...pageMeta(
-						`${loaderData.title} | Effetch`,
-						loaderData.description,
-						pageImagePath(loaderData.slugs),
-					),
-					// Older lines stay out of search engines, which send readers
-					// to the current docs instead.
-					...(loaderData.older
-						? [{ name: "robots", content: "noindex" }]
-						: []),
-				]
-			: [],
-	}),
+	head: ({ loaderData }) => {
+		if (!loaderData) return {};
+		const { title, description, url, markdownUrl, folders, older } =
+			loaderData;
+		const image = pageImagePath(loaderData.slugs);
+		const head = pageHead({
+			title: `${title} | Effetch`,
+			description,
+			path: url,
+			type: "article",
+			image,
+			markdown: markdownUrl,
+			jsonLd: [
+				{
+					"@context": "https://schema.org",
+					"@type": "TechArticle",
+					headline: title,
+					description,
+					url: SITE_URL + url,
+					image: SITE_URL + image,
+					inLanguage: "en",
+					isPartOf: { "@id": `${SITE_URL}/#website` },
+				},
+				// Search results show the trail. An older line's pages aren't
+				// indexed, and their trail would start in the current docs.
+				...(older
+					? []
+					: [
+							{
+								"@context": "https://schema.org",
+								"@type": "BreadcrumbList",
+								itemListElement: [
+									{ name: "Docs", url: "/docs" },
+									...folders,
+									{ name: title, url },
+								]
+									// The first page's own crumb would repeat Docs.
+									.filter(
+										(crumb, i, all) =>
+											all.findIndex((c) => c.url === crumb.url) ===
+											i,
+									)
+									.map((crumb, i) => ({
+										"@type": "ListItem",
+										position: i + 1,
+										name: crumb.name,
+										item: SITE_URL + crumb.url,
+									})),
+							},
+						]),
+			],
+		});
+		// Older lines stay out of search engines, which send readers to the
+		// current docs instead.
+		return older
+			? {
+					...head,
+					meta: [...head.meta, { name: "robots", content: "noindex" }],
+				}
+			: head;
+	},
 });
 
 /**
@@ -88,6 +134,8 @@ const loader = createServerFn({ method: "GET" })
 		return {
 			path: page.path,
 			slugs: page.slugs,
+			url: page.url,
+			folders: pageFolders(page.url),
 			title: page.data.title ?? "",
 			description: page.data.description ?? "",
 			markdownUrl: getPageMarkdownUrl(page).url,

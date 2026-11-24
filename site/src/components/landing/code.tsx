@@ -25,7 +25,9 @@ export function useSetIn(ref: RefObject<HTMLElement | null>) {
 				observer.disconnect();
 				element.dataset.setIn = "view";
 			},
-			{ threshold: 0.35 },
+			// As soon as any of it rises above the screen's bottom fifth. A
+			// ratio of it in view can't be reached by one taller than the screen.
+			{ rootMargin: "0px 0px -20% 0px" },
 		);
 		observer.observe(element);
 		return () => {

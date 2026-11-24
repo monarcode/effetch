@@ -223,16 +223,35 @@ export function HomeImage() {
 	);
 }
 
+/** The home-screen icon: the mark on ink, as the favicon draws it. */
+export function TouchIcon() {
+	return (
+		<div
+			style={{
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "center",
+				width: "100%",
+				height: "100%",
+				backgroundColor: INK,
+			}}
+		>
+			<Mark height={116} />
+		</div>
+	);
+}
+
 /**
  * Draws an image as a PNG response, or, for the prerender, as base64 text
- * (see {@link IMAGE_AS_BASE64}).
+ * (see {@link IMAGE_AS_BASE64}). Link previews by default.
  */
 export async function imageResponse(
 	element: ReactNode,
 	request: Request,
+	size: { width: number; height: number } = OG_SIZE,
 ): Promise<Response> {
 	const image = await render(element, {
-		...OG_SIZE,
+		...size,
 		format: "png",
 		fonts: FONTS,
 	});
