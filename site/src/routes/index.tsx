@@ -12,6 +12,7 @@ import {
 } from "@/components/landing/sections";
 import { SpecimenProvider } from "@/components/landing/specimen";
 import { loadLanding } from "@/lib/landing";
+import { HOME_IMAGE_PATH } from "@/lib/og";
 import { pageMeta } from "@/lib/shared";
 
 import { version } from "../../../package.json";
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/")({
 		meta: pageMeta(
 			"Effetch: typed HTTP calls for Effect",
 			"Schema-driven HTTP calls on Effect v4's HttpClient: path params, object queries, decoded responses, typed errors and plugins.",
+			HOME_IMAGE_PATH,
 		),
 	}),
 	component: Home,

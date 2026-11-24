@@ -77,6 +77,11 @@ to static files. It's a package in the pnpm workspace and isn't published.
   `/llms.txt` and `/llms-full.txt` list the current line's pages. Link
   between pages with root-relative paths, which the Markdown turns into
   full URLs.
+- Each docs page, and the landing page, has a link-preview image, drawn
+  with Takumi by `site/src/lib/og-image.tsx` and served at `/og/docs/<page>.png`
+  and `/og/home.png`. `vite.config.ts` lists them for the prerender, which
+  saves responses as text, so it asks for each image as base64 and writes
+  the bytes back. In dev, open an image's URL to see it.
 - The live docs deploy from the `site` branch, which the Release workflow
   moves to each released commit; `main` and pull requests deploy as
   previews. Don't push `site` yourself.

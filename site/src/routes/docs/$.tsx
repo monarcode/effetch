@@ -19,6 +19,7 @@ import { DocsHeader } from "@/components/docs/header";
 import { useMDXComponents } from "@/components/mdx";
 import { docs } from "@/lib/docs";
 import { baseOptions } from "@/lib/layout.shared";
+import { pageImagePath } from "@/lib/og";
 import {
 	getPageMarkdownUrl,
 	gitConfig,
@@ -44,6 +45,7 @@ export const Route = createFileRoute("/docs/$")({
 					...pageMeta(
 						`${loaderData.title} | Effetch`,
 						loaderData.description,
+						pageImagePath(loaderData.slugs),
 					),
 					// Older lines stay out of search engines, which send readers
 					// to the current docs instead.
@@ -85,6 +87,7 @@ const loader = createServerFn({ method: "GET" })
 					};
 		return {
 			path: page.path,
+			slugs: page.slugs,
 			title: page.data.title ?? "",
 			description: page.data.description ?? "",
 			markdownUrl: getPageMarkdownUrl(page).url,

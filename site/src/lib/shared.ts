@@ -1,12 +1,25 @@
 export const docsRoute = "/docs";
 
-/** A page's title and description, for the browser and for link previews. */
-export function pageMeta(title: string, description: string) {
+/**
+ * A page's title and description, for the browser and for link previews,
+ * and the path of its preview image (see `lib/og.ts`).
+ */
+export function pageMeta(title: string, description: string, image?: string) {
 	return [
 		{ title },
 		{ name: "description", content: description },
 		{ property: "og:title", content: title },
 		{ property: "og:description", content: description },
+		...(image
+			? [
+					// Link previews need the image's full URL.
+					{ property: "og:image", content: `${SITE_URL}${image}` },
+					{ property: "og:image:width", content: "1200" },
+					{ property: "og:image:height", content: "630" },
+					{ property: "og:image:alt", content: title },
+					{ name: "twitter:card", content: "summary_large_image" },
+				]
+			: []),
 	];
 }
 
