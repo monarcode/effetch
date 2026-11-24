@@ -294,11 +294,7 @@ describe("return type", () => {
 		expectTypeOf(
 			endpoint("DELETE /todos/:id")({ params: { id: 1 } }),
 		).toEqualTypeOf<
-			Effect.Effect<
-				Response,
-				NetworkError | HttpError.With<unknown> | TimeoutError,
-				never
-			>
+			Effect.Effect<Response, NetworkError | HttpError | TimeoutError, never>
 		>();
 	});
 
@@ -307,7 +303,7 @@ describe("return type", () => {
 		expectTypeOf(getTodo({ params: { id: 1 } })).toEqualTypeOf<
 			Effect.Effect<
 				Todo,
-				NetworkError | HttpError.With<unknown> | DecodeError | TimeoutError,
+				NetworkError | HttpError | DecodeError | TimeoutError,
 				never
 			>
 		>();

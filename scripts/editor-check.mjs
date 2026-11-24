@@ -433,6 +433,7 @@ const errorsAndServices = (hover) => {
 		: undefined;
 };
 
+// `typed` has a `defaultError`, so its calls fail with `HttpError.With<…>`.
 const callErrors = ["DecodeError", "HttpError.With", "NetworkError"];
 for (const [marker, errors, services] of [
 	["todoCall", callErrors, ["never"]],
@@ -441,7 +442,12 @@ for (const [marker, errors, services] of [
 	["boundCall", callErrors, ["never"]],
 	["postCall", callErrors, ["never"]],
 	["requestCall", callErrors, ["never"]],
-	["timedCall", [...callErrors, "TimeoutError"].sort(), ["never"]],
+	// `timed` has no `defaultError`, so its body isn't typed: plain `HttpError`.
+	[
+		"timedCall",
+		["DecodeError", "HttpError", "NetworkError", "TimeoutError"],
+		["never"],
+	],
 	["servicesCall", callErrors, ["Locale", "Signer"]],
 	["statusGet", [...callErrors, "TodoNotFound"].sort(), ["never"]],
 	[

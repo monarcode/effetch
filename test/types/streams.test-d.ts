@@ -45,9 +45,7 @@ describe("api.sse and api.ndjson", () => {
 		expectTypeOf(api.sse("/events")).toEqualTypeOf<
 			Stream.Stream<
 				Fetch.SseEvent<string>,
-				| Fetch.NetworkError
-				| Fetch.HttpError.With<unknown>
-				| Fetch.DecodeError,
+				Fetch.NetworkError | Fetch.HttpError | Fetch.DecodeError,
 				never
 			>
 		>();
@@ -182,9 +180,7 @@ describe("stream endpoints", () => {
 		expectTypeOf(api.bind(plain)()).toEqualTypeOf<
 			Effect.Effect<
 				{ readonly id: number },
-				| Fetch.NetworkError
-				| Fetch.HttpError.With<unknown>
-				| Fetch.DecodeError,
+				Fetch.NetworkError | Fetch.HttpError | Fetch.DecodeError,
 				never
 			>
 		>();

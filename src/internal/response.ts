@@ -62,10 +62,7 @@ const readErrorBody = <EB extends AnySchema>(
  */
 export function checkStatus(
 	response: HttpClientResponse.HttpClientResponse,
-): Effect.Effect<
-	HttpClientResponse.HttpClientResponse,
-	HttpError.With<unknown>
->;
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpError>;
 export function checkStatus<EB extends AnySchema>(
 	response: HttpClientResponse.HttpClientResponse,
 	errorSchema: EB,
@@ -79,7 +76,7 @@ export function checkStatus<EB extends AnySchema>(
 	errorSchema: EB | undefined,
 ): Effect.Effect<
 	HttpClientResponse.HttpClientResponse,
-	HttpError.With<unknown>,
+	HttpError,
 	EB["DecodingServices"]
 >;
 export function checkStatus(

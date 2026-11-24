@@ -168,7 +168,7 @@ describe("make with plugins written inline", () => {
 		>().toEqualTypeOf<HttpClient.HttpClient>();
 		const call = inlineApi.get("/todos");
 		expectTypeOf<Effect.Error<typeof call>>().toEqualTypeOf<
-			Fetch.NetworkError | Fetch.HttpError.With<unknown>
+			Fetch.NetworkError | Fetch.HttpError
 		>();
 		inlineApi.get("/todos", {
 			plugins: { plain: false, withOptions: { version: "2" } },
@@ -189,7 +189,7 @@ describe("Client with plugins", () => {
 		const call = plugged.get("/todos", { output: Todo });
 		expectTypeOf<Effect.Error<typeof call>>().toEqualTypeOf<
 			| Fetch.NetworkError
-			| Fetch.HttpError.With<unknown>
+			| Fetch.HttpError
 			| Fetch.DecodeError
 			| TokenError
 			| Unavailable

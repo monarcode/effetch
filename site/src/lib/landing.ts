@@ -419,11 +419,17 @@ async function readSpecimen(): Promise<Specimen> {
 	});
 	if (combos.length !== 16)
 		throw new Error(`specimen.ts: ${combos.length} combinations, not 16`);
-	// One order for every error, by name before any type argument, that
-	// each union follows.
-	const key = (error: string) => error.split("<")[0]!;
+	// One order for every error, by name before any member or type
+	// argument, that each union follows. `HttpError` and
+	// `HttpError.With<ApiError>` are one slot. TypeScript prints the plain
+	// one first and the typed one last, so the typed combinations set the
+	// order, and the check below leaves the plain one out.
+	const key = (error: string) => error.split(/[.<]/)[0]!;
 	const errors: string[] = [];
-	for (const combo of combos)
+	const typedFirst = [...combos].sort(
+		(a, b) => Number(b.error) - Number(a.error),
+	);
+	for (const combo of typedFirst)
 		for (const error of combo.effect.errors)
 			if (!errors.includes(key(error))) {
 				const before = combo.effect.errors
@@ -437,7 +443,9 @@ async function readSpecimen(): Promise<Specimen> {
 				);
 			}
 	for (const combo of combos) {
-		const order = combo.effect.errors.map(key);
+		const order = combo.effect.errors
+			.filter((error) => error !== "HttpError")
+			.map(key);
 		const kept = errors.filter((error) => order.includes(error));
 		if (kept.join() !== order.join())
 			throw new Error(`specimen.ts: ${combo.call} orders its errors apart`);

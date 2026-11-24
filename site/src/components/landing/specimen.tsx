@@ -164,16 +164,23 @@ function TypeText({ text }: { text: string }) {
 	);
 }
 
-/** An error's name and its type argument: `HttpError.With`, `unknown`. */
+/**
+ * An error's name, the member of its namespace it's typed through, and its
+ * type argument: `HttpError.With<ApiError>` is `HttpError`, `.With` and
+ * `ApiError`. A plain `HttpError` is the same error, untyped, so both share
+ * a slot.
+ */
 export function parts(error: string) {
-	const open = error.indexOf("<");
-	return open < 0
-		? { name: error, argument: undefined }
-		: { name: error.slice(0, open), argument: error.slice(open + 1, -1) };
+	const [, name = error, member = "", argument] =
+		/^([^.<]+)(\.[^<]+)?(?:<(.*)>)?$/s.exec(error) ?? [];
+	return { name, member, argument };
 }
 
-/** Every error a signature can carry, with every type argument it takes. */
-export type ErrorSlot = { name: string; arguments: string[] };
+/**
+ * Every error a signature can carry, with every type argument it takes and
+ * the member that takes them (`.With`), if any.
+ */
+export type ErrorSlot = { name: string; member: string; arguments: string[] };
 
 /** The text a screen reader reads for a signature. */
 export function spoken(effect: EffectParts) {
@@ -333,7 +340,8 @@ export function SpecimenSignature({
 									<>
 										{"\u200B"}
 										<span className="spec-pair spec-error">
-											<Member on={on}>
+											<Member on={present[slot.name] !== undefined}>
+												{slot.member}
 												<span className="spec-punct">&lt;</span>
 											</Member>
 											{slot.arguments.map((a) => (
@@ -344,7 +352,7 @@ export function SpecimenSignature({
 													{a}
 												</Member>
 											))}
-											<Member on={on}>
+											<Member on={present[slot.name] !== undefined}>
 												<span className="spec-punct">&gt;</span>
 											</Member>
 											{comma}
@@ -367,21 +375,20 @@ export function SpecimenSignature({
 
 /** Every error a set of signatures carries, in the order `names` gives. */
 export function slotsOf(names: string[], effects: EffectParts[]): ErrorSlot[] {
-	return names.map((name) => ({
-		name,
-		arguments: [
-			...new Set(
-				effects.flatMap((effect) =>
-					effect.errors
-						.map(parts)
-						.filter((error) => error.name === name)
-						.flatMap((error) =>
-							error.argument === undefined ? [] : [error.argument],
-						),
+	return names.map((name) => {
+		const typed = effects.flatMap((effect) =>
+			effect.errors
+				.map(parts)
+				.filter(
+					(error) => error.name === name && error.argument !== undefined,
 				),
-			),
-		],
-	}));
+		);
+		return {
+			name,
+			member: typed[0]?.member ?? "",
+			arguments: [...new Set(typed.map((error) => error.argument!))],
+		};
+	});
 }
 
 /**

@@ -21,11 +21,7 @@ declare const maybeApiError: typeof ApiError | undefined;
 describe("checkStatus", () => {
 	it("keeps the response and types the body as unknown without a schema", () => {
 		expectTypeOf(checkStatus(response)).toEqualTypeOf<
-			Effect.Effect<
-				HttpClientResponse.HttpClientResponse,
-				HttpError.With<unknown>,
-				never
-			>
+			Effect.Effect<HttpClientResponse.HttpClientResponse, HttpError, never>
 		>();
 	});
 
@@ -41,11 +37,7 @@ describe("checkStatus", () => {
 
 	it("types the body as unknown when the schema may be undefined", () => {
 		expectTypeOf(checkStatus(response, maybeApiError)).toEqualTypeOf<
-			Effect.Effect<
-				HttpClientResponse.HttpClientResponse,
-				HttpError.With<unknown>,
-				never
-			>
+			Effect.Effect<HttpClientResponse.HttpClientResponse, HttpError, never>
 		>();
 	});
 

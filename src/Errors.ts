@@ -119,7 +119,9 @@ export class HttpError extends Schema.TaggedError<HttpError>()("HttpError", {
 export declare namespace HttpError {
 	/**
 	 * An {@link HttpError} whose `body` was decoded as `B`. `body` is
-	 * `undefined` when the response didn't match the error schema.
+	 * `undefined` when the response didn't match the error schema. A call
+	 * with an `error` schema, or a client with a `defaultError`, fails with
+	 * one. Without either, a call fails with a plain `HttpError`.
 	 *
 	 * @example
 	 * ```ts

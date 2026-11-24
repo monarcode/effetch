@@ -34,6 +34,18 @@ All notable changes to `@monarcode/effetch`, newest first.
   the client `client` (as in `client.bind`). They say "bind" or "your
   client's endpoint or bind method", so they read the same whatever you
   name your client.
+- A call without an `error` schema, on a client without a `defaultError`,
+  now shows its error as `HttpError` rather than `HttpError.With<unknown>`:
+  `Effect<Todo, NetworkError | DecodeError | HttpError>`. They're the same
+  type, so values and assignments are unaffected. With a schema, the error
+  is still `HttpError.With<…>`, typed by it, and `Schema.Any` still gives
+  `HttpError.With<any>`. One thing can break: a
+  function generic over the error schema, such as one that takes a
+  `Fetch.CallEffect<O, EB, …>` with `EB` still a type parameter, can no
+  longer use `Effect.catchTag("HttpError", …)` on it, because TypeScript
+  can't tell which of the two the error is. Check `error._tag ===
+  "HttpError"` instead, or type the parameter as any
+  `Effect.Effect<A, E, R>`, as the `CallEffect` docs advise.
 
 ### Fixed
 

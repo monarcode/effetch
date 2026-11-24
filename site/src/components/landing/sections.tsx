@@ -397,8 +397,7 @@ const FAILURES: Record<string, string> = {
 	SchemaError: "A JSON body that doesn't match Todo.",
 	DecodeError: "A 2xx body that isn't JSON or doesn't match Todo.",
 	NetworkError: "No response: offline, DNS failure, connection refused, CORS.",
-	"HttpError.With<unknown>":
-		"A status outside 200–299, with its headers and body.",
+	HttpError: "A status outside 200–299, with its headers and body.",
 	HttpClient: "Needs an HttpClient layer before it runs.",
 	never: "Needs nothing more to run.",
 };

@@ -626,7 +626,10 @@ export declare namespace Plugin {
 			| (Options<P> extends infer O
 					? O extends object
 						? { [K in keyof O]?: O[K] | undefined }
-						: O
+						: // Options typed `unknown` take `{}`, as `Partial` gives.
+							unknown extends O
+							? {}
+							: O
 					: never);
 
 	/**

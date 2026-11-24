@@ -287,6 +287,14 @@ describe("Plugin.Overrides", () => {
 		void [ok, wrong, nonsense];
 	});
 
+	it("takes {} for options typed unknown, as Partial does", () => {
+		type Loose = Plugin<"loose", never, never, unknown>;
+		expectTypeOf<Plugin.Override<Loose>>().toEqualTypeOf<false | {}>();
+		// @ts-expect-error: null isn't an override
+		const none: Plugin.Override<Loose> = null;
+		void none;
+	});
+
 	it("types option keys", () => {
 		// @ts-expect-error times is a number
 		const wrongType: Overrides = { retry: { times: "0" } };

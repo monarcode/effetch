@@ -597,10 +597,12 @@ export type Success<
 		: HttpClientResponse.HttpClientResponse;
 
 /**
- * What a call can fail with: `NetworkError`, `HttpError` (with `body`
- * typed by the `error` schema), `DecodeError` when there's an `output`
- * schema, the plugins' errors, and the errors of the `statusErrors` maps
- * that apply (see {@link StatusError}).
+ * What a call can fail with: `NetworkError`, `HttpError`, `DecodeError`
+ * when there's an `output` schema, the plugins' errors, and the errors of
+ * the `statusErrors` maps that apply (see {@link StatusError}). With an
+ * `error` schema, or the client's `defaultError`, the `HttpError` is an
+ * `HttpError.With<…>` whose `body` has the schema's type. Without one,
+ * it's a plain `HttpError`, whose `body` is `unknown`.
  *
  * - `SE`: the `statusErrors` maps of the call, the endpoint and the client,
  *   as a union. `undefined` (the default) when there are none.
@@ -627,7 +629,15 @@ export type CallError<
 	SE extends StatusErrorMap | undefined = undefined,
 > =
 	| NetworkError
-	| HttpError.With<EB["Type"]>
+	// A body typed `unknown` gives plain `HttpError`, which is the same type
+	// and reads better. `any` keeps `With<any>`, so its body stays `any`
+	// (`0 extends 1 & B` holds only for `any`). The brackets keep a union
+	// body whole. The signatures that write these members out do the same.
+	| ([unknown] extends [EB["Type"]]
+			? 0 extends 1 & EB["Type"]
+				? HttpError.With<EB["Type"]>
+				: HttpError
+			: HttpError.With<EB["Type"]>)
 	| (O extends AnySchema ? DecodeError : never)
 	| Plugin.Errors<Ps>
 	| StatusError<SE>;
@@ -701,7 +711,7 @@ export type CallServices<
  *   Schema.Unknown,
  *   []
  * >;
- * //   ^? Effect<{ readonly id: number }, NetworkError | DecodeError | HttpError.With<unknown>, never>
+ * //   ^? Effect<{ readonly id: number }, NetworkError | DecodeError | HttpError, never>
  * ```
  *
  * @since 0.1.0
@@ -720,7 +730,11 @@ export type CallEffect<
 	// print `CallError<…>` rather than the members. The method and endpoint
 	// signatures spell them out the same way.
 	| NetworkError
-	| HttpError.With<EB["Type"]>
+	| ([unknown] extends [EB["Type"]]
+			? 0 extends 1 & EB["Type"]
+				? HttpError.With<EB["Type"]>
+				: HttpError
+			: HttpError.With<EB["Type"]>)
 	| (O extends AnySchema ? DecodeError : never)
 	| Plugin.Errors<Ps>
 	| StatusError<SE>,
@@ -771,7 +785,11 @@ export interface NoBodyMethod<
 		Success<O, NoInfer<M>>,
 		// CallError and CallServices, written out (see CallEffect)
 		| NetworkError
-		| HttpError.With<EB["Type"]>
+		| ([unknown] extends [EB["Type"]]
+				? 0 extends 1 & EB["Type"]
+					? HttpError.With<EB["Type"]>
+					: HttpError
+				: HttpError.With<EB["Type"]>)
 		| (O extends AnySchema ? DecodeError : never)
 		| Plugin.Errors<Ps>
 		| StatusError<NoInfer<SE>>
@@ -829,7 +847,11 @@ export interface BodyMethod<
 		Success<O, NoInfer<M>>,
 		// CallError and CallServices, written out (see CallEffect)
 		| NetworkError
-		| HttpError.With<EB["Type"]>
+		| ([unknown] extends [EB["Type"]]
+				? 0 extends 1 & EB["Type"]
+					? HttpError.With<EB["Type"]>
+					: HttpError
+				: HttpError.With<EB["Type"]>)
 		| (O extends AnySchema ? DecodeError : never)
 		| Plugin.Errors<Ps>
 		| StatusError<NoInfer<SE>>
@@ -889,7 +911,11 @@ export interface RequestMethod<
 		Success<O, NoInfer<M>>,
 		// CallError and CallServices, written out (see CallEffect)
 		| NetworkError
-		| HttpError.With<EB["Type"]>
+		| ([unknown] extends [EB["Type"]]
+				? 0 extends 1 & EB["Type"]
+					? HttpError.With<EB["Type"]>
+					: HttpError
+				: HttpError.With<EB["Type"]>)
 		| (O extends AnySchema ? DecodeError : never)
 		| Plugin.Errors<Ps>
 		| StatusError<NoInfer<SE>>
