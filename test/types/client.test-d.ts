@@ -226,11 +226,7 @@ describe("body", () => {
 describe("return type", () => {
 	it("is the raw response without output", () => {
 		expectTypeOf(get("/todos")).toEqualTypeOf<
-			Effect.Effect<
-				Response,
-				NetworkError | HttpError.With<unknown> | TimeoutError,
-				never
-			>
+			Effect.Effect<Response, NetworkError | HttpError | TimeoutError, never>
 		>();
 	});
 
@@ -240,7 +236,7 @@ describe("return type", () => {
 		).toEqualTypeOf<
 			Effect.Effect<
 				Todo,
-				NetworkError | HttpError.With<unknown> | DecodeError | TimeoutError,
+				NetworkError | HttpError | DecodeError | TimeoutError,
 				never
 			>
 		>();
@@ -271,6 +267,39 @@ describe("return type", () => {
 		expectTypeOf<Extract<E, { _tag: "HttpError" }>["body"]>().toEqualTypeOf<
 			{ readonly code: string } | undefined
 		>();
+	});
+
+	it("shows plain HttpError for an unknown body, and With for a typed one", () => {
+		expectTypeOf<Effect.Error<ReturnType<typeof get<"/x">>>>().toEqualTypeOf<
+			NetworkError | HttpError | TimeoutError
+		>();
+		// `any` stays `any`, so `error.body.code` still compiles.
+		expectTypeOf(get("/x", { error: Schema.Any })).toEqualTypeOf<
+			Effect.Effect<
+				Response,
+				NetworkError | HttpError.With<any> | TimeoutError,
+				never
+			>
+		>();
+		const Either = Schema.Union([ApiError, Schema.String]);
+		expectTypeOf(get("/x", { error: Either })).toEqualTypeOf<
+			Effect.Effect<
+				Response,
+				| NetworkError
+				| HttpError.With<{ readonly code: string } | string>
+				| TimeoutError,
+				never
+			>
+		>();
+	});
+
+	it("narrows by _tag in code generic over the error schema", () => {
+		// `catchTag` can't read the tag of the still-open conditional member;
+		// checking `_tag` works.
+		const status = <EB extends AnySchema>(
+			error: CallError<undefined, EB, []>,
+		) => (error._tag === "HttpError" ? error.status : 0);
+		expectTypeOf(status).returns.toEqualTypeOf<number>();
 	});
 
 	it("fits CallEffect, CallError and CallServices in generic code", () => {

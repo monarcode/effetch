@@ -114,7 +114,8 @@ always send what the schema expects:
 
 - With a schema, `body` is the decoded body, or `undefined` when it doesn't
   match.
-- Without one, `body` is the parsed JSON, typed `unknown`.
+- Without one, `body` is the parsed JSON, typed `unknown`, and the call's
+  error type shows a plain `HttpError`.
 - With or without one, `body` is `undefined` when the response body is empty
   or isn't JSON.
 
@@ -122,7 +123,8 @@ Reading the body never fails the call: you always get the `HttpError`. The
 raw body is always on `text`, or `""` if it couldn't be read.
 
 For your own function signatures, `Fetch.HttpError.With<B>` is the type of an
-`HttpError` whose `body` is `B | undefined`.
+`HttpError` whose `body` is `B | undefined`, as a call with an `error` schema
+shows it.
 
 ## Catch a status
 

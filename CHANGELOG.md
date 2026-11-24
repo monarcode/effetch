@@ -2,7 +2,7 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
-## Unreleased
+## 0.1.0-rc.5
 
 ### Added
 
@@ -34,6 +34,18 @@ All notable changes to `@monarcode/effetch`, newest first.
   the client `client` (as in `client.bind`). They say "bind" or "your
   client's endpoint or bind method", so they read the same whatever you
   name your client.
+- A call without an `error` schema, on a client without a `defaultError`,
+  now shows its error as `HttpError` rather than `HttpError.With<unknown>`:
+  `Effect<Todo, NetworkError | DecodeError | HttpError>`. They're the same
+  type, so values and assignments are unaffected. With a schema, the error
+  is still `HttpError.With<…>`, typed by it, and `Schema.Any` still gives
+  `HttpError.With<any>`. One thing can break: a
+  function generic over the error schema, such as one that takes a
+  `Fetch.CallEffect<O, EB, …>` with `EB` still a type parameter, can no
+  longer use `Effect.catchTag("HttpError", …)` on it, because TypeScript
+  can't tell which of the two the error is. Check `error._tag ===
+  "HttpError"` instead, or type the parameter as any
+  `Effect.Effect<A, E, R>`, as the `CallEffect` docs advise.
 
 ### Fixed
 
@@ -42,6 +54,19 @@ All notable changes to `@monarcode/effetch`, newest first.
   `Uint8Array<ArrayBuffer>`, which TypeScript 5.6 and older reject. With
   `skipLibCheck: true`, an older TypeScript compiles a project that uses
   Effetch, but some of its types become `any`.
+- A plugin override can set an option to `undefined`, which keeps the
+  option's default, with `exactOptionalPropertyTypes` on too. Calls already
+  worked this way, but the type rejected it, so passing a value that may be
+  missing, as in `plugins: { retry: { times: maybeTimes } }`, needed a
+  cast.
+- `Fetch.paginate` ignores a `plugins` key returned from `request`, as its
+  type always said. The key reached each page's call, unchecked, so an
+  unknown plugin name or a wrong option went unnoticed. Give plugin
+  overrides when you bind the endpoint, and every page's call uses them.
+  `PageRequest`'s `plugins` key says so in its hover.
+- A literal value returned from `Fetch.paginate`'s `request` keeps its
+  type, so a query field typed `"asc" | "desc"` accepts `"asc"`. It was
+  widened to `string`, which failed to compile.
 
 ## 0.1.0-rc.4
 

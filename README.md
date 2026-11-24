@@ -47,7 +47,7 @@ export const getTodo = (id: number) =>
     return yield* api.get("/todos/:id", { params: { id }, output: Todo });
   });
 // Effect<{ readonly id: number; readonly title: string },
-//        NetworkError | DecodeError | HttpError.With<unknown>, Api>
+//        NetworkError | DecodeError | HttpError, Api>
 ```
 
 > **Release candidate.** Effetch is in release candidates (`0.1.0-rc.N`)
@@ -64,13 +64,6 @@ The guides and the API reference are at
 
 ```bash
 pnpm add @monarcode/effetch effect
-```
-
-With Expo:
-
-```bash
-npx expo install effect
-pnpm add @monarcode/effetch
 ```
 
 You'll need:

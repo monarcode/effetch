@@ -45,9 +45,7 @@ describe("api.sse and api.ndjson", () => {
 		expectTypeOf(api.sse("/events")).toEqualTypeOf<
 			Stream.Stream<
 				Fetch.SseEvent<string>,
-				| Fetch.NetworkError
-				| Fetch.HttpError.With<unknown>
-				| Fetch.DecodeError,
+				Fetch.NetworkError | Fetch.HttpError | Fetch.DecodeError,
 				never
 			>
 		>();
@@ -182,9 +180,7 @@ describe("stream endpoints", () => {
 		expectTypeOf(api.bind(plain)()).toEqualTypeOf<
 			Effect.Effect<
 				{ readonly id: number },
-				| Fetch.NetworkError
-				| Fetch.HttpError.With<unknown>
-				| Fetch.DecodeError,
+				Fetch.NetworkError | Fetch.HttpError | Fetch.DecodeError,
 				never
 			>
 		>();
@@ -309,6 +305,36 @@ describe("Fetch.paginate", () => {
 			start: 1,
 			// @ts-expect-error: page must be a number
 			request: () => ({ params: { org: "acme" }, query: { page: "1" } }),
+			next: () => Option.none(),
+		});
+	});
+
+	it("leaves plugin overrides to the binding", () => {
+		const bound = withAuth.bind(listTodos, {
+			plugins: { timeout: { duration: "5 seconds" } },
+		});
+		const request: Fetch.PageRequest<typeof bound> = {
+			params: { org: "acme" },
+			query: { page: 1 },
+			// @ts-expect-error: give plugin overrides when binding
+			plugins: { timeout: false },
+		};
+		void request;
+	});
+
+	it("keeps a literal query value's type", () => {
+		const sorted = Fetch.endpoint("GET /rows", {
+			query: Schema.Struct({
+				sort: Schema.Literals(["asc", "desc"]),
+				page: Schema.Finite,
+			}),
+			output: Todos,
+		});
+		Fetch.paginate(api.bind(sorted), {
+			start: 1,
+			request: (page) => ({
+				query: { sort: page === 1 ? "asc" : "desc", page },
+			}),
 			next: () => Option.none(),
 		});
 	});

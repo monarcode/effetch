@@ -170,8 +170,8 @@ export interface PluginExitContext<Opts> extends PluginContext<Opts> {
  * the client don't need them.
  *
  * `Opts` is the type of the options calls can override, and `defaults`
- * holds their values. Calls override them with
- * `plugins: { [name]: { ...partial } }`, and any plugin can be skipped for
+ * holds their values. Calls override some of them with
+ * `plugins: { [name]: { ...options } }`, and any plugin can be skipped for
  * one call with `plugins: { [name]: false }`. A plugin with options must
  * have `defaults`; {@link plugin} enforces this.
  *
@@ -202,7 +202,7 @@ export interface Plugin<
 > {
 	/** Unique within a client. Used as the key for per-request overrides. */
 	readonly name: Name;
-	/** Default options. Enables per-request `Partial<Opts>` overrides. */
+	/** Default options. Enables per-request overrides of any of them. */
 	readonly defaults?: Opts | undefined;
 	/** Runs before the request is sent, in array order. */
 	readonly onRequest?: Plugin.OnRequest<Opts, E, R> | undefined;
@@ -523,7 +523,7 @@ export declare namespace Plugin {
 	> {
 		/** Unique within a client. Used as the key for per-request overrides. */
 		readonly name: Name;
-		/** Default options. Enables per-request `Partial<Opts>` overrides. */
+		/** Default options. Enables per-request overrides of any of them. */
 		readonly defaults?: Opts | undefined;
 		/** Runs before the request is sent, in array order. */
 		readonly onRequest?:
@@ -599,9 +599,10 @@ export declare namespace Plugin {
 
 	/**
 	 * What one plugin accepts as a per-request override: `false` to skip
-	 * it, or a partial of its options. Plugins without options accept only
-	 * `false`. A key whose value is `undefined` at runtime keeps its
-	 * default.
+	 * it, or some of its options. Plugins without options accept only
+	 * `false`. A key set to `undefined` keeps the value it would have
+	 * without it: the endpoint's override, else the default. So a value
+	 * that may be missing can be passed as it is.
 	 *
 	 * @example
 	 * ```ts
@@ -610,14 +611,26 @@ export declare namespace Plugin {
 	 * type RetryOverride = Fetch.Plugin.Override<
 	 *   Fetch.Plugin<"retry", never, never, { times: number }>
 	 * >;
-	 * //   ^? false | Partial<{ times: number }>
+	 * //   ^? false | { times?: number | undefined }
+	 *
+	 * declare const times: number | undefined;
+	 * export const override: RetryOverride = { times };
 	 * ```
 	 *
 	 * @since 0.1.0
 	 */
 	export type Override<P extends Any> = [Options<P>] extends [undefined]
 		? false
-		: false | Partial<Options<P>>;
+		: // Each member of a union of options on its own, as `Partial` does.
+			| false
+			| (Options<P> extends infer O
+					? O extends object
+						? { [K in keyof O]?: O[K] | undefined }
+						: // Options typed `unknown` take `{}`, as `Partial` gives.
+							unknown extends O
+							? {}
+							: O
+					: never);
 
 	/**
 	 * The `plugins` option of a call: an override per plugin name in `Ps`.

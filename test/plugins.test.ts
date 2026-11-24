@@ -313,10 +313,9 @@ describe("per-call overrides", () => {
 			const { mock, api } = yield* setup([reply.json({})], {
 				plugins: [headers],
 			});
-			const withUndefined = { a: "A", b: undefined } as {
-				readonly a: string;
-			};
-			yield* api.get("/todos", { plugins: { headers: withUndefined } });
+			yield* api.get("/todos", {
+				plugins: { headers: { a: "A", b: undefined } },
+			});
 			yield* api.get("/todos");
 			expect(wire(mock, 0).headers).toMatchObject({
 				"x-a": "A",

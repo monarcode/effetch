@@ -286,11 +286,8 @@ describe("plugin overrides", () => {
 			const list = api.endpoint("GET /todos", {
 				plugins: { flags: { a: "endpoint", b: "endpoint" } },
 			});
-			const withUndefined = { a: "call", b: undefined } as {
-				readonly a: string;
-			};
 			yield* list({ plugins: { flags: { b: "call" } } });
-			yield* list({ plugins: { flags: withUndefined } });
+			yield* list({ plugins: { flags: { a: "call", b: undefined } } });
 			expect(wire(mock, 0).headers).toMatchObject({
 				"x-a": "endpoint",
 				"x-b": "call",

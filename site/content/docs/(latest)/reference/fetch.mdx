@@ -263,7 +263,7 @@ For a `404` that means "not found", [`optional`](#optional) gives an `Option` in
 
 ### Fetch.DecodeError [#decodeerror]
 
-The error a call fails with when a 2xx response body doesn't match the call's `output` schema, isn't valid JSON, or can't be read. A stream fails with it too, when a value doesn't decode or the body breaks off. Its fields:
+The error a call fails with when a 2xx response body doesn't match the call's `output` schema, isn't valid JSON, or can't be read, and the error a stream fails with while it's read (see below). Its fields:
 
 - `method`: the request's HTTP method.
 - `url`: the request URL without its query string.
@@ -288,7 +288,7 @@ The error a call fails with when the server answers with a status outside 200–
 
 ### Fetch.HttpError.With [#httperror-with]
 
-An [`HttpError`](#httperror) whose `body` was decoded as `B`. `body` is `undefined` when the response didn't match the error schema.
+An [`HttpError`](#httperror) whose `body` was decoded as `B`. `body` is `undefined` when the response didn't match the error schema. A call with an `error` schema, or a client with a `defaultError`, fails with one. Without either, a call fails with a plain `HttpError`.
 
 ### Fetch.isFetchError [#isfetcherror]
 
@@ -310,7 +310,7 @@ It's [`catchStatus`](#catchstatus)`(404, …)` for the common case of a resource
 
 ### Fetch.CallError [#callerror]
 
-What a call can fail with: `NetworkError`, `HttpError` (with `body` typed by the `error` schema), `DecodeError` when there's an `output` schema, the plugins' errors, and the errors of the `statusErrors` maps that apply (see [`StatusError`](#statuserror)).
+What a call can fail with: `NetworkError`, `HttpError`, `DecodeError` when there's an `output` schema, the plugins' errors, and the errors of the `statusErrors` maps that apply (see [`StatusError`](#statuserror)). With an `error` schema, or the client's `defaultError`, the `HttpError` is an `HttpError.With<…>` whose `body` has the schema's type. Without one, it's a plain `HttpError`, whose `body` is `unknown`.
 
 - `SE`: the `statusErrors` maps of the call, the endpoint and the client, as a union. `undefined` (the default) when there are none.
 
@@ -389,7 +389,7 @@ The options type of plugin `P`.
 
 ### Fetch.Plugin.Override [#plugin-override]
 
-What one plugin accepts as a per-request override: `false` to skip it, or a partial of its options. Plugins without options accept only `false`. A key whose value is `undefined` at runtime keeps its default.
+What one plugin accepts as a per-request override: `false` to skip it, or some of its options. Plugins without options accept only `false`. A key set to `undefined` keeps the value it would have without it: the endpoint's override, else the default. So a value that may be missing can be passed as it is.
 
 ### Fetch.Plugin.Overrides [#plugin-overrides]
 
@@ -656,7 +656,7 @@ One page of endpoint `EP`: its `output`'s type, or the raw response without `out
 
 ### Fetch.PageRequest [#pagerequest]
 
-The options of one page's call, as [`PaginateOptions`](#paginateoptions)' `request` returns them for endpoint `EP`: `params`, `body`, `query` and `headers`, typed as for any call of the endpoint.
+The options of one page's call, as [`PaginateOptions`](#paginateoptions)' `request` returns them for endpoint `EP`: `params`, `body`, `query` and `headers`, typed as for any call of the endpoint. Plugin overrides aren't among them: give those when binding the endpoint, and every page's call uses them.
 
 ### Fetch.PageResponse [#pageresponse]
 

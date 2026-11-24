@@ -187,10 +187,7 @@ describe("make with the built-ins", () => {
 	it("adds TimeoutError and the token's error to calls", () => {
 		const call = api.get("/todos");
 		expectTypeOf<Effect.Error<typeof call>>().toEqualTypeOf<
-			| Fetch.NetworkError
-			| Fetch.HttpError.With<unknown>
-			| TimeoutError
-			| TokenError
+			Fetch.NetworkError | Fetch.HttpError | TimeoutError | TokenError
 		>();
 	});
 

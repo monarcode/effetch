@@ -51,7 +51,9 @@ export interface PageEndpoint {
 /**
  * The options of one page's call, as {@link PaginateOptions}' `request`
  * returns them for endpoint `EP`: `params`, `body`, `query` and `headers`,
- * typed as for any call of the endpoint.
+ * typed as for any call of the endpoint. Plugin overrides aren't among
+ * them: give those when binding the endpoint, and every page's call uses
+ * them.
  *
  * @example
  * ```ts
@@ -68,21 +70,26 @@ export interface PageEndpoint {
  *
  * @since 0.1.0
  */
-export type PageRequest<EP extends PageEndpoint> = EP extends {
-	readonly route: infer R extends string;
-}
-	? ParamsOption<RoutePath<R>> &
-			EndpointBody<R, EP["input"]> &
-			EndpointQuery<EP["query"]> & {
-				/** Headers for this page's call. */
-				readonly headers?: Headers.Input | undefined;
-				/**
-				 * Not allowed: the endpoint's `responseMode` decides what each
-				 * page is.
-				 */
-				readonly responseMode?: undefined;
-			}
-	: never;
+export type PageRequest<EP extends PageEndpoint> =
+	// The route is read by index, not with a conditional `infer`, so a
+	// literal returned from `request`, such as `sort: "asc"`, keeps its type
+	// while the endpoint's type is being inferred.
+	ParamsOption<RoutePath<EP["route"]>> &
+		EndpointBody<EP["route"], EP["input"]> &
+		EndpointQuery<EP["query"]> & {
+			/** Headers for this page's call. */
+			readonly headers?: Headers.Input | undefined;
+			/**
+			 * Not allowed: give plugin overrides when binding the endpoint,
+			 * and every page's call uses them.
+			 */
+			readonly plugins?: undefined;
+			/**
+			 * Not allowed: the endpoint's `responseMode` decides what each
+			 * page is.
+			 */
+			readonly responseMode?: undefined;
+		};
 
 /**
  * One page of endpoint `EP`: its `output`'s type, or the raw response
@@ -260,9 +267,14 @@ export const paginate = <const EP extends PageEndpoint, S>(
 	const both = endpoint.responseMode === "decoded-and-response";
 	return Stream.paginate(options.start, (state: S) =>
 		Effect.map(
-			// The endpoint's mode, even if `request` gives another.
+			// The endpoint's mode and plugin overrides, even if `request`
+			// gives others.
 			Effect.suspend(() =>
-				call({ ...options.request(state), responseMode: undefined }),
+				call({
+					...options.request(state),
+					plugins: undefined,
+					responseMode: undefined,
+				}),
 			),
 			(result) => {
 				const [page, response] = both

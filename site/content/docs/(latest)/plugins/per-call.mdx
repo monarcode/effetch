@@ -58,9 +58,12 @@ A call's changes combine with the rest as follows:
 
 - **Options you leave out keep their defaults.** A call that passes
   `{ consoleLogger: { detail: "summary" } }` changes `detail` only, and
-  keeps the other settings. A key
-  whose value is `undefined` at runtime keeps its default too, rather than
-  replacing it with `undefined`.
+  keeps the other settings. A key set to `undefined` is left out too, so it
+  keeps the value it would have without it, and you can pass a value that
+  may be missing, such as `{ retry: { times: maybeTimes } }`, as it is.
+  Any object still turns the plugin on, even one whose keys are all
+  `undefined`: on an endpoint bound with `retry: false`, that call
+  retries.
 - **`false` skips the whole plugin.** Its `wrap`, `onRequest` and
   `onResponse` don't run for that call, and neither do its `onError` and
   `onExit`. A skipped `consoleLogger` prints nothing, for example.

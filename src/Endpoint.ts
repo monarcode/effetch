@@ -481,7 +481,11 @@ export interface Endpoint<
 				// CallError and CallServices, written out (see CallEffect), with
 				// DecodeError always: reading the stream can fail.
 				| NetworkError
-				| HttpError.With<EB["Type"]>
+				| ([unknown] extends [EB["Type"]]
+						? 0 extends 1 & EB["Type"]
+							? HttpError.With<EB["Type"]>
+							: HttpError
+						: HttpError.With<EB["Type"]>)
 				| DecodeError
 				| Plugin.Errors<Ps>
 				| StatusError<SE>,
@@ -496,7 +500,11 @@ export interface Endpoint<
 				Success<O, NoInfer<CM extends undefined ? M : CM>>,
 				// CallError and CallServices, written out (see CallEffect)
 				| NetworkError
-				| HttpError.With<EB["Type"]>
+				| ([unknown] extends [EB["Type"]]
+						? 0 extends 1 & EB["Type"]
+							? HttpError.With<EB["Type"]>
+							: HttpError
+						: HttpError.With<EB["Type"]>)
 				| (O extends AnySchema ? DecodeError : never)
 				| Plugin.Errors<Ps>
 				| StatusError<SE>,
