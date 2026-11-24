@@ -1,17 +1,23 @@
 ---
 title: Write a plugin
-description: Build a first plugin, then learn the hooks and how a plugin knows the route.
+description: Build a first plugin step by step, then look up the hooks and how a plugin reads the route.
 ---
 
-When the built-in plugins don't cover what you need, write your own. The
-built-in ones are written with the same API. In this tutorial, you write a
-plugin that pins the API version on every request, then learn the hooks a
-plugin can use and how it knows which route a call is for.
+When the built-in plugins don't cover what you need, such as a header your
+API asks for on every request, write your own. The built-in plugins are
+written with the same API. In this tutorial, you write a plugin that pins
+the API version on every request and check that it works. After that, the
+page describes every hook a plugin can use, and how a plugin reads which
+route a call is for.
 
 ## Write your first plugin
 
-A plugin is a name and one or more hooks. This one pins the API version on
-every request, with an option that a call can change:
+The plugin you build sends an `api-version` header with every request, with
+a default version that one call can change. It takes four steps.
+
+### Step 1: Define the plugin
+
+A plugin is a name and one or more hooks. Create it with `Fetch.plugin`:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -20,6 +26,64 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { Fetch } from "@monarcode/effetch";
 
 export const apiVersion = Fetch.plugin({
+  name: "apiVersion",
+  defaults: { version: "2024-06-01" },
+  onRequest: (request, ctx) =>
+    Effect.succeed(
+      HttpClientRequest.setHeader(request, "api-version", ctx.options.version),
+    ),
+});
+```
+
+The `onRequest` hook runs before each request is sent, and returns the
+request to send. `ctx.options` holds the plugin's `defaults`, merged with
+the call's changes, if it made any. A plugin needs `defaults` to take
+options at all.
+
+`Fetch.plugin` infers the plugin's name, options, errors and services from
+what you give it. Calls can then change `apiVersion` by name, and TypeScript
+checks their options.
+
+### Step 2: Add it to a client
+
+List the plugin in the client's `plugins` option, as you would a built-in
+one:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+
+import { Fetch } from "@monarcode/effetch";
+
+const apiVersion = Fetch.plugin({
+  name: "apiVersion",
+  defaults: { version: "2024-06-01" },
+  onRequest: (request, ctx) =>
+    Effect.succeed(
+      HttpClientRequest.setHeader(request, "api-version", ctx.options.version),
+    ),
+});
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [apiVersion],
+}) {}
+```
+
+Every call the client makes sends `api-version: 2024-06-01`.
+
+### Step 3: Change it for one call
+
+A call changes the plugin's options in its `plugins` option, under the
+plugin's name:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+
+import { Fetch } from "@monarcode/effetch";
+
+const apiVersion = Fetch.plugin({
   name: "apiVersion",
   defaults: { version: "2024-06-01" },
   onRequest: (request, ctx) =>
@@ -41,40 +105,119 @@ export const program = Effect.gen(function* () {
 });
 ```
 
-`Fetch.plugin` infers the plugin's name, options, errors and services from
-what you give it, so calls can override `apiVersion` by name, and their
-options are checked. `ctx.options` is the plugin's `defaults` merged with the
-call's override, so a plugin needs `defaults` to take options.
+### Step 4: Check that it sends the header
 
-## Hooks
+To check the header without a server, run two calls against the fake
+backend from `@monarcode/effetch/test`, and print the header each request
+carried:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+
+import { Fetch } from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+const apiVersion = Fetch.plugin({
+  name: "apiVersion",
+  defaults: { version: "2024-06-01" },
+  onRequest: (request, ctx) =>
+    Effect.succeed(
+      HttpClientRequest.setHeader(request, "api-version", ctx.options.version),
+    ),
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.test",
+  plugins: [apiVersion],
+}) {}
+
+const getReports = Fetch.endpoint("GET /reports");
+
+const Backend = FetchTest.layer([
+  FetchTest.respond(getReports, () => Effect.void),
+]);
+
+const program = Effect.gen(function* () {
+  const api = yield* Api;
+  yield* api.get("/reports");
+  yield* api.get("/reports", {
+    plugins: { apiVersion: { version: "2025-01-01" } },
+  });
+  for (const sent of yield* FetchTest.requests) {
+    console.log(sent.headers["api-version"]);
+  }
+}).pipe(Effect.provide(Api.layer.pipe(Layer.provideMerge(Backend))));
+
+Effect.runPromise(program);
+```
+
+It prints the default version for the first call, and the call's own for the
+second:
+
+```text
+2024-06-01
+2025-01-01
+```
+
+To learn more about the fake backend, see
+[Test with a fake backend](/docs/testing).
+
+## Hook reference
+
+The rest of this page describes what a plugin can do: each hook, when it
+runs, and what it receives.
+
+### When each hook runs
 
 A plugin can define any of the following hooks:
 
-| Hook                           | Runs                                                                                                                                         |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `onRequest(request, ctx)`      | Before the request is sent, in array order. Returns the request to send, or fails. It sees the full URL and the client's headers.            |
-| `onResponse(response, ctx)`    | On every response, non-2xx included, in reverse order. Returns the response, or fails. The status check and decoding come after all plugins. |
-| `onError(error, ctx)`          | After a call fails or dies, in array order. It can't change the outcome.                                                                     |
-| `onExit(exit, ctx)`            | After every call, whatever the outcome, in array order, after `onError`. It can't change the outcome.                                        |
-| `wrap(client, options, route)` | Wraps the plugins after it and the network, for retries, timeouts and the like. It can add errors but can't remove them.                     |
+| Hook                           | When it runs                                                                                                                            | What it can do                                                          |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `onRequest(request, ctx)`      | Before the request is sent, in list order. It has the full URL and the client's headers.                                                | Return the request to send, changed or not, or fail.                    |
+| `onResponse(response, ctx)`    | On every response, non-2xx included, in reverse list order. The status check and decoding come after every plugin's `onResponse`.       | Return the response, changed or not, or fail.                           |
+| `wrap(client, options, route)` | Around its own `onRequest` and `onResponse`, every plugin after it and the network. A retrying `wrap` runs all of them on each attempt. | Retry, time out and the like. It can add errors, but can't remove them. |
+| `onError(error, ctx)`          | After a call fails or dies, in list order, after the status check and decoding.                                                         | Observe only: it can't change the outcome.                              |
+| `onExit(exit, ctx)`            | After every call, whatever the outcome, in list order, after the `onError` hooks.                                                       | Observe only: it can't change the outcome.                              |
 
-`ctx.request` is the request: in `onResponse`, the one this plugin passed on;
-in `onError` and `onExit`, the one the call built.
+To see the order the hooks of several plugins run in, see
+[How plugins nest](/docs/plugins#how-plugins-nest).
+
+`ctx.request` is a different request in each hook:
+
+- in `onRequest`, the request the hook receives;
+- in `onResponse`, the one this plugin passed on. Plugins after it may have
+  changed it further, and `response.request` is the one that was sent;
+- in `onError` and `onExit`, the request as the call built it, before any
+  plugin ran.
+
+`onError`'s `error` is the call's error: an Effetch error such as
+`HttpError`, another plugin's error, one of the call's `statusErrors`, or a
+defect.
+
+<Accordions>
+<Accordion title="Details: when onError and onExit don't run">
+
+- Neither runs when the call dies before its request is built, such as for
+  a missing path parameter or a body that can't be encoded. Neither runs for
+  requests sent through `api.httpClient`, or for a plugin that the call
+  skips with `false`.
+- `onError` doesn't run when the call is interrupted, since that isn't a
+  failure. `onExit` does, with the interruption in its `Exit`.
+- For a stream (`api.sse`, `api.ndjson` or a stream endpoint), the call ends
+  when the response headers arrive. `onExit` runs then. Neither hook runs for
+  the body being read, or for a `DecodeError` while it's read.
+- Neither hook can fail. If one dies, the defect is logged at the Debug
+  level and ignored.
+
+</Accordion>
+</Accordions>
 
 ### Record every call with onExit
 
-`onExit` gets the call's `Exit`: its result (the decoded `output`, or the
-response for a call without one), or the cause of its failure, defect or
-interruption. Its `ctx` also has:
-
-- `response`: the one the plugins returned; when a plugin failed after a
-  response arrived, the last one the network sent; `undefined` when none
-  arrived;
-- `durationMs`: the time from sending the request to decoding the body,
-  retries included.
-
-It suits logging and metrics, and is what `consoleLogger` uses. This plugin
-records each call's route, outcome and duration:
+`onExit` suits logging and metrics, and is what `consoleLogger` uses. This
+plugin records each call's route, outcome and duration:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -91,8 +234,24 @@ export const metrics = Fetch.plugin({
 });
 ```
 
-The call returns once every `onExit` hook is done, so keep them quick, and
-fork anything slow.
+The hook gets the call's `Exit`. On success, it holds the call's result: the
+decoded `output`, or the response for a call without one. With
+`responseMode: "decoded-and-response"`, it holds a pair of both. Otherwise,
+it holds the cause of the call's failure, defect or interruption.
+
+Besides `request`, `options` and `route`, its `ctx` has:
+
+- `response`: the response the plugins returned. When a plugin failed after
+  a response arrived, it's the last one the network sent, whose body may not
+  have been read. It's `undefined` when no response arrived: after a network
+  failure, a timeout, or a plugin that failed before the request was sent.
+- `durationMs`: how long the call took, in whole milliseconds, retries
+  included. It starts when the request enters the plugin chain, so
+  `onRequest` hooks, such as reading a token, count. It stops after the
+  status is checked and the body decoded, so `onError` hooks don't count.
+
+The call returns after every `onExit` hook is done, and the hooks can't be
+interrupted. Keep them quick, and fork anything slow.
 
 ## Read the route
 
@@ -100,7 +259,7 @@ fork anything slow.
 filled in: `"GET /users/:id"`, whether the call was
 `api.get("/users/:id", …)` or an [endpoint](/docs/endpoints). It's the same
 for every user ID, so it's what to group logs, metrics and error reports by.
-It's `undefined` for requests sent through `client.httpClient`.
+It's `undefined` for requests sent through `api.httpClient`.
 
 A `wrap` reads it from its third argument, an Effect like `options`. The
 following example reads the route in an `onError` hook and in a `wrap`:
@@ -134,20 +293,22 @@ export const timing = Fetch.plugin({
 
 Keep these rules in mind as you write plugins:
 
-- Services a plugin needs are required once, by the client's layer (or by
-  `Fetch.make`). Calls don't need them. Services provided around a call win
-  over those the client was built with.
-- Plugin names must be unique.
-- Write `wrap` bodies with `Effect.gen`. A ternary that returns two different
-  Effects can't be typed.
-- Pass plugin lists inline, or let TypeScript infer them. Annotating a list as
-  `Fetch.Plugin.Any[]` erases the plugins' types.
+- **Services are required once.** The services a plugin needs are
+  required by the client's layer (or `Fetch.make`), not by each call.
+  Services provided around a call win over those the client was built with.
+- **Names are unique within a client.** If two plugins have the same name,
+  building the client dies (with `Fetch.make` or the client's layer), with
+  the message `Two plugins are named "…"`.
+- **Write `wrap` bodies with `Effect.gen`.** A ternary that returns two
+  different Effects can't be typed.
+- **Pass plugin lists inline, or let TypeScript infer them.** Annotating a
+  list as `Fetch.Plugin.Any[]` erases the plugins' types.
 
 ## What's next
 
 - [Plugin recipes](/docs/plugins/recipes): copy a plugin that signs out on a
   `401`, or one that sets a deadline with its own error.
-- [Plugin order](/docs/plugins/order): decide where your plugin goes in the
-  list.
+- [Built-in plugins](/docs/plugins#how-plugins-nest): decide where your
+  plugin goes in the list.
 - [Change plugins for one call](/docs/plugins/per-call): skip or adjust your
   plugin on a single call.

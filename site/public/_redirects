@@ -1,0 +1,10 @@
+# Pages merged into another page. Cloudflare Pages reads this file.
+/docs/calls/parameters /docs/calls#fill-in-path-parameters 301
+/docs/calls/parameters/ /docs/calls#fill-in-path-parameters 301
+/docs/calls/parameters.md /docs/calls.md 301
+/docs/errors/error-bodies /docs/errors/catching#read-the-error-body 301
+/docs/errors/error-bodies/ /docs/errors/catching#read-the-error-body 301
+/docs/errors/error-bodies.md /docs/errors/catching.md 301
+/docs/plugins/order /docs/plugins#how-plugins-nest 301
+/docs/plugins/order/ /docs/plugins#how-plugins-nest 301
+/docs/plugins/order.md /docs/plugins.md 301

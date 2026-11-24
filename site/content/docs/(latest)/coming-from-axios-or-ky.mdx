@@ -1,27 +1,84 @@
 ---
 title: Coming from axios or ky
-description: Map what you know from axios or ky to Effetch.
+description: Map what you know from axios or ky to Effetch, and see what has no counterpart.
 ---
 
-If you've used axios or ky, most of what you know has a counterpart in
-Effetch. The following table maps what you know from axios and ky to Effetch:
+If you've used axios or ky, you already know most of what Effetch does. The
+names are different, and a few things move: a hook becomes a plugin, a cast
+becomes a schema, and an abort signal becomes interruption. This page maps
+each option and habit to its counterpart in Effetch, and lists what has
+none.
 
-| axios or ky                                                   | Effetch                                                                                                                                                              |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `axios.create`, `ky.create`                                   | [`Fetch.Service`](/docs/clients), or [`Fetch.make`](/docs/clients/service-or-make) in a script                                                                       |
-| `ky.extend`, a client per API version                         | A second `Fetch.Service` from `{ ...Api.config, baseUrl }` (see [Derive a client](/docs/clients/derived))                                                            |
-| `baseURL`, `prefixUrl`                                        | `baseUrl`, a string or an Effect such as a `Config`                                                                                                                  |
-| `params`, `searchParams`                                      | `query`, a plain object, or typed by an endpoint's [`query` schema](/docs/endpoints/typed-query)                                                                     |
-| Interceptors, `hooks.beforeRequest` and `hooks.afterResponse` | A [plugin](/docs/plugins/writing)'s `onRequest` and `onResponse`                                                                                                     |
-| `hooks.beforeError`                                           | `Effect.mapError` on the call. A plugin's `onError` sees errors but can't change them                                                                                |
-| `retry`, `timeout`                                            | The [`retry` and `timeout` plugins](/docs/plugins), which a call can turn off or adjust                                                                              |
-| ky's `totalTimeout`                                           | `retry({ budget })`, or `Effect.timeout` around a call                                                                                                               |
-| `AbortController`, `signal`                                   | Interruption: `Fiber.interrupt`, `Effect.race`, `Effect.timeout`. An interrupted call aborts its request                                                             |
-| `validateStatus`, `throwHttpErrors: false`                    | `Effect.catchTag("HttpError", …)`, [`statusErrors`](/docs/errors/status-errors), or [`Fetch.catchStatus`](/docs/errors/catching#catch-a-status) and `Fetch.optional` |
-| `error.response.data`, ky's `HTTPError` body                  | `HttpError.body`, decoded with `defaultError` or the call's `error` schema                                                                                           |
-| `ky.get(url).json<T>()`, `axios.get<T>(url)`                  | `api.get(path, { output: Schema })`: the body is checked, not cast                                                                                                   |
-| `responseType: "text"` or `"arraybuffer"`                     | `output: Fetch.text()` or `Fetch.bytes()` (see [Read text or bytes](/docs/calls/responses#read-text-or-bytes))                                                       |
-| Reading the status and headers with the data                  | `responseMode: "decoded-and-response"` (see [Read the body and the response](/docs/calls/responses#read-the-body-and-the-response))                                  |
-| `responseType: "stream"`, `onDownloadProgress` for events     | [`api.sse` and `api.ndjson`](/docs/streaming)                                                                                                                        |
-| A `FormData` body built by hand                               | `input: Fetch.multipart(schema)`, a typed body sent as a form (see [Upload files](/docs/calls/uploads))                                                              |
-| The `fetch` option or an `adapter` in tests                   | [`FetchTest`](/docs/testing), or any `HttpClient` layer                                                                                                              |
+## Clients and requests
+
+The following table maps how you create a client and build a request:
+
+| axios or ky                                                             | Effetch                                                                                                       |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `axios.create`, `ky.create`                                             | [`Fetch.Service`](/docs/clients), or [`Fetch.make`](/docs/clients/service-or-make) in a script                |
+| `ky.extend`, a client per API version                                   | A second `Fetch.Service` from `{ ...Api.config, baseUrl }` (see [Derive a client](/docs/clients/derived))     |
+| axios's `baseURL`; ky's `baseUrl` or `prefix` (`prefixUrl` before ky 2) | `baseUrl`, a string or an Effect such as a `Config`. It's joined to the path as a string, as ky's `prefix` is |
+| `headers`                                                               | `headers`, on the client or on one call                                                                       |
+| `params`, `searchParams`                                                | `query`, a plain object, or typed by an endpoint's [`query` schema](/docs/endpoints/typed-query)              |
+| axios's `data`, ky's `json`                                             | `body`, which an `input` schema can type and check (see [Send a body](/docs/calls/body))                      |
+| A `FormData` body built by hand                                         | `input: Fetch.multipart(schema)`, a typed body sent as a form (see [Upload files](/docs/calls/uploads))       |
+| axios's `withCredentials`, ky's `credentials`                           | `credentials: "include"` in `FetchHttpClient.RequestInit` (see [Send cookies](/docs/platforms#send-cookies))  |
+
+## Responses
+
+The following table maps how you read what comes back:
+
+| axios or ky                                               | Effetch                                                                                                                                                                    |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ky.get(url).json<T>()`, `axios.get<T>(url)`              | `api.get(path, { output: Schema })`. The body is checked against the schema, not cast                                                                                      |
+| `responseType: "text"` or `"arraybuffer"`                 | `output: Fetch.text()` or `Fetch.bytes()` (see [Read text or bytes](/docs/calls/responses#read-text-or-bytes))                                                             |
+| Reading the status and headers with the data              | `responseMode: "decoded-and-response"` (see [Read the body and the response](/docs/calls/responses#read-the-body-and-the-response))                                        |
+| `responseType: "stream"`, `onDownloadProgress` for events | [`api.sse` and `api.ndjson`](/docs/streaming), which give the events or lines as a `Stream`                                                                                |
+| `responseType: "stream"` for raw bytes                    | A call without `output`. It succeeds with the `HttpClientResponse`, whose `stream` reads the body as it arrives (see [Skip decoding](/docs/calls/responses#skip-decoding)) |
+
+## Errors
+
+The following table maps how you handle a failed call:
+
+| axios or ky                                  | Effetch                                                                                                                                                              |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `validateStatus`, `throwHttpErrors: false`   | `Effect.catchTag("HttpError", …)`, [`statusErrors`](/docs/errors/status-errors), or [`Fetch.catchStatus`](/docs/errors/catching#catch-a-status) and `Fetch.optional` |
+| `error.response.data`, ky's `HTTPError` body | `HttpError.body`, decoded with `defaultError` or the call's `error` schema (see [Read the error body](/docs/errors/catching#read-the-error-body))                    |
+| `hooks.beforeError`                          | `Effect.mapError` on the call. A plugin's `onError` receives errors, but can't change them                                                                           |
+
+## Hooks, retries, cancellation and tests
+
+The following table maps what runs around every request:
+
+| axios or ky                                                                   | Effetch                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interceptors, `hooks.beforeRequest` and `hooks.afterResponse`                 | A [plugin](/docs/plugins/writing)'s `onRequest` and `onResponse`                                                                                                                                          |
+| An interceptor that adds a token                                              | The `bearer` plugin, which can also refresh the token (see [Refresh a token](/docs/plugins/token-refresh))                                                                                                |
+| `retry`, `timeout`                                                            | The [`retry` and `timeout` plugins](/docs/plugins), which a call can turn off or adjust                                                                                                                   |
+| ky's `totalTimeout`                                                           | `retry({ budget })`, or `Effect.timeout` around a call                                                                                                                                                    |
+| `AbortController`, `signal`                                                   | Interruption, with `Fiber.interrupt`, `Effect.race` or `Effect.timeout`. An interrupted call aborts its request                                                                                           |
+| `transformRequest`, `transformResponse`, ky's `parseJson` and `stringifyJson` | An `input` or `output` schema, which encodes or decodes the body, such as a date string into a `Date`. For anything else, a plugin's `onRequest` or `onResponse` can return a changed request or response |
+
+In tests, where you'd pass ky a `fetch` option or give axios an `adapter`,
+provide [`FetchTest`](/docs/testing) or any other `HttpClient` layer
+instead.
+
+## What has no counterpart
+
+Some features of axios and ky have no counterpart in Effetch:
+
+- **Upload and download progress.** Effetch has no `onUploadProgress` or
+  `onDownloadProgress`, and Effect's `HttpClient` doesn't report progress
+  either.
+- **`paramsSerializer`.** The query format is fixed: an array repeats its
+  key, as in `tags=a&tags=b`. For another format, build the value yourself,
+  such as `tags: tags.join(",")`.
+
+## What's next
+
+- [Getting started](/docs/getting-started): write and run a first program
+  with Effetch.
+- [Write a plugin](/docs/plugins/writing): move an interceptor or a hook
+  into a plugin.
+- [Catch errors](/docs/errors/catching): handle a failed call the Effect
+  way, by the error's tag.

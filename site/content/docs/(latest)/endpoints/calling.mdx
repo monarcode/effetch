@@ -3,18 +3,22 @@ title: Call an endpoint
 description: Pass what changes on each call, and bind endpoints to a client with bind, bindAll or api.endpoint.
 ---
 
-This page shows you what to pass when you call an endpoint, and how to bind
-endpoints to a client yourself when `Fetch.Endpoints` doesn't fit.
+A bound endpoint is a function: you call it with what changes from one call
+to the next, and it returns the same Effect a method would. This page shows
+what each call takes, and how to bind endpoints to a client yourself when
+`Fetch.Endpoints` doesn't fit.
 
 ## Pass what changes on each call
 
-What's fixed goes in the definition, and what changes goes in each call:
+What's fixed goes in the definition, and what changes goes in each call.
+The two sides split as follows:
 
-| Defined once, on the endpoint                       | Passed with each call     |
-| --------------------------------------------------- | ------------------------- |
-| `output`, `error`, `input`, `query`, `statusErrors` | `params`, `query`, `body` |
-| `headers`, `responseMode`, `stream`                 | `headers`, `responseMode` |
-| `plugins` (when binding)                            | `plugins`                 |
+| Defined once, on the endpoint                             | Passed with each call                                     |
+| --------------------------------------------------------- | --------------------------------------------------------- |
+| `output`, `error`, `input`, `statusErrors` and `stream`   | `params` and `body`                                       |
+| `query`, a schema                                         | `query`, the values                                       |
+| `headers` and `responseMode`                              | `headers`, and `responseMode` except on a stream endpoint |
+| `plugins`, when binding or in `api.endpoint`'s definition | `plugins`                                                 |
 
 A call follows these rules:
 
@@ -22,7 +26,7 @@ A call follows these rules:
   `api.get("/users/:id", { output: User, params: { id } })` does, and
   returns the same Effect.
 - `params` are required when the route's path has any, as with the methods.
-  An endpoint that needs nothing more is called with no arguments:
+  An endpoint that needs nothing more is called with no arguments, as in
   `users.list()`.
 - With an `input` schema, `body` is required and typed by it.
 - `GET`, `HEAD`, `OPTIONS` and `TRACE` endpoints take no `body` and no
@@ -31,18 +35,24 @@ A call follows these rules:
   schema has required fields. See
   [Typed query parameters](/docs/endpoints/typed-query).
 
+When the call and the endpoint both give headers, plugin overrides or a
+`responseMode`, the call's win. The full rules are in
+[How defaults combine](/docs/endpoints/defining#how-defaults-combine).
+
 ## Bind endpoints with bind and bindAll
 
 `Fetch.Endpoints` is built on two client methods, which you can also use
-directly, such as inside your own service's layer:
+yourself, such as inside your own service's layer:
 
 - **`api.bind(definition, options?)`** binds one definition. `options` are
   the binding's `headers` and `plugins` overrides.
-- **`api.bindAll(record)`** binds a record of definitions, each under its own
-  name. An entry can also be a `[definition, options]` pair, with the options
-  `api.bind` takes. Each endpoint has the type `api.bind` gives it.
+- **`api.bindAll(record)`** binds a record of definitions, each under its
+  own name. An entry can also be a `[definition, options]` pair, with the
+  options `api.bind` takes. Each endpoint has the type `api.bind` gives it.
 
-The following example binds the same two endpoints both ways:
+The following example binds the same two endpoints both ways. Logging in
+turns off the `bearer` plugin, which would otherwise add a token (see
+[Built-in plugins](/docs/plugins)):
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -52,10 +62,17 @@ import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const Credentials = Schema.Struct({
+  user: Schema.String,
+  password: Schema.String,
+});
 const Session = Schema.Struct({ token: Schema.String });
 
 const getUser = Fetch.endpoint("GET /users/:id", { output: User });
-const login = Fetch.endpoint("POST /auth/login", { output: Session });
+const login = Fetch.endpoint("POST /auth/login", {
+  input: Credentials,
+  output: Session,
+});
 
 class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
@@ -79,11 +96,16 @@ export const sameEndpoints = Effect.gen(function* () {
 });
 ```
 
+Both methods check what you pass when they run, and throw on a mistake that
+got past the types. `api.bind` throws when it's given an endpoint that's
+already bound, and `api.bindAll` throws on an entry that isn't a definition
+or a `[definition, options]` pair.
+
 ## Define and bind in one step
 
-**`api.endpoint(route, definition)`** defines and binds in one step, where
-you already have the client. Its definition can take `plugins` directly,
-since it knows the client's plugins:
+`api.endpoint(route, definition)` defines and binds in one step, where you
+already have the client. Its definition can take `plugins` directly, since
+the client is right there to check them against:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -92,6 +114,10 @@ import * as Schema from "effect/Schema";
 import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
+const Credentials = Schema.Struct({
+  user: Schema.String,
+  password: Schema.String,
+});
 const Session = Schema.Struct({ token: Schema.String });
 
 class Api extends Fetch.Service<Api>()("Api", {
@@ -103,6 +129,7 @@ export const endpoints = Effect.gen(function* () {
   const api = yield* Api;
   return {
     login: api.endpoint("POST /auth/login", {
+      input: Credentials,
       output: Session,
       plugins: { bearer: false },
     }),
@@ -112,9 +139,12 @@ export const endpoints = Effect.gen(function* () {
 
 ## Choose between Fetch.endpoint and api.endpoint
 
-`api.bind(Fetch.endpoint(route, definition))` is the endpoint
-`api.endpoint(route, definition)` makes, with the same type and the same
-calls. Prefer `Fetch.endpoint` when:
+The two give the same endpoint. `api.bind(Fetch.endpoint(route, definition))`
+has the same type and makes the same calls as
+`api.endpoint(route, definition)`, as long as the definition has no
+`plugins`. With `Fetch.endpoint`, those go in `api.bind`'s options instead.
+
+Prefer `Fetch.endpoint` when:
 
 - endpoints should be listed next to their schemas, in a file with no client
   (see
@@ -123,6 +153,9 @@ calls. Prefer `Fetch.endpoint` when:
 - a tool works from your endpoints, and needs their routes and schemas
   without a client, as `FetchTest` does (see
   [Test with a fake backend](/docs/testing)).
+
+Otherwise, `api.endpoint` does the same in one step, where you have the
+client.
 
 ## What's next
 

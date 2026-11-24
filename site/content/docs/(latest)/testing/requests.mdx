@@ -3,16 +3,16 @@ title: Check what was sent
 description: Assert on the requests your code sent, and learn how they're matched.
 ---
 
-This page shows how to read the requests the [fake backend](/docs/testing)
-received, so you can assert on what your code sent, and explains how the
-fake backend matches each request to a handler.
+Sometimes what matters in a test isn't what comes back but what your code sent:
+that a delete went to the right URL, or that a form carried the right
+fields. The [fake backend](/docs/testing) records every request it
+receives, so you can assert on them. This page shows how to read those
+records, and how the fake backend picks a handler for each request.
 
 ## Read the recorded requests
 
-The layer also provides `FetchTest.Recorder`, which keeps every request it
-received, with a new record each time the layer is built.
-`FetchTest.requests` reads it. Under a client's layer, `Layer.provide` would
-hide it, so use `Layer.provideMerge`:
+`FetchTest.requests` gives you the requests the fake backend received,
+oldest first:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -41,9 +41,26 @@ export const test = Effect.gen(function* () {
 }).pipe(Effect.provide(Api.layer.pipe(Layer.provideMerge(Backend))));
 ```
 
-Each recorded request has its `method`, `url`, the `route` and `params` it
-matched, its raw `query`, its `headers`, and its `body`, read back as JSON,
-text or bytes.
+The records live in `FetchTest.Recorder`, a service that the fake backend's
+layer provides, with a new, empty record each time the layer is built.
+Notice `Layer.provideMerge` in the last line. Under a client's layer,
+`Layer.provide` would hide the recorder from your test, while
+`Layer.provideMerge` keeps it available.
+
+Each recorded request has the following properties:
+
+- `method`, such as `"DELETE"`;
+- `url`, with its query string;
+- `route` and `params`, the route and the path params it matched, as
+  strings;
+- `query`, the raw query parameters;
+- `headers`, with lowercase names;
+- `body`, read back: the value of a JSON body, the text of a text or form
+  body, the bytes of other bytes, a `FormData` or stream as it was sent, or
+  `undefined` without one.
+
+A request that no route matched is recorded too, with `route` set to
+`undefined` and `params` set to `{}`.
 
 ## How requests are matched
 
@@ -61,8 +78,8 @@ The fake backend picks a handler for each request by these rules:
   segments wins, then the one with the most literal segments, so
   `GET /todos/count` wins over `GET /todos/:id`. After that, the one listed
   first wins.
-- **Absolute routes** such as `POST https://uploads.example.com/files` match
-  that URL only.
+- **Absolute routes,** such as `POST https://uploads.example.com/files`,
+  match that URL only.
 - **No match is a defect,** whose message lists the backend's routes, and the
   ones that match the path with another method:
 
@@ -79,5 +96,5 @@ The fake backend picks a handler for each request by these rules:
   fail, or answer with another status.
 - [Use a hand-written HttpClient](/docs/testing/http-client): fake what the
   fake backend doesn't do, such as a network failure.
-- [FetchTest](/docs/reference/fetch-test): every member of the `FetchTest`
-  namespace.
+- [FetchTest](/docs/reference/fetch-test): look up every member of the
+  `FetchTest` namespace.

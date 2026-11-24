@@ -3,10 +3,15 @@ title: Examples
 description: Find a complete program that uses Effetch, typechecked with the package.
 ---
 
-The repository's
-[`examples/`](https://github.com/monarcode/effetch/tree/main/examples) folder
-has complete programs, typechecked with the package so they always match the
-current API. Use them to see a whole feature in context.
+The guides show one feature at a time. When you want to see several of them
+working together in a whole program, look in the repository's
+[`examples/`](https://github.com/monarcode/effetch/tree/main/examples)
+folder.
+
+The examples are typechecked with the package on the `main` branch, which
+can be ahead of the latest release. To read them as they were at your
+version, switch GitHub's branch menu to that release's tag, such as
+`v0.1.0-rc.4`.
 
 The folder has these programs:
 
@@ -34,4 +39,11 @@ The folder has these programs:
 
 The examples'
 [README](https://github.com/monarcode/effetch/blob/main/examples/README.md)
-walks through each one.
+walks through each one, and explains how `app/` is laid out.
+
+## What's next
+
+- [Structure an app](/docs/structuring-an-app): see the layout that `app/`
+  follows, and when to use it.
+- [Test with a fake backend](/docs/testing): write tests like the ones in
+  `testing.ts`.

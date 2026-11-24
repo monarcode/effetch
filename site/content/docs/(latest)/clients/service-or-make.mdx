@@ -3,19 +3,38 @@ title: Fetch.Service or Fetch.make
 description: Choose between declaring a client as a service and building one with Fetch.make.
 ---
 
-This page explains how `Fetch.Service` and `Fetch.make` relate, and helps
-you choose between them.
+Most apps declare each client with `Fetch.Service`, and never need anything
+else. Underneath it is `Fetch.make`, a function that builds a client
+directly. It's the better fit for a script, for a config that only an
+Effect can produce, or for a client made while the program runs. This page
+shows how the two relate, what you give up with `Fetch.make`, and when to
+use each.
 
 ## How they relate
 
-`Fetch.make` is the function underneath `Fetch.Service`: it takes the same
-config and returns an Effect that builds the client. Both give you the same
-client, with the same calls and the same types.
+`Fetch.make` takes the same config as `Fetch.Service` and returns an Effect
+that builds the client. `Fetch.Service` calls `Fetch.make` in its layer, and
+adds the pieces an app needs around it: a service key, a layer and the
+config to read back. Both give you the same client, with the same calls and
+the same types.
+
+## What you give up with Fetch.make
+
+With `Fetch.make`, you write by hand what the class gives you:
+
+- **No service key.** To share the client as a service, you declare one
+  with `Context.Service`, as in
+  [Fetch.make with a config from an Effect](#fetchmake-with-a-config-from-an-effect).
+- **No layer.** You build one with `Layer.effect`.
+- **No `Api.config`.** There's no frozen config to spread into a derived
+  client (see [Derive a client](/docs/clients/derived)).
+- **No `Fetch.isService`.** It returns `false` for a key you wrote with
+  `Context.Service`.
 
 ## Which one to use
 
-Use the class by default, and reach for `Fetch.make` when the class doesn't
-fit:
+Use the class by default, and use `Fetch.make` when the class doesn't fit.
+The following table matches common situations to each:
 
 | Situation                                                                          | Use             |
 | ---------------------------------------------------------------------------------- | --------------- |
@@ -26,9 +45,14 @@ fit:
 | A config that comes from an Effect, such as headers read from a service            | `Fetch.make`    |
 | A client made inside your own service's layer, or one per tenant at runtime        | `Fetch.make`    |
 
+`Fetch.Endpoints` takes the client's service key, so it works with any key,
+including one you wrote by hand. `Fetch.Service` is the shorter way there,
+since the class is already that key.
+
 ## Fetch.make in a script
 
-In a script, use `Fetch.make` inline:
+In a script, call `Fetch.make` inline and provide an `HttpClient` where you
+run it:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -46,8 +70,9 @@ await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)));
 
 ## Fetch.make with a config from an Effect
 
-When the config itself comes from an Effect, call `Fetch.make` inside that
-Effect and declare the service by hand:
+When the config itself comes from an Effect, such as a header read from
+another service, call `Fetch.make` inside that Effect, then declare the
+service and its layer by hand:
 
 ```ts
 import * as Context from "effect/Context";
@@ -75,8 +100,13 @@ export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
 export const ApiLive = Layer.effect(Api)(makeApi);
 ```
 
-## Related pages
+`ApiLive` needs a `Tenant` and an `HttpClient`, and `Api` works as a client
+key for `Fetch.Endpoints`.
+
+## What's next
 
 - [Declare a client](/docs/clients): declare a client with `Fetch.Service`.
-- [Client configuration](/docs/clients/configuration): the options both
-  take.
+- [Client configuration](/docs/clients/configuration): look up the options
+  both take.
+- [Share endpoints as a service](/docs/endpoints/services): bind endpoints
+  to a client's service key with `Fetch.Endpoints`.

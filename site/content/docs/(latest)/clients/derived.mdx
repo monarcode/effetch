@@ -3,15 +3,16 @@ title: Derive a client
 description: Make a client from another, with a different base URL or one more header.
 ---
 
-This page shows how to make a second client from a first one, for the same
-client with a different base URL, such as a second API version, or with one
-more header.
+Sometimes you need a second client that's almost the same as the first:
+the same API under another version, or the same backend with one more
+header. Rather than repeat the config, you spread the first client's config
+into the second and change what differs. This page shows how, and what
+happens to each option you change.
 
 ## Spread the first client's config
 
-Spread the first class's `config` into a second class. The second class
-keeps the plugins, `defaultError` and `statusErrors`, so its client has the
-same type:
+Spread the first class's `config` into a second class, then set the options
+that differ:
 
 ```ts
 import * as Schema from "effect/Schema";
@@ -31,11 +32,65 @@ export class ApiV2 extends Fetch.Service<ApiV2>()("ApiV2", {
 }) {}
 ```
 
-## Keep the first client's headers
+`ApiV2` keeps the plugins, the `defaultError` and the `statusErrors` of
+`Api`, so its client has the same type. A function that takes
+`Effect.Success<typeof Api>` takes an `ApiV2` client too.
 
-When you set `headers`, `Api.config.headers` is replaced, not merged. To
-keep the first client's headers, spread them too, as in
-`headers: { ...Api.config.headers, "x-client": "web" }`.
+Give the second class its own id, as `"ApiV2"` here. With the same id, the
+two classes would be the same service.
+
+## Change an option
+
+Any option you set replaces the first client's. It isn't merged with it.
+
+To add a header and keep the first client's, spread `Api.config.headers`
+before your own:
+
+```ts
+import { Fetch } from "@monarcode/effetch";
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  headers: { "x-app": "todos" },
+}) {}
+
+export class WebApi extends Fetch.Service<WebApi>()("WebApi", {
+  ...Api.config,
+  headers: { ...Api.config.headers, "x-client": "web" },
+}) {}
+```
+
+A header you list after the spread wins over one of the same name from
+`Api.config.headers`, whatever its case.
+
+To add a plugin, list the plugins again. Keep the ones both clients share
+in constants, so both lists hold the same plugins:
+
+```ts
+import { Fetch } from "@monarcode/effetch";
+import { logger, retry } from "@monarcode/effetch/plugins";
+
+const retrying = retry();
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [retrying],
+}) {}
+
+export class LoggedApi extends Fetch.Service<LoggedApi>()("LoggedApi", {
+  ...Api.config,
+  plugins: [retrying, logger()],
+}) {}
+```
+
+A client with different plugins has a different type, since plugins add
+errors and per-call options. The same goes for a different `defaultError`
+or `statusErrors`. Type the second client as
+`Effect.Success<typeof LoggedApi>`.
+
+You could also write `[...(Api.config.plugins ?? []), logger()]`, but
+`Api.config.plugins` can be `undefined` in its type, so the list's type
+becomes a choice between two lists rather than the one you meant.
 
 ## What's next
 

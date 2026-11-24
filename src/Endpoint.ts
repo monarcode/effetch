@@ -417,7 +417,7 @@ export type EndpointUrlArgs<
 		];
 
 /**
- * An endpoint made by `client.endpoint` or `client.bind`: a function that
+ * An endpoint made by `api.endpoint` or `api.bind`: a function that
  * sends its request with the options of one call, and returns the same
  * Effect as the equivalent client method. With `stream`, it returns a
  * `Stream` of the body's values instead, as `api.sse` and `api.ndjson`
@@ -556,7 +556,7 @@ export interface Endpoint<
 }
 
 /**
- * The signature of `client.endpoint`: defines an {@link Endpoint} from a
+ * The signature of `api.endpoint`: defines an {@link Endpoint} from a
  * route and an {@link EndpointDefinition}.
  *
  * - `Ps`: the client's plugins.
@@ -626,7 +626,7 @@ export interface EndpointMethod<
  *   the body's values (see {@link StreamFormat}).
  *
  * Plugin overrides are given when binding, in {@link BindOptions}: a
- * definition doesn't know which plugins a client has.
+ * definition has no client yet, so it can't check plugin names.
  *
  * - `R`: the route, for the method and the path.
  * - `O`, `EB`, `I`: the `output`, `error` and `input` schemas (`undefined`
@@ -707,8 +707,8 @@ export interface UnboundDefinition<
 
 /**
  * An endpoint defined without a client, by {@link endpoint}: its route,
- * schemas and headers, as plain data. `client.bind` turns it into an
- * {@link Endpoint} of that client, the same one `client.endpoint` makes
+ * schemas and headers, as plain data. `api.bind` turns it into an
+ * {@link Endpoint} of that client, the same one `api.endpoint` makes
  * from the same route and definition.
  *
  * It needs no client, so it can be exported from module level next to its
@@ -765,8 +765,8 @@ export interface UnboundEndpoint<
 	 */
 	readonly error: EB;
 	/**
-	 * The `statusErrors` map, as given, or `undefined` without one. Once
-	 * bound, the client's are tried after it.
+	 * The `statusErrors` map, as given, or `undefined` without one. After
+	 * binding, the client's are tried after it.
 	 */
 	readonly statusErrors: SE;
 	/** The schema the body is encoded with, or `undefined` without `input`. */
@@ -786,7 +786,7 @@ export interface UnboundEndpoint<
 	 * Builds the path a call with these `params` and `query` sends to,
 	 * relative, without a client's `baseUrl`: the path with its params
 	 * filled in, then the query string. A route with an absolute URL gives
-	 * that URL. Once bound, the endpoint's `url` adds the client's
+	 * that URL. After binding, the endpoint's `url` adds the client's
 	 * `baseUrl`.
 	 *
 	 * It throws when a param is missing, or the query doesn't match the
@@ -799,7 +799,7 @@ export interface UnboundEndpoint<
 }
 
 /**
- * What `client.bind` takes besides the definition: headers and plugin
+ * What `api.bind` takes besides the definition: headers and plugin
  * overrides for every call of the bound endpoint.
  *
  * - `headers`: sent with every call, over the definition's headers. A
@@ -830,8 +830,8 @@ export interface BindOptions<Ps extends ReadonlyArray<Plugin.Any>> {
 }
 
 /**
- * The signature of `client.bind`: turns an {@link UnboundEndpoint} into an
- * {@link Endpoint} of the client, the same one `client.endpoint` makes from
+ * The signature of `api.bind`: turns an {@link UnboundEndpoint} into an
+ * {@link Endpoint} of the client, the same one `api.endpoint` makes from
  * the same route and definition.
  *
  * - `Ps`: the client's plugins.
@@ -920,11 +920,11 @@ export interface AnyUnboundEndpoint extends Omit<
 }
 
 /**
- * How `client.bindAll` and `Fetch.Endpoints` check one entry of a record of
+ * How `api.bindAll` and `Fetch.Endpoints` check one entry of a record of
  * definitions, given the entry's own type `E` and the client's plugins
  * `Ps`. An entry is a definition made with {@link endpoint}, or a pair of
  * a definition and the {@link BindOptions} to bind it with. A pair's
- * options are checked as `client.bind` checks them, so a misspelt option
+ * options are checked as `api.bind` checks them, so a misspelled option
  * or plugin name is an error.
  *
  * @example
@@ -954,7 +954,7 @@ export type EndpointEntry<
 		: AnyUnboundEndpoint | readonly [AnyUnboundEndpoint, BindOptions<Ps>];
 
 /**
- * What `client.bindAll` and `Fetch.Endpoints` take: a record of
+ * What `api.bindAll` and `Fetch.Endpoints` take: a record of
  * definitions made with {@link endpoint}, by the name each endpoint gets,
  * each entry checked by {@link EndpointEntry}. `D` is the record's own
  * type, and `Ps` the client's plugins. Names are strings: symbol keys are
@@ -986,7 +986,7 @@ export type EndpointDefinitions<D, Ps extends ReadonlyArray<Plugin.Any>> = {
 
 /**
  * The endpoint a client makes from one entry of
- * {@link EndpointDefinitions}: what `client.bind` returns for that
+ * {@link EndpointDefinitions}: what `api.bind` returns for that
  * definition. `Ps`, `DefaultEB` and `ClientSE` are the client's, as in
  * {@link BindMethod}.
  *
@@ -1034,7 +1034,7 @@ export type BoundEndpoint<
 		: never;
 
 /**
- * The endpoints `client.bindAll` makes from a record of
+ * The endpoints `api.bindAll` makes from a record of
  * {@link EndpointDefinitions}: one {@link Endpoint} for each entry, under
  * the same name.
  *
@@ -1069,8 +1069,8 @@ export type BoundEndpoints<
 };
 
 /**
- * The signature of `client.bindAll`: binds a record of definitions at
- * once, as `client.bind` binds each one. `Ps`, `DefaultEB` and `ClientSE`
+ * The signature of `api.bindAll`: binds a record of definitions at
+ * once, as `api.bind` binds each one. `Ps`, `DefaultEB` and `ClientSE`
  * are the client's, as in {@link BindMethod}.
  *
  * @example
@@ -1103,10 +1103,10 @@ export interface BindAllMethod<
  * Defines an endpoint without a client: a route like `"GET /users/:id"` and
  * the schemas and headers to call it with. You get back plain data, an
  * {@link UnboundEndpoint}, that you can export from module level next to
- * its schemas. `client.bind(definition)` turns it into an {@link Endpoint}
- * of that client: the same one `client.endpoint(route, definition)` makes.
+ * its schemas. `api.bind(definition)` turns it into an {@link Endpoint}
+ * of that client: the same one `api.endpoint(route, definition)` makes.
  *
- * - The route is checked as you type, as with `client.endpoint`. A route
+ * - The route is checked as you type, as with `api.endpoint`. A route
  *   that isn't valid (which the types prevent) throws here, when the
  *   module loads.
  * - With an `input` schema, `body` is required on every call and typed by
@@ -1122,16 +1122,16 @@ export interface BindAllMethod<
  *   endpoint returns a `Stream` of the body's values. A `stream` that
  *   isn't one of those, or that comes with `responseMode` or a
  *   `Fetch.bytes()` output, throws here.
- * - Plugin overrides are given when binding: a definition doesn't know
- *   which plugins a client has.
+ * - Plugin overrides are given when binding: a definition has no client
+ *   yet, so it can't check plugin names.
  * - `definition.url(options)` builds the URL a call would go to, without
  *   the client's `baseUrl`.
  *
  * Use it when endpoints should be listed next to their schemas, read
  * without a client, or bound to more than one client. Otherwise
- * `client.endpoint` does the same in one step.
+ * `api.endpoint` does the same in one step.
  *
- * To bind several definitions at once, use `client.bindAll`. To share a
+ * To bind several definitions at once, use `api.bindAll`. To share a
  * module's endpoints as a service, use `Fetch.Endpoints`. To test code
  * that calls them, answer them with `FetchTest.respond` from
  * `@monarcode/effetch/test`.

@@ -1,23 +1,121 @@
 ---
-title: Methods
-description: Call a route with get, head, options, post, put, patch or del.
+title: Make a call
+description: Pick a method, fill in the path's parameters and build the query string.
 ---
 
-With a client in hand, every call is one method: you pass the path and an
-object of options, and get an Effect back.
+With a client in hand, every request is a single method call. You pass a
+path and an object of options, and you get back an Effect that sends the
+request when it runs. This page covers what every call has in common: the
+method, the path and its parameters, and the query string.
 
 ## Pick a method
 
-A client has a method for each HTTP method:
+The client has a method for each common HTTP method, named in lowercase:
 
 - `get`, `head` and `options` send no body.
-- `post`, `put`, `patch` and `del` can send one. It's `del` because `delete`
-  is a reserved word.
+- `post`, `put`, `patch` and `del` can send one. It's `del`, not `delete`,
+  because `delete` is a reserved word in JavaScript.
+
+Each one takes the path first, then the options:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+export const todo = api.get("/todos/1", { output: Todo });
+
+export const renamed = api.patch("/todos/1", {
+  body: { title: "Write the docs" },
+  output: Todo,
+});
+```
+
+Three other methods cover the rest:
+
+- `api.request` takes the HTTP method as its first argument. Use it when
+  the method is only known at runtime, or for one with no shorthand, such
+  as `TRACE` or `QUERY` (see
+  [When the methods aren't enough](/docs/calls/http-client)).
+- `api.sse` and `api.ndjson` read a response that arrives a piece at a time
+  (see [Streaming responses](/docs/streaming)).
+
+## Fill in path parameters
+
+To put a value in the path, write that segment as a name that starts with
+`:`, and pass the value in `params`:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+// GET /todos/42
+export const one = api.get("/todos/:id", { params: { id: 42 }, output: Todo });
+```
+
+TypeScript reads the parameter names from the path, so it asks for exactly
+`params: { id }`, with no names missing and none extra. A path without
+parameters doesn't take `params` at all.
+
+A value can be a string or a number. Effetch converts it with `String()` and
+encodes it with `encodeURIComponent`, so `"a/b"` stays one segment (`a%2Fb`)
+and can't add a level to the path.
+
+A parameter is always a whole segment, from the `:` to the next `/`. In
+`/files/:name.json`, the parameter is called `name.json`, not `name`. To send
+a file name with its extension, make the whole segment the parameter, as in
+`/files/:file`, and pass `"report.json"`.
+
+## Build a query string
+
+Pass the query as a plain object, and Effetch builds the string for you:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+// GET /todos?page=1&tags=work&tags=home
+export const some = api.get("/todos", {
+  query: { page: 1, tags: ["work", "home"], search: undefined },
+  output: Schema.Array(Todo),
+});
+```
+
+The rules are made so that you can pass optional filters as they are:
+
+- An array repeats the key, as in `tags=work&tags=home`.
+- `null` and `undefined` values are left out, so `search` sends nothing.
+- Numbers, booleans and bigints are converted with `String()`.
+
+With Effect 4.1 or later, a value can also be `Redacted`, such as
+`Redacted.make(apiKey)`. It's sent as its value, and Effect keeps it out of
+its own logs and traces.
+
+The `query` object isn't checked against anything, so a typo in a key
+compiles. To type a query, or to send values that need encoding, such as
+dates, give an endpoint a query schema. See
+[Typed query parameters](/docs/endpoints/typed-query).
 
 ## What's next
 
-- [Path and query parameters](/docs/calls/parameters): fill in the path and
-  build a query.
-- [Send a body](/docs/calls/body): send JSON, forms, text or bytes.
-- [Read the response](/docs/calls/responses): decode what comes back.
+- [Send a body](/docs/calls/body): send JSON, a form, text or bytes.
+- [Upload files](/docs/calls/uploads): send files in a typed multipart form.
+- [Read the response](/docs/calls/responses): decode what comes back with a
+  schema.
 - [Call options](/docs/calls/options): look up every option a call takes.
+- [When the methods aren't enough](/docs/calls/http-client): pick the method
+  at runtime, or use the client's `HttpClient` directly.

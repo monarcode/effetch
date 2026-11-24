@@ -1,7 +1,8 @@
 # Examples
 
 Complete programs using Effetch. They're typechecked with the package
-(`pnpm run typecheck`), so they always match the current API.
+(`pnpm run typecheck`), so they match the API on the branch you're reading,
+which on `main` can be ahead of the latest release.
 
 | Example                                | What it shows                                                                                                                  |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |

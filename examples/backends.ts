@@ -35,9 +35,9 @@ const session: { accessToken: string | undefined } = {
 // Plugins are plain values, so both clients can share one token source.
 const auth = bearer({ token: () => session.accessToken });
 
-// `ctx.route` is a method and path, with no host: both backends could have a
-// `GET /health`. A plugin shared across backends takes the backend's name,
-// and each client gets its own instance.
+// `ctx.route` is a method and path, without the base URL: both backends
+// could have a `GET /health`. A plugin shared across backends takes the
+// backend's name, and each client gets its own instance.
 const reportErrors = (backend: string) =>
 	Fetch.plugin({
 		name: "reportErrors",

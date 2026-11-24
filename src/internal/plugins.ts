@@ -24,7 +24,7 @@ const noOverrides: OverrideMap = {};
 
 /**
  * The `plugins` option of the call being run. Provided around each call;
- * anything else (such as `client.httpClient`) sees no overrides.
+ * anything else (such as `api.httpClient`) sees no overrides.
  */
 export const CurrentOverrides: Context.Reference<OverrideMap> =
 	Context.Reference<OverrideMap>("@monarcode/effetch/CurrentOverrides", {
@@ -38,7 +38,7 @@ export const provideOverrides = (
 
 /**
  * The route of the call being run, such as `"GET /users/:id"`. Provided
- * around each call; anything else (such as `client.httpClient`) sees
+ * around each call; anything else (such as `api.httpClient`) sees
  * `undefined`.
  */
 export const CurrentRoute: Context.Reference<string | undefined> =
@@ -66,7 +66,7 @@ export interface ResponseBox {
 /**
  * The {@link ResponseBox} of the call being run, if it has `onExit` hooks.
  * Provided around each call (`undefined` without hooks, and for
- * `client.httpClient`), so a call made inside another doesn't write to its
+ * `api.httpClient`), so a call made inside another doesn't write to its
  * box.
  */
 export const CurrentResponseBox: Context.Reference<ResponseBox | undefined> =

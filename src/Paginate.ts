@@ -14,7 +14,7 @@ import type {
 
 /**
  * An endpoint {@link paginate} can page through: one made by
- * `client.endpoint` or `client.bind`, whose calls return an `Effect`. A
+ * `api.endpoint` or `api.bind`, whose calls return an `Effect`. A
  * definition made by `Fetch.endpoint` needs binding first, and a stream
  * endpoint can't be paged.
  *
@@ -246,7 +246,7 @@ export const paginate = <const EP extends PageEndpoint, S>(
 		typeof (endpoint as { readonly route?: unknown }).route !== "string"
 	) {
 		throw new TypeError(
-			"Fetch.paginate takes a bound endpoint: pass what client.endpoint or client.bind returns",
+			"Fetch.paginate takes a bound endpoint: pass what your client's endpoint or bind method returns",
 		);
 	}
 	if ((endpoint as { readonly stream?: unknown }).stream !== undefined) {

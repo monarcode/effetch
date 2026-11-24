@@ -498,19 +498,19 @@ export function Specifications({ version }: { version: string }) {
 						))}
 					</ul>
 					<p className="mt-3 max-w-[56ch] text-[15px] text-steel">
-						No Node.js modules and no{" "}
+						Built for each of them: no Node.js modules and no{" "}
 						<code className="spec-mono text-[0.92em] text-paper">
 							new URL()
 						</code>
-						, so it runs on Hermes too.
+						, so it runs on Hermes too. CI tests on Node.js 24.
 					</p>
 				</Spec>
 				<Spec term="Built on">Effect v4's HttpClient and Schema.</Spec>
 				<Spec term="Status">
 					A release candidate,{" "}
-					<span className="spec-mono text-[0.9em]">{version}</span>. The
-					API is settled: release candidates add small, opt-in features and
-					fixes.
+					<span className="spec-mono text-[0.9em]">{version}</span>, on the
+					way to 0.1.0. When a release candidate changes the API, the
+					changelog says what to change in your code.
 				</Spec>
 				<Spec term="Checked">
 					Every example in the docs and the README is compiled against the

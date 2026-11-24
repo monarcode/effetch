@@ -28,7 +28,7 @@ export type TextSchema = Schema.Top & { readonly Encoded: string };
  * - `Fetch.text(schema)` reads a single value, such as a count or a
  *   status: it trims the text, then decodes it with `schema`, whose
  *   encoded side is a string, such as `Schema.NumberFromString`. An empty
- *   body fails, as for JSON.
+ *   body fails with a `DecodeError`, where JSON would decode it as `null`.
  *
  * Details:
  *
@@ -37,7 +37,7 @@ export type TextSchema = Schema.Top & { readonly Encoded: string };
  *   call, the endpoint or the client.
  * - A body that can't be read, or doesn't match `schema`, fails the call
  *   with a `DecodeError`, as for JSON.
- * - It works wherever `output` does: on calls, `client.endpoint` and
+ * - It works wherever `output` does: on calls, `api.endpoint` and
  *   `Fetch.endpoint`. `error` and `statusErrors` still read JSON.
  * - In a stream (`api.sse`, `api.ndjson` or a `stream` endpoint), it
  *   gives each event's data, or each line, as text.
@@ -74,8 +74,8 @@ export function text(): Schema.String;
  *
  * It's {@link text} with a schema: the same `Accept` header and errors.
  * Surrounding whitespace, such as a trailing newline, is ignored, and an
- * empty body fails the call with a `DecodeError`, as for JSON, rather
- * than reaching `schema` (which would read `""` as `0` with
+ * empty body fails the call with a `DecodeError` rather than reaching
+ * `schema` (which would read `""` as `0` with
  * `Schema.NumberFromString`).
  *
  * It returns `schema`, annotated. Pass it to `output` as it is, or with

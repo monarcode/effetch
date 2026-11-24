@@ -1,25 +1,42 @@
 ---
 title: Call options
-description: Look up an option a call accepts.
+description: Look up an option a call accepts, its default, and the page that explains it.
 ---
 
-Every method takes the path and an object of options. This page lists every
-option a call accepts.
+Every method takes a path and an object of options, such as
+`api.get("/todos/:id", { params: { id: 1 }, output: Todo })`. Use this page
+to look an option up. Each row links to the page that explains it in full.
 
 ## Options
 
-The following options control how a call builds its request and reads its
-response:
+The following table lists every option a call accepts, with what a call
+without it does:
 
-| Option         | What it does                                                                                                                                                                                                                                                                                                   |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `params`       | Values for the path's `:params`. Required, with exactly those names, when the path has any; not allowed otherwise. Values are URI-encoded.                                                                                                                                                                     |
-| `query`        | An object of query parameters. Arrays repeat the key, and `null` and `undefined` are dropped.                                                                                                                                                                                                                  |
-| `headers`      | Headers for this call. They win over the client's, and over the body's `content-type`.                                                                                                                                                                                                                         |
-| `body`         | Sent by its type: `HttpBody`, string, `ArrayBuffer` and typed arrays, `Blob`/`File`, `FormData` and `URLSearchParams` as they are, anything else as JSON.                                                                                                                                                      |
-| `input`        | A schema `body` is encoded with. `body` is then typed by it. Sent as JSON, or as `multipart/form-data` when wrapped in `Fetch.multipart` (see [Upload files](/docs/calls/uploads)).                                                                                                                            |
-| `output`       | A schema the 2xx body is decoded with: read as JSON, or as text with `Fetch.text()` and bytes with `Fetch.bytes()`. The call then sends a matching `Accept` header (unless you set `accept`). Without it, the call succeeds with the raw `HttpClientResponse`. See [Read the response](/docs/calls/responses). |
-| `responseMode` | `"decoded-and-response"` makes the call succeed with `[value, response]`, to read the status and headers too. Defaults to `"decoded"`, the value alone.                                                                                                                                                        |
-| `error`        | A schema for the body of error responses, replacing the client's `defaultError`.                                                                                                                                                                                                                               |
-| `statusErrors` | Your own errors for error responses, by status. See [Errors by status](/docs/errors/status-errors).                                                                                                                                                                                                            |
-| `plugins`      | Plugin overrides for this call (see [Change plugins for one call](/docs/plugins/per-call)).                                                                                                                                                                                                                    |
+| Option         | What it does                                                                                                                                                                                                                                 | Default                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `params`       | Fills in the path's `:name` segments. Required when the path has any, and not allowed otherwise. See [Fill in path parameters](/docs/calls#fill-in-path-parameters).                                                                         | None.                                                                |
+| `query`        | Builds the query string from an object. See [Build a query string](/docs/calls#build-a-query-string).                                                                                                                                        | None.                                                                |
+| `headers`      | Headers for this call. They win over the client's, and over the body's `content-type`, except on a `FormData` body. See [Set the content type](/docs/calls/body#set-the-content-type).                                                       | The client's headers.                                                |
+| `body`         | The request body, sent by its type. Only on `post`, `put`, `patch`, `del` and `request`, and on `sse` and `ndjson`. See [Send a body](/docs/calls/body).                                                                                     | None: no body.                                                       |
+| `input`        | A schema that types `body` and encodes it. A body that doesn't match makes the call die. See [Encode the body with a schema](/docs/calls/body#encode-the-body-with-a-schema), and [Upload files](/docs/calls/uploads) for `Fetch.multipart`. | None: `body` is sent by its type.                                    |
+| `output`       | A schema the 2xx body is decoded with. See [Read the response](/docs/calls/responses).                                                                                                                                                       | None: the call succeeds with the `HttpClientResponse`.               |
+| `responseMode` | `"decoded-and-response"` makes the call succeed with `[value, response]`. See [Read the body and the response](/docs/calls/responses#read-the-body-and-the-response).                                                                        | `"decoded"`: the value alone.                                        |
+| `error`        | A schema for the body of error responses, decoded onto `HttpError.body`. See [Catch errors](/docs/errors/catching#read-the-error-body).                                                                                                      | The client's `defaultError`, else `Schema.Unknown`: the parsed JSON. |
+| `statusErrors` | Your own errors for error responses, by status. Tried before the client's. See [Errors by status](/docs/errors/status-errors).                                                                                                               | None: only the client's apply.                                       |
+| `plugins`      | Turns a plugin off, or changes its options, for this call. See [Change plugins for one call](/docs/plugins/per-call).                                                                                                                        | None: each plugin runs with its defaults.                            |
+
+These are the options of the client's methods. An endpoint's call takes a
+subset of them, since its definition holds the rest (see
+[Call an endpoint](/docs/endpoints/calling)).
+
+`api.request` takes the same options, after the HTTP method. A `GET` or
+`HEAD` request with a `body` makes the call die (see
+[When the methods aren't enough](/docs/calls/http-client)).
+
+## What's next
+
+- [Make a call](/docs/calls): pick a method, and fill in the path and the
+  query.
+- [Send a body](/docs/calls/body): send JSON, a form, text or bytes.
+- [Read the response](/docs/calls/responses): decode what comes back with a
+  schema.

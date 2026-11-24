@@ -3,37 +3,98 @@ title: Call errors
 description: Learn what a call can fail with and how each error is typed.
 ---
 
-Every call's type lists the ways it can fail, so TypeScript knows which
-errors you've handled and which are left. This page describes those errors.
-The other pages in this section show how to catch them and how to turn the
-API's error responses into errors of your own.
+A request can go wrong in more ways than one. The network can drop, the
+server can answer with a 404, or the body can come back in a shape you
+didn't expect. With Effetch, each of these is a separate tagged error, and
+every call's type lists the ones it can fail with. TypeScript then tracks
+which errors you've handled and which are left.
 
-## What can go wrong
+This page describes those errors and how they fit together. The rest of the
+section shows how to catch them, read the API's error body, and turn error
+statuses into errors of your own.
 
-A call can fail in three ways, each with its own tagged error. Plugins can add
-their own, such as `timeout`'s `TimeoutError`, and
-[`statusErrors`](/docs/errors/status-errors) can turn an `HttpError` into one
-of your own.
+## How a call fails
 
-The following table lists each error, when it happens and the fields it
-carries:
+A call fails with one of three errors, each with its own `_tag`:
 
-| Error                   | When                                                                               | Fields                                               |
-| ----------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `NetworkError`          | No response: offline, DNS failure, connection refused, CORS rejection.             | `method`, `url`, `cause`                             |
-| `HttpError`             | A response outside 200–299 (3xx included).                                         | `method`, `url`, `status`, `headers`, `text`, `body` |
-| `DecodeError`           | A 2xx body that isn't JSON or doesn't match `output`. Only on calls with `output`. | `method`, `url`, `status`, `issue`, `message`        |
-| `TimeoutError` (plugin) | The `timeout` plugin's limit passed before the response arrived.                   | `method`, `url`, `duration`                          |
+- **`NetworkError`:** the request got no response at all.
+- **`HttpError`:** the server answered, but with a status outside 200–299.
+- **`DecodeError`:** the server answered with a 2xx, but its body couldn't
+  be read or decoded.
 
-## Error pages
+Here's how they show up in a call's type:
 
-The rest of this section covers each part of handling errors:
+```ts
+import * as Schema from "effect/Schema";
 
-- [Catch errors](/docs/errors/catching): handle an error by its tag, or one
-  status.
-- [Typed error bodies](/docs/errors/error-bodies): decode the API's error
-  body with a schema.
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+// Fails with NetworkError, HttpError or DecodeError
+export const todo = api.get("/todos/:id", {
+  params: { id: 1 },
+  output: Todo,
+});
+```
+
+Two things can add to that list:
+
+- **Plugins.** A plugin can fail a call with an error of its own, such as
+  the `timeout` plugin's `TimeoutError`, and that error joins the call's
+  type.
+- **Your own errors.** With [`statusErrors`](/docs/errors/status-errors),
+  an error status becomes an error you define, such as a 404 that fails with
+  `TodoNotFound`.
+
+## The errors and their fields
+
+Every error carries the request's `method` and `url`, so a log line says
+which call failed. The following table lists when each error happens and
+the fields it carries:
+
+| Error                   | When                                                                                                                                     | Fields                                               |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `NetworkError`          | No response: offline, DNS failure, connection refused, CORS rejection.                                                                   | `method`, `url`, `cause`                             |
+| `HttpError`             | A response outside 200–299, 3xx included.                                                                                                | `method`, `url`, `status`, `headers`, `text`, `body` |
+| `DecodeError`           | A 2xx body that couldn't be read, isn't JSON or doesn't match `output`, on a call with `output`. Or a stream that fails while it's read. | `method`, `url`, `status`, `issue`, `message`        |
+| `TimeoutError` (plugin) | The `timeout` plugin's limit passed before the response arrived, or the `retry` plugin's `budget` ran out during an attempt.             | `method`, `url`, `duration`                          |
+
+A stream (`api.sse`, `api.ndjson` or a stream endpoint) fails with
+`DecodeError` with or without `output`: when a value doesn't decode, when
+the body breaks off, or when an SSE response's `Content-Type` isn't
+`text/event-stream`. For how a stream reads its body, see
+[Streaming responses](/docs/streaming).
+
+A few of these fields are worth knowing before you handle them:
+
+- `url` is the request URL without its query string, so a token in the
+  query doesn't end up in your logs.
+- `HttpError.text` is the raw body, and `body` is that body decoded. See
+  [Read the error body](/docs/errors/catching#read-the-error-body).
+- `DecodeError.message` is a readable summary of what went wrong, and
+  `issue` holds the schema issue, the JSON `SyntaxError` or the read error
+  behind it.
+
+## Errors and defects
+
+The errors in the table are things your app can recover from: show a
+message, retry, or fall back to a cached value. A mistake in your own code,
+such as a missing path parameter, is different. It makes the Effect die as
+a defect (a failure that isn't in the error type, which you don't catch in
+normal code), so the bug surfaces instead of passing as an `HttpError`.
+[Logging and defects](/docs/errors/logging-and-defects) lists those
+mistakes.
+
+## What's next
+
+- [Catch errors](/docs/errors/catching): handle an error by its tag or its
+  status, and read the API's error body.
 - [Errors by status](/docs/errors/status-errors): turn an error status into
   your own domain error.
-- [Logging and defects](/docs/errors/logging-and-defects): what errors keep
-  out of logs, and which mistakes are defects rather than errors.
+- [Logging and defects](/docs/errors/logging-and-defects): see what stays
+  out of logged errors, and which mistakes are defects.
+- [Test errors and statuses](/docs/testing/errors): make a fake backend
+  fail, to test your handlers.

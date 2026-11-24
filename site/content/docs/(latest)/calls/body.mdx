@@ -3,13 +3,15 @@ title: Send a body
 description: Send JSON, form data, text or bytes, encoded with a schema or as is.
 ---
 
-Send a request body with `post`, `put`, `patch` or `del`. Effetch sends the
-`body` according to its type, and an `input` schema types and encodes it.
+When a call creates or changes something, it sends a body: a todo as JSON,
+a form, a file. You pass the value as `body`, and Effetch picks how to
+send it from its type. Add an `input` schema, and the body is typed and
+encoded by it too. This page shows both, and the `content-type` each kind
+of body is sent with.
 
-## Send JSON or a form
+## Send JSON
 
-The following calls send a body encoded with an `input` schema, a plain JSON
-body, and a `FormData` you build yourself:
+Pass a plain object as `body`, and Effetch sends it as JSON:
 
 ```ts
 import * as Schema from "effect/Schema";
@@ -22,6 +24,37 @@ const Todo = Schema.Struct({
   id: Schema.Finite,
   title: Schema.String,
   done: Schema.Boolean,
+});
+
+export const complete = api.patch("/todos/:id", {
+  params: { id: 1 },
+  body: { done: true },
+  output: Todo,
+});
+```
+
+The request goes out with `content-type: application/json`.
+
+`post`, `put`, `patch` and `del` take a body. `get`, `head` and `options`
+don't, and TypeScript rejects one there. With `api.request`, any method
+takes one, but a body on a `GET` or `HEAD` request makes the call die (see
+[When the methods aren't enough](/docs/calls/http-client)).
+
+## Encode the body with a schema
+
+Add an `input` schema, and `body` is typed by it and encoded with it before
+it's sent as JSON:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({
+  id: Schema.Finite,
+  title: Schema.String,
   due: Schema.Date,
 });
 const NewTodo = Schema.Struct({ title: Schema.String, due: Schema.Date });
@@ -31,12 +64,29 @@ export const create = api.post("/todos", {
   body: { title: "Write docs", due: new Date() },
   output: Todo,
 });
+```
 
-export const complete = api.patch("/todos/:id", {
-  params: { id: 1 },
-  body: { done: true },
-  output: Todo,
-});
+In `create`, `due` is a `Date` in your code and an ISO string on the wire.
+
+A body that doesn't match `input`, or that can't be serialized as JSON,
+makes the call die: it fails as a defect (an Effect that dies, which you
+don't catch in normal code), with a message that starts with
+`Invalid request body:`. A body the call can't send is a bug in the calling
+code, not something to handle at runtime. See
+[Logging and defects](/docs/errors/logging-and-defects).
+
+To send a typed body as a form instead, such as a file upload, see
+[Upload files](/docs/calls/uploads).
+
+## Send a form, text or bytes
+
+Without `input`, Effetch sends the body according to its type. A
+`FormData` you build yourself is sent as a form:
+
+```ts
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
 
 export const upload = (file: Blob) => {
   const form = new FormData();
@@ -45,22 +95,47 @@ export const upload = (file: Blob) => {
 };
 ```
 
-## How a body is sent
+The following table shows how each type of body is sent, checked in this
+order:
 
-A `body` is sent according to its type:
+| Body                                              | Sent as               | `content-type`                                           |
+| ------------------------------------------------- | --------------------- | -------------------------------------------------------- |
+| An Effect `HttpBody`                              | As it is              | The body's own                                           |
+| A string                                          | As it is              | `text/plain`                                             |
+| An `ArrayBuffer`, typed array or `DataView`       | Its bytes             | `application/octet-stream`                               |
+| A `Blob` or `File`                                | As it is              | The blob's `type`, or none when its `type` is empty      |
+| `FormData`                                        | As it is              | `multipart/form-data`, with a boundary the platform adds |
+| `URLSearchParams`                                 | As a URL-encoded form | `application/x-www-form-urlencoded`                      |
+| Anything else, such as an object, array or number | JSON                  | `application/json`                                       |
 
-- an `HttpBody`, a string, an `ArrayBuffer` or typed array, a `Blob` or
-  `File`, `FormData` and `URLSearchParams` are sent as they are;
-- anything else is sent as JSON.
+A string is sent as `text/plain`, even when it holds JSON. So
+`body: JSON.stringify(todo)` arrives as text, and a server that only reads
+JSON may reject it. Pass the object itself, and Effetch serializes it.
 
-## Encode the body with a schema
+## Set the content type
 
-Add an `input` schema, and `body` is typed by it and encoded with it before
-it's sent as JSON. In `create`, `due` is a `Date` in your code and an ISO
-string on the wire.
+A `content-type` header on the call wins over the body's. Use it to send a
+string you serialized yourself as JSON, or a body in a format of your own:
 
-To send a typed body as a form instead, such as a file upload, see
-[Upload files](/docs/calls/uploads).
+```ts
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+declare const todoJson: string;
+
+export const save = api.put("/todos/1", {
+  body: todoJson,
+  headers: { "content-type": "application/json" },
+});
+```
+
+A `FormData` body is the exception. Its `content-type` has to carry the
+boundary the platform picks, so Effetch removes any `content-type` set by
+the call, the endpoint or the client, and lets the platform set it.
+
+A `content-type` in the client's headers is dropped for every body (see
+[Client configuration](/docs/clients/configuration#headers)).
 
 ## What's next
 

@@ -3,13 +3,15 @@ title: Build an endpoint's URL
 description: Get the URL a call to an endpoint would go to, without sending a request.
 ---
 
-This page shows you how to get the URL an endpoint call would go to, as a
-string, for a link, an `<img>` source, or a cache key.
+Sometimes you need the URL of a call rather than its response: for a link,
+an `<img>` source, a download or a cache key. Writing it by hand repeats the
+path, and can drift from what the call sends. This page shows how to get
+the URL from the endpoint itself, built the same way the call builds it.
 
 ## Get the URL
 
-`endpoint.url(options)` returns the URL a call with the same `params` and
-`query` would go to. It works on a definition and on a bound endpoint:
+`endpoint.url(options)` returns the URL that a call with the same `params`
+and `query` would go to. It works on a definition and on a bound endpoint:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -41,23 +43,40 @@ export const link = Effect.gen(function* () {
 });
 ```
 
+`url` takes `params` and `query` as a call does, and TypeScript checks them
+the same way. When neither is required, you can call it with no arguments.
+
 ## What the URL contains
 
-The URL contains the following:
+Where the URL starts depends on what you call `url` on:
 
-- On a bound endpoint, the URL starts with the client's `baseUrl`.
-- On a definition from `Fetch.endpoint`, which has no client, it's the path
-  alone, unless the route is a full URL. That makes it a stable cache key
-  for one backend, whichever client calls it.
-- The URL is built before plugins run, so anything a plugin adds, such as a
-  token in the query, isn't in it.
+- **On a bound endpoint,** the URL starts with the client's `baseUrl`. When
+  the client has no `baseUrl`, it's relative, as in `/files/report.pdf`.
+- **On a definition from `Fetch.endpoint`,** which has no client, it's the
+  path alone, unless the route is a full URL. That makes it a stable cache
+  key for one backend, whichever client calls it.
+- **For a route written as a full URL,** such as
+  `"GET https://cdn.example.com/files/:name"`, it's that URL in both cases.
+
+The URL is built before plugins run, so anything a plugin adds, such as a
+token in the query, isn't in it.
 
 ## When url throws
 
-`url` throws when a path parameter is missing or the query doesn't match the
-schema, as a call would die. It encodes the query synchronously, so on an
-endpoint whose query schema needs services to encode, calling it doesn't
-compile.
+`url` runs synchronously and returns a string, so where a call would die,
+`url` throws instead. It throws when:
+
+- a path parameter is missing;
+- the query doesn't match the endpoint's `query` schema, or a field encodes
+  to an object;
+- the URL can't be built from the base URL and the path.
+
+An endpoint whose query schema needs a service to encode can't be encoded
+synchronously, so calling its `url` doesn't compile.
+
+`url` builds the URL with Effect's URL helpers, as each call does, and they
+use the platform's `URL`. On React Native without Expo, that needs a
+polyfill (see [Platform notes](/docs/platforms#react-native)).
 
 ## What's next
 

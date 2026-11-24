@@ -14,8 +14,8 @@ import type { Plugin } from "./Plugin.js";
  * {@link Endpoints} returns, to extend.
  *
  * The class is a `Context.Service` key. Its service is the record of
- * endpoints that `client.bindAll(definitions)` makes, so `yield* TodoApi`
- * gives `{ list, get, … }`, each typed as `client.bind` types it. It also
+ * endpoints that `api.bindAll(definitions)` makes, so `yield* TodoApi`
+ * gives `{ list, get, … }`, each typed as `api.bind` types it. It also
  * carries:
  *
  * - `layer`: the layer that binds the definitions to the client. It needs
@@ -72,7 +72,7 @@ export interface EndpointsClass<
 	 */
 	readonly definitions: D;
 	/**
-	 * Binds the definitions to the client with `client.bindAll`, once, when
+	 * Binds the definitions to the client with `api.bindAll`, once, when
 	 * the layer is built, and provides the endpoints as this service. It
 	 * needs the client's service and never fails.
 	 */
@@ -91,12 +91,12 @@ export interface EndpointsClass<
  * - `definitions`: a record of definitions made with `Fetch.endpoint`, by
  *   the name each endpoint gets. An entry can also be a
  *   `[definition, options]` pair, where `options` are the
- *   options (`BindOptions`) `client.bind` takes, such as plugin overrides.
+ *   options (`BindOptions`) `api.bind` takes, such as plugin overrides.
  *
  * The class:
  *
  * - is a `Context.Service` key: `yield* TodoApi` gives the endpoints, each
- *   typed as `client.bind` types it, with the client's plugins,
+ *   typed as `api.bind` types it, with the client's plugins,
  *   `defaultError` and `statusErrors`;
  * - has `TodoApi.layer`, which binds the definitions to the client once,
  *   when it's built. It needs the client's service;

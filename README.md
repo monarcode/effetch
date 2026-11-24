@@ -50,10 +50,10 @@ export const getTodo = (id: number) =>
 //        NetworkError | DecodeError | HttpError.With<unknown>, Api>
 ```
 
-> **Release candidate.** Effetch is close to its first stable release
-> (`0.1.0-rc.N`). The API is settled: release candidates add small, opt-in
-> features and fixes, and the [changelog](./CHANGELOG.md) lists anything
-> that needs a change in your code.
+> **Release candidate.** Effetch is in release candidates (`0.1.0-rc.N`)
+> on the way to `0.1.0`. A release candidate can still change the API, and
+> when one does, the [changelog](./CHANGELOG.md) says what to change in your
+> code.
 
 ## Documentation
 
@@ -77,8 +77,10 @@ You'll need:
 
 - `effect` 4.x, which is a peer dependency;
 - an ESM project, since the package is ESM only;
-- TypeScript 5.4 or newer. With `skipLibCheck: false`, Effect's own
-  declarations need TypeScript 5.7 or newer.
+- TypeScript 5.7 or newer.
+
+[Compatibility](https://effetch.pages.dev/docs/reference/compatibility)
+lists the runtimes Effetch is built for, and which of them CI tests.
 
 ## Quick start
 
@@ -139,10 +141,10 @@ Calling an API from a web page on another origin? Read
   responses.
 - [Errors](https://effetch.pages.dev/docs/errors): what a call can fail with, and how to
   catch and type each error.
-- [Plugins](https://effetch.pages.dev/docs/plugins): auth, retries, timeouts and logging, and
-  writing your own.
 - [Endpoints](https://effetch.pages.dev/docs/endpoints): save routes with their schemas and
   share them as a service.
+- [Plugins](https://effetch.pages.dev/docs/plugins): auth, retries, timeouts and logging, and
+  writing your own.
 - [Streaming responses](https://effetch.pages.dev/docs/streaming) and
   [Pagination](https://effetch.pages.dev/docs/pagination).
 - [Structure an app](https://effetch.pages.dev/docs/structuring-an-app).

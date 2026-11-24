@@ -1,15 +1,17 @@
 ---
 title: Client configuration
-description: Look up an option a client accepts.
+description: Look up an option a client accepts, its default, and what it changes for each call.
 ---
 
-This page lists the options you can pass when you declare a client. The
-config of `Fetch.Service` takes the same options as `Fetch.make` (see
-[Fetch.Service or Fetch.make](/docs/clients/service-or-make)).
+A client's config holds what every call to one backend has in common. You
+pass it to `Fetch.Service`, or to `Fetch.make`, which takes the same options
+(see [Fetch.Service or Fetch.make](/docs/clients/service-or-make)). This
+page lists each option with its default, then the rules that come with
+each one.
 
 ## Example
 
-Here's a client with all of the options:
+Here's a client that uses every option:
 
 ```ts
 import * as Config from "effect/Config";
@@ -43,12 +45,93 @@ export class Api extends Fetch.Service<Api>()("Api", {
 
 ## Options
 
-Every option is optional:
+Every option is optional. The following table lists what each one is for,
+and what a client without it does:
 
-| Option         | What it's for                                                                                                                                                                                                                     |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `baseUrl`      | Where the API lives. It's put in front of every path that isn't a full `http(s)://` URL. Pass a string, or an Effect that's run once when the client is built, such as a `Config`. It can't contain a query string or a fragment. |
-| `headers`      | Headers sent with every request. A call's header with the same name wins. `content-type` and `content-length` are ignored here, since they come from each body.                                                                   |
-| `defaultError` | A schema for the body of the API's error responses (see [Typed error bodies](/docs/errors/error-bodies)).                                                                                                                         |
-| `statusErrors` | Your own errors for error responses, by status, for every call (see [Errors by status](/docs/errors/status-errors)).                                                                                                              |
-| `plugins`      | Behavior every call goes through, outermost first (see [Built-in plugins](/docs/plugins)).                                                                                                                                        |
+| Option         | What it's for                                                                                      | Default                                                |
+| -------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `baseUrl`      | Where the API lives. A string, or an Effect such as a `Config`. See [The base URL](#the-base-url). | None: each path is sent as you wrote it.               |
+| `headers`      | Headers sent with every request. See [Headers](#headers).                                          | None.                                                  |
+| `defaultError` | A schema for the body of the API's error responses, decoded onto `HttpError.body`.                 | `Schema.Unknown`: `HttpError.body` is the parsed JSON. |
+| `statusErrors` | Your own errors for error responses, by status, for every call.                                    | None: an error status fails with `HttpError`.          |
+| `plugins`      | Behavior every call goes through, such as auth, retries and logging.                               | `[]`: no plugins.                                      |
+
+## The base URL
+
+Effetch puts the `baseUrl` in front of every path that isn't a full
+`http://` or `https://` URL. It joins the two with exactly one `/`, so a
+base path is kept: with `https://api.example.com/v1`, both `"/todos"` and
+`"todos"` go to `https://api.example.com/v1/todos`.
+
+A `baseUrl` can be a string, or an Effect that's run one time, when the
+client is built. A `Config` such as `Config.String("API_URL")` works, and
+its failure is the error of `Api.layer`.
+
+The `baseUrl` can't contain a query string or a fragment. Pass query
+parameters with each call's `query` option instead (see
+[Build a query string](/docs/calls#build-a-query-string)).
+
+Without a `baseUrl`, a browser resolves a relative path against the page's
+URL. Other runtimes have no page to resolve it against, so there a call
+with a relative path dies.
+
+## Headers
+
+The client's headers are sent with every request, and a header with the
+same name on a call, or on an endpoint, wins over the client's.
+
+You can't set `content-type` or `content-length` here, and Effetch drops
+them if you do. Each body sets its own, and a client-wide value would be
+wrong for most of them (see [Send a body](/docs/calls/body)).
+
+An `accept` header here replaces the one Effetch picks for a call's
+`output`, such as `application/json` (see
+[Read the response](/docs/calls/responses)). Set one only when every call
+expects the same type.
+
+## Error schemas
+
+`defaultError` decodes the body of every error response onto
+`HttpError.body`. A call's or an endpoint's `error` option replaces it for
+that call (see [Catch errors](/docs/errors/catching#read-the-error-body)).
+
+`statusErrors` apply to every call. An endpoint and a call can have their
+own as well. For a given status, the call's map, or on an endpoint call
+the endpoint's, is tried before the client's (see
+[Errors by status](/docs/errors/status-errors)).
+
+## Plugins
+
+Plugins run outermost first: `plugins[0]` wraps all the others (see
+[How plugins nest](/docs/plugins#how-plugins-nest)). Two rules keep the
+list working:
+
+- **Each plugin's name must be unique.** Calls turn a plugin off or change
+  its options by its name, so two plugins with one name make building the
+  client die.
+- **Pass the list inline,** in the config. Annotating it as `Plugin.Any[]`
+  erases the plugins' types, and with them the errors and per-call options
+  they add.
+
+## When a config is wrong
+
+Some mistakes in a config are bugs in your code, not failures to handle at
+runtime, so they're defects: the Effect dies, and you don't catch it in
+normal code (see [Logging and defects](/docs/errors/logging-and-defects)).
+
+Building the client dies when `Api.layer` is built or `Fetch.make` runs,
+not when the class is declared, if:
+
+- the `baseUrl` contains a `?` or a `#`;
+- two plugins have the same name.
+
+A call dies when it runs if its path is relative, the client has no
+`baseUrl`, and the program isn't running in a browser.
+
+## What's next
+
+- [Provide the client](/docs/clients/providing): give `Api.layer` what it
+  needs, and run your program.
+- [Derive a client](/docs/clients/derived): make a second client from this
+  config.
+- [Built-in plugins](/docs/plugins): pick the plugins to add.

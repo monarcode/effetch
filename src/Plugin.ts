@@ -57,7 +57,7 @@ declare const UpstreamServicesTypeId: unique symbol;
  *   filled in, such as `"GET /users/:id"`. It's the same for every call to
  *   that path, whether made with a method like `get` or an endpoint, so
  *   logs and metrics can be grouped by it. `undefined` for requests sent
- *   through `client.httpClient`.
+ *   through `api.httpClient`.
  *
  * @example
  * ```ts
@@ -87,7 +87,7 @@ export interface PluginContext<Opts> {
 	readonly options: Opts;
 	/**
 	 * The call's method and unfilled path, such as `"GET /users/:id"`.
-	 * `undefined` for requests sent through `client.httpClient`.
+	 * `undefined` for requests sent through `api.httpClient`.
 	 */
 	readonly route: string | undefined;
 }
@@ -112,7 +112,7 @@ export interface PluginContext<Opts> {
  * see the body being read, or a `DecodeError` while it's read.
  *
  * `route` is always set, as `onExit` doesn't run for requests sent through
- * `client.httpClient`.
+ * `api.httpClient`.
  *
  * @example
  * ```ts
@@ -299,8 +299,8 @@ export declare namespace Plugin {
 	) => Effect.Effect<void, never, R>;
 
 	/**
-	 * The `onExit` hook: runs once per call, when it's over, with the call's
-	 * `Exit`. On success that holds the call's result: the decoded `output`,
+	 * The `onExit` hook: runs one time per call, after it's over, with the
+	 * call's `Exit`. On success that holds the call's result: the decoded `output`,
 	 * or the response for a call without one, or, with
 	 * `responseMode: "decoded-and-response"`, a pair of that and the
 	 * response. Otherwise it holds the cause of its failure, defect or
@@ -310,7 +310,7 @@ export declare namespace Plugin {
 	 * `statusErrors` and decoding included, which suits logging and metrics.
 	 *
 	 * It can't fail or change the outcome: if it dies, the defect is logged
-	 * at Debug level and ignored. The call returns once every hook is done,
+	 * at Debug level and ignored. The call returns after every hook is done,
 	 * so keep hooks quick and fork anything slow. Hooks can't be
 	 * interrupted.
 	 *
@@ -318,7 +318,7 @@ export declare namespace Plugin {
 	 * sits in the list doesn't change what its `onExit` sees: retries made
 	 * by a `wrap` all belong to one call. They don't run when the call dies
 	 * before its request is built, for requests sent through
-	 * `client.httpClient`, or for a plugin the call skips.
+	 * `api.httpClient`, or for a plugin the call skips.
 	 *
 	 * @example
 	 * ```ts
@@ -600,7 +600,8 @@ export declare namespace Plugin {
 	/**
 	 * What one plugin accepts as a per-request override: `false` to skip
 	 * it, or a partial of its options. Plugins without options accept only
-	 * `false`. Keys set to `undefined` keep their default.
+	 * `false`. A key whose value is `undefined` at runtime keeps its
+	 * default.
 	 *
 	 * @example
 	 * ```ts

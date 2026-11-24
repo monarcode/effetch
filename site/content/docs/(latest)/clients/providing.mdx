@@ -1,15 +1,18 @@
 ---
 title: Provide the client
-description: Give a program the HttpClient that the client's layer needs.
+description: Give a program the HttpClient that the client's layer needs, then run it.
 ---
 
-This page shows how to give `Api.layer` the `HttpClient` it needs, so you
-can run a program that uses your client.
+`Api.layer` builds your client, but it doesn't bring the `HttpClient` that
+sends the requests. You provide one where you run your program, and that
+separation is what lets a test swap in a fake one. This page shows how to
+provide it, how to set fetch options such as cookies, and how to build the
+`HttpClient` into the layer when you'd rather not provide it.
 
 ## Provide an HttpClient where you run the program
 
-`Api.layer` needs an `HttpClient`. Provide one where you run your program,
-usually next to the other layers of your app:
+Provide `FetchHttpClient.layer`, Effect's `HttpClient` built on `fetch`, to
+`Api.layer`, then provide the result to your program and run it:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -29,11 +32,30 @@ export const program = Effect.gen(function* () {
   return yield* api.get("/health");
 });
 
-export const runnable = program.pipe(Effect.provide(ApiLive));
+await Effect.runPromise(program.pipe(Effect.provide(ApiLive)));
 ```
 
-Keeping the `HttpClient` out of `Api.layer` is what lets tests swap in a
-fake one.
+`ApiLive` usually sits next to the other layers of your app. Provide it
+one time, where the program runs: each `Effect.provide` builds the client
+again, so providing it inside each function that calls the API builds a
+separate client for every one of them.
+
+Effect's `HttpClient` adds tracing headers (`traceparent` and `b3`) to
+every request. In a browser, a call to a cross-origin API that doesn't
+allow them fails the CORS preflight. See [Platform notes](/docs/platforms#browsers) to turn
+them off.
+
+## Set fetch options for every request
+
+`FetchHttpClient.RequestInit` sets the `fetch` options every request starts
+from, such as `credentials`, `cache` or `redirect`. Provide it next to
+`FetchHttpClient.layer`, and every call the client makes uses it, since the
+client keeps the services it was built with. Each request's method, headers
+and body still come from the call.
+
+The most common use is a browser app that calls an API on another origin
+and needs its cookies sent. [Send cookies](/docs/platforms#send-cookies)
+shows that setup, with what the API's CORS response has to allow.
 
 ## Build the HttpClient into the layer
 
@@ -55,8 +77,9 @@ export class Api extends Fetch.Service<Api>()("Api", {
 }
 ```
 
-An override can need less than the original layer, but not more, and can't
-add an error.
+The override can need less than the original layer, but not more, and it
+can't add an error. To add requirements, build a separate layer from
+`Api.layer` instead.
 
 <Callout type="warn">
   The override builds the real `HttpClient` into `Api.layer`, so a test can no
@@ -67,8 +90,8 @@ add an error.
 
 ## What's next
 
+- [Make a call](/docs/calls): call the API with the client's methods.
 - [Test with a fake backend](/docs/testing): provide a fake `HttpClient`
   instead of the real one.
 - [Derive a client](/docs/clients/derived): make a second client from the
   first one's config.
-- [Methods](/docs/calls): make calls with the client.

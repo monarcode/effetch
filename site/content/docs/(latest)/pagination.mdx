@@ -4,9 +4,11 @@ description: Page through a list with Fetch.paginate, with the cursor in the bod
 ---
 
 Lists are often split into pages: you ask for the first, and the response
-says how to get the next. `Fetch.paginate` follows those pages for you, as a
-`Stream` of pages. This page shows how to page through a list, with the next
-page's state in the body or in a header.
+says how to get the next. Writing that loop by hand for every list means
+tracking the state, stopping at the end, and not fetching pages nobody
+reads. `Fetch.paginate` follows the pages for you, as a `Stream` of pages.
+This page shows how to page through a list, with the next page's state in
+the body or in a header.
 
 ## Page through a list
 
@@ -41,20 +43,24 @@ export const allTodos = Effect.gen(function* () {
   return yield* Fetch.paginate(todos.list, {
     start: 1,
     request: (page) => ({ query: { page } }),
-    next: (page, number) =>
-      page.length === 0 ? Option.none() : Option.some(number + 1),
+    next: (items, page) =>
+      items.length === 0 ? Option.none() : Option.some(page + 1),
   }).pipe(Stream.flattenIterable, Stream.runCollect);
 });
 ```
 
 `Fetch.paginate` takes three options:
 
-- `start` is the state of the first page, such as a page number or a
+- **`start`** is the state of the first page, such as a page number or a
   cursor.
-- `request(state)` gives the page's call options: `params`, `query`, `body`
-  and `headers`, typed by the endpoint.
-- `next(page, state, response)` gives the next page's state, or
-  `Option.none()` after the last page.
+- **`request(state)`** gives the options for that page's call: `params`,
+  `query`, `body` and `headers`, typed by the endpoint. Plugin overrides
+  aren't among them, so give those when you bind the endpoint. The
+  endpoint's `responseMode` always decides what each page is.
+- **`next(page, state, response)`** gives the next page's state, or
+  `Option.none()` after the last page. `response` is the page's
+  `HttpClientResponse` when the endpoint's `responseMode` is
+  `"decoded-and-response"`, and `undefined` otherwise.
 
 Each page is one value of the stream, so a page that's a list stays a list.
 `Stream.flattenIterable` gives its items one by one.
@@ -65,15 +71,17 @@ The stream is lazy: it sends a page's call only when the page is needed, so
 `Stream.take(1)` sends one. A call that fails fails the stream with the
 call's error.
 
-`Fetch.paginate` takes a bound endpoint, from `Fetch.Endpoints`,
-`client.bind`, `client.bindAll` or `client.endpoint`. A definition made by
-`Fetch.endpoint` needs binding first, and a stream endpoint can't be paged.
+`Fetch.paginate` takes a bound endpoint, from `Fetch.Endpoints`, `api.bind`,
+`api.bindAll` or `api.endpoint`. It throws when you pass it a definition
+made by `Fetch.endpoint`, which needs binding first, or a stream endpoint,
+which can't be paged.
 
 ## Read the cursor from a header
 
-When the next page's cursor is in a header, such as a `Link` header, define
-the endpoint with `responseMode: "decoded-and-response"`. `next` then gets
-each page's response:
+Some APIs put the next page's cursor in a header, such as a `Link` header,
+rather than in the body. For those, define the endpoint with
+`responseMode: "decoded-and-response"`, and `next` gets each page's
+response:
 
 ```ts
 import * as Option from "effect/Option";
@@ -102,6 +110,9 @@ export const allItems = Fetch.paginate(api.bind(listItems), {
   next: (_items, _cursor, response) => nextCursor(response.headers.link),
 });
 ```
+
+Each page is still the decoded body, here the array of items. Only `next`
+gets the response.
 
 ## What's next
 

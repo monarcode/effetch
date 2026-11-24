@@ -3,39 +3,62 @@ title: Entry points
 description: Find which entry point exports what, and the reference page that lists it.
 ---
 
-This page lists Effetch's entry points and what each one exports. Each has a
-reference page that lists every export, with the first paragraph of its docs
-and a link to the guide that covers it.
+The reference lists every export of Effetch, grouped by the guide that
+covers it. Start here to find which import a name comes from, then follow
+the link to its page.
 
 ## The entry points
 
-Effetch has three entry points:
+Effetch has three entry points, each with its own reference page:
 
-| Import                       | What it exports                                                                      | Reference                               |
-| ---------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------- |
-| `@monarcode/effetch`         | The `Fetch` namespace: clients, calls, errors, plugins, endpoints, streams and pages | [Fetch](/docs/reference/fetch)          |
-| `@monarcode/effetch/plugins` | The built-in plugins: `bearer`, `retry`, `timeout`, `logger` and `consoleLogger`     | [Plugins](/docs/reference/plugins)      |
-| `@monarcode/effetch/test`    | The `FetchTest` namespace: a fake backend for tests                                  | [FetchTest](/docs/reference/fetch-test) |
+| Import                       | What it exports                                                                                                                      | Reference                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |
+| `@monarcode/effetch`         | The `Fetch` namespace: clients, calls, responses, uploads, errors, plugins, endpoint definitions, streaming and pagination           | [Fetch](/docs/reference/fetch)          |
+| `@monarcode/effetch/plugins` | The built-in plugins (`bearer`, `retry`, `timeout`, `logger` and `consoleLogger`), their option and plugin types, and `TimeoutError` | [Plugins](/docs/reference/plugins)      |
+| `@monarcode/effetch/test`    | The `FetchTest` namespace: a fake backend for tests, and the requests it records                                                     | [FetchTest](/docs/reference/fetch-test) |
 
-Two more subpaths export the same members without their namespace, for the
-declaration files TypeScript writes. In your own code, import from the
-entry points above, as [Installation](/docs/installation#import-effetch)
-explains.
+Each reference entry gives the first paragraph of the name's docs, plus
+what it needs and how it fails. Your editor shows the full docs, with an
+example, when you hover a name or go to its definition.
 
-Every export is also documented, with an example, in the type declarations
-your editor shows: hover a name, or go to its definition.
+Two more subpaths, `@monarcode/effetch/Fetch` and
+`@monarcode/effetch/test/FetchTest`, export the same members without the
+namespace. They exist for the declaration files TypeScript writes, so you
+may see them in a `.d.ts` file. In your own code, import from the three
+entry points in the table, as [Installation](/docs/installation#import-effetch)
+shows.
 
 ## Types for your own functions
 
-To wrap the client in a function of your own, type it with the option and
-result types under [Calls](/docs/reference/fetch#calls), such as
-`Fetch.RequestOptions` and `Fetch.CallEffect`. `CallEffect` types a function
-that returns a call. To take a call as an argument, accept any
-`Effect.Effect<A, E, R>`.
+When you wrap a call in a function of your own, you can name its return
+type with `Fetch.CallEffect`. It takes the output schema, the error body
+schema, the input schema and the client's plugins, and works out the
+call's errors and services from them:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+type GetTodo = Fetch.CallEffect<typeof Todo, Schema.Unknown, undefined, []>;
+
+export const getTodo = (id: number): GetTodo =>
+  api.get("/todos/:id", { params: { id }, output: Todo });
+```
+
+The option types, such as `Fetch.RequestOptions`, are under
+[Calls](/docs/reference/fetch#calls) in the `Fetch` reference. To take a
+call as an argument instead, accept any `Effect.Effect<A, E, R>`, since
+TypeScript can't infer `CallEffect`'s parameters from a call.
 
 ## What's next
 
-- [Compatibility](/docs/reference/compatibility): the Effect versions,
-  runtimes and TypeScript settings Effetch supports.
-- [Limitations](/docs/reference/limitations): the known limits of paths,
-  plugins and streams.
+- [Fetch](/docs/reference/fetch): look up a member of the `Fetch` namespace.
+- [Compatibility](/docs/reference/compatibility): check the Effect,
+  runtime and TypeScript versions Effetch supports.
+- [Limitations](/docs/reference/limitations): check the known limits of
+  paths, plugins and streams before you rely on them.

@@ -4,7 +4,8 @@ description: Read Server-Sent Events or newline-delimited JSON as a Stream, and 
 ---
 
 Some APIs send their answer a piece at a time: progress feeds,
-notifications, exports, the answers of language models. `api.sse` and
+notifications, exports, the answers of language models. Waiting for the
+whole body would mean showing nothing until the end. `api.sse` and
 `api.ndjson` give such a body as an Effect `Stream`, one value at a time,
 as it arrives. This page shows how to read both formats, define stream
 endpoints, and handle a stream that fails or that you stop.
@@ -33,42 +34,54 @@ export const followJob = (id: number) =>
   );
 ```
 
-The following rules apply to an SSE call:
+`output` decodes each event's `data` as JSON. Without it, or with
+`Fetch.text()`, `data` is the text as it was sent.
 
-- `output` decodes each event's `data` as JSON. Without it, or with
-  `Fetch.text()`, `data` is the text as it was sent.
-- `method` defaults to `"GET"`. APIs that stream the answer to a request
-  take `"POST"` and a `body`:
+The request is a `GET` by default. An API that streams its answer to a
+request usually takes a `POST` with a body, so pass `method` and `body`:
 
-  ```ts
-  import * as Schema from "effect/Schema";
+```ts
+import * as Schema from "effect/Schema";
 
-  import type { Fetch } from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 
-  declare const api: Fetch.Client;
+declare const api: Fetch.Client;
 
-  const Prompt = Schema.Struct({ prompt: Schema.String });
-  const Delta = Schema.Struct({ text: Schema.String });
+const Prompt = Schema.Struct({ prompt: Schema.String });
+const Delta = Schema.Struct({ text: Schema.String });
 
-  export const complete = (prompt: string) =>
-    api.sse("/completions", {
-      method: "POST",
-      input: Prompt,
-      body: { prompt },
-      output: Delta,
-    });
-  ```
+export const complete = (prompt: string) =>
+  api.sse("/completions", {
+    method: "POST",
+    input: Prompt,
+    body: { prompt },
+    output: Delta,
+  });
+```
 
-- The request sends `Accept: text/event-stream`, unless the call or the
-  client sets an `accept` header.
-- Events are parsed by the
-  [WHATWG rules](https://html.spec.whatwg.org/multipage/server-sent-events.html):
-  comment lines are ignored, a multi-line `data` is joined with `\n`, and an
-  `id` carries over to the events after it. The stream doesn't reconnect,
-  and ignores `retry:` lines.
-- A response whose `Content-Type` is set to another type than
+The request sends `Accept: text/event-stream`, unless the call or the
+client sets an `accept` header.
+
+### How events are parsed
+
+Events are parsed by the
+[WHATWG rules](https://html.spec.whatwg.org/multipage/server-sent-events.html),
+which most servers follow without you noticing. A few of them can surprise
+you:
+
+- Comment lines are ignored. A multi-line `data` is joined with `\n`, and
+  an `id` carries over to the events after it.
+- An event without any `data` line is dropped.
+- An event ends at a blank line. When the server closes the connection
+  without one after its last event, that last event is dropped.
+- An event over 10 MiB fails the stream with a `DecodeError`.
+- A response whose `Content-Type` is set to a type other than
   `text/event-stream`, such as a login page from a proxy, fails the stream
-  with a `DecodeError`.
+  with a `DecodeError` before any event.
+- The stream doesn't reconnect, and ignores `retry:` lines.
+
+[Limitations](/docs/reference/limitations#streams) shows how to pick up a
+stream where it stopped.
 
 <Callout>
   `api.sse` parses events with Effect's `encoding/Sse` module, which Effect
@@ -77,10 +90,10 @@ The following rules apply to an SSE call:
 
 ### Stop at a sentinel
 
-`output` decodes every event, so an event whose data doesn't match it
-fails the stream, after the events before it. When the server ends with a
-sentinel that isn't JSON, such as `data: [DONE]`, leave `output` out, stop
-at the sentinel, then decode the rest:
+`output` decodes every event, so an event whose data doesn't match it fails
+the stream, after the events before it. Some servers end with a sentinel
+that isn't JSON, such as `data: [DONE]`. For those, leave `output` out,
+stop at the sentinel, then decode the rest:
 
 ```ts
 import * as Schema from "effect/Schema";
@@ -101,8 +114,8 @@ export const deltas = (prompt: string) =>
 
 ## Read newline-delimited JSON
 
-`api.ndjson` reads an `application/x-ndjson` body (also called JSON Lines):
-one JSON value per line, decoded with `output`:
+`api.ndjson` reads an `application/x-ndjson` body, also called JSON Lines:
+one JSON value per line, each decoded with `output`:
 
 ```ts
 import * as Schema from "effect/Schema";
@@ -126,6 +139,9 @@ The following rules apply to an NDJSON call:
 - Blank lines are skipped, and the last line needs no line end.
 - The request sends `Accept: application/x-ndjson`, unless an `accept`
   header is set.
+- Unlike SSE, the response's `Content-Type` isn't checked. A body that
+  isn't NDJSON, such as an HTML page, fails on its first line as invalid
+  JSON, unless you read the lines as text with `Fetch.text()`.
 
 ## Define a stream endpoint
 
@@ -161,44 +177,61 @@ export const lastEvent = (id: number) =>
   });
 ```
 
+Its calls follow the same rules as `api.sse` or `api.ndjson`.
+
 ## How a stream fails
 
-A stream's request runs as any call does, up to the response's headers:
+A stream fails in two stages: while its request is sent, and while its body
+is read.
+
+The request runs as any call does, up to the response's headers:
 
 - Plugins run once. `retry` and `timeout` apply to getting the response,
   not to reading the body.
 - When no response arrives, the stream fails with a `NetworkError`.
+- A plugin's error fails it too, such as the `TimeoutError` of the
+  `timeout` plugin.
 - An error status fails it with an `HttpError`, or a
   [`statusErrors`](/docs/errors/status-errors) error, before it gives any
   value.
 - A `204 No Content` or `205 Reset Content` gives an empty stream.
 
-Then the body is read as it arrives. The values before a failure are given
-first. A value that doesn't match `output`, or a body that breaks off,
-fails the stream with a `DecodeError`, which names the event or the line:
-`Line 3 doesn't match the output schema`.
+Then the body is read as it arrives, and the values before a failure are
+given first. A value that doesn't match `output`, or a body that breaks
+off, fails the stream with a `DecodeError`, which names the event or the
+line, as in `Line 3 doesn't match the output schema`.
+On React Native, the built-in `fetch` doesn't stream response bodies, so
+every stream fails there with a `DecodeError`.
+[Platform notes](/docs/platforms#react-native) shows which `fetch` to use
+instead.
 
-For plugins, the call ends when the response's headers arrive. Their
-`onExit` hooks, and so `logger` and `consoleLogger`, report it then, with
-the time to the headers, and a `DecodeError` while reading the body doesn't
-reach them. Handle it on the stream, with `Stream.catchTag("DecodeError", …)`
-or `Stream.tapError`.
+For plugins, a stream's call ends when the response's headers arrive:
+
+- `logger` times every call up to the headers, so for a stream, it logs the
+  time to the headers.
+- `onExit` hooks, `consoleLogger`'s among them, run when the headers
+  arrive, and report the time to the headers.
+- A `DecodeError` while the body is read reaches neither.
+
+Handle errors from the body on the stream itself, with
+`Stream.catchTag("DecodeError", …)` or `Stream.tapError`.
 
 ## Stop a stream
 
 Interrupting the stream, or taking only part of it, as with `Stream.take`,
-aborts the request. Nothing else is needed to close the connection.
+aborts the request. You don't need to close the connection yourself.
 
 ## Options a stream doesn't take
 
-A stream can't take `responseMode`, or an `output` made with
-`Fetch.bytes()`. A call that passes one dies, and a definition with one
-throws when it's made.
+A stream can't take `responseMode`, since it gives the body's values, or an
+`output` made with `Fetch.bytes()`, which can't decode them one at a time.
+A call that passes one dies, and a definition with one throws when it's
+made.
 
 ## What's next
 
 - [Pagination](/docs/pagination): follow a list's pages as a `Stream`.
 - [Test stream endpoints](/docs/testing/streams): answer a stream endpoint
   from a fake backend.
-- [Errors by status](/docs/errors/status-errors): fail a stream with your
-  own error for a status.
+- [Limitations](/docs/reference/limitations#streams): see what streams
+  don't do, such as reconnecting.

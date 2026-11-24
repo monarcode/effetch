@@ -3,17 +3,29 @@ title: Structure an app
 description: Lay out clients and endpoints in a small app, a feature-sliced app and an app with several backends.
 ---
 
-This page shows where clients and endpoints can live as your app grows, from
-a single client to several backends.
+Your first few calls can live anywhere. As the app grows, you have to
+decide where the client goes, where the endpoints go, and how the rest of
+the code reaches them. This page shows three layouts that work, from a
+small app to one that talks to several backends, so you can pick the one
+that fits.
 
-A client is declared once, and endpoints are bound to it once, in a layer.
-Where each piece lives depends on the size of your app. These are patterns,
-not rules: Effetch works the same way whichever you pick.
+## What every layout has in common
+
+Whichever layout you pick, two things stay the same:
+
+- **The client is declared once,** as a service, with its base URL, error
+  body and plugins.
+- **Endpoints are bound to it once,** in a layer, when the app starts. Code
+  that makes calls gets the bound endpoints from a service, and never binds
+  them itself.
+
+The rest is up to you. These layouts are patterns, not rules, and Effetch
+works the same way whichever you use.
 
 ## A small app
 
-Keep the client in one file, and each area's endpoints in its own file, as a
-`Fetch.Endpoints` class. One layer puts them together:
+In a small app, keep the client in one file, and each area's endpoints in
+its own file, as a `Fetch.Endpoints` class. One layer puts them together:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -26,6 +38,11 @@ import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
 const NewUser = Schema.Struct({ name: Schema.String });
+const Credentials = Schema.Struct({
+  user: Schema.String,
+  password: Schema.String,
+});
+const Session = Schema.Struct({ token: Schema.String });
 const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
 // api.ts
@@ -39,7 +56,10 @@ export class Users extends Fetch.Endpoints<Users>()("Users", Api, {
   get: Fetch.endpoint("GET /users/:id", { output: User }),
   create: Fetch.endpoint("POST /users", { input: NewUser, output: User }),
   login: [
-    Fetch.endpoint("POST /auth/login", { output: User }),
+    Fetch.endpoint("POST /auth/login", {
+      input: Credentials,
+      output: Session,
+    }),
     { plugins: { bearer: false } },
   ],
 }) {}
@@ -65,57 +85,102 @@ export const program = Effect.gen(function* () {
 });
 ```
 
-The plugin override on `login` is checked against `Api`'s plugins, and every
-endpoint's errors are typed with `Api`'s `defaultError` and `statusErrors`.
+`login` turns off the `bearer` plugin, so logging in sends no token. That
+override is checked against `Api`'s plugins, and every endpoint's errors
+are typed with `Api`'s `defaultError` and `statusErrors`.
+`Layer.provideMerge` keeps `Api` itself in the layer, for the one-off calls
+that aren't worth an endpoint.
 
-### Endpoints made with client.endpoint
+### Endpoints made with api.endpoint
 
-To make endpoints with `client.endpoint` instead, write each area as a
-function of the client, typed `Effect.Success<typeof Api>`, so overrides and
-errors are still checked against your plugins and `defaultError`:
+You may prefer to define each endpoint on the client with `api.endpoint`,
+in one step. Then write each area as a function of the client, typed
+`Effect.Success<typeof Api>`, so overrides and errors are still checked
+against `Api`'s plugins and `defaultError`.
+
+That function makes new endpoints each time it runs, so don't call it per
+request. Run it once, in a layer, and share what it returns as a service:
 
 ```ts
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import { Fetch } from "@monarcode/effetch";
 import { bearer } from "@monarcode/effetch/plugins";
 
 const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+const Credentials = Schema.Struct({
+  user: Schema.String,
+  password: Schema.String,
+});
+const Session = Schema.Struct({ token: Schema.String });
 
 class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
   plugins: [bearer({ token: "token" })],
 }) {}
 
+// The endpoints, made from the client
 export const users = (api: Effect.Success<typeof Api>) => ({
   get: api.endpoint("GET /users/:id", { output: User }),
   login: api.endpoint("POST /auth/login", {
-    output: User,
+    input: Credentials,
+    output: Session,
     plugins: { bearer: false },
   }),
 });
+
+// Made once, when the layer is built, and shared as a service
+const makeUsers = Api.useSync(users);
+
+export class Users extends Context.Service<
+  Users,
+  Effect.Success<typeof makeUsers>
+>()("Users") {}
+
+export const UsersLayer = Layer.effect(Users)(makeUsers);
 ```
+
+`Api.useSync(users)` is an Effect that gets the client and calls `users`
+with it. `Layer.effect` runs that Effect once, when the layer is built.
+Code then gets the endpoints with `yield* Users`, as with a
+`Fetch.Endpoints` class. `Fetch.Endpoints` writes these three steps for
+you, so it's the shorter choice when your endpoints are defined with
+`Fetch.endpoint`.
 
 ## A feature-sliced app
 
-When your app is split into feature modules, each with its own schemas, the
-client becomes shared infrastructure that knows nothing about the modules.
-Each module defines its endpoints next to its schemas, with no client, and
-binds them to the client in its data layer:
+A larger app is often split into feature modules, each with its own
+schemas. There, the client becomes shared infrastructure, and it imports
+nothing from the modules. Each module defines its endpoints next to its
+schemas, with no client, and binds them to the client in its data layer.
+
+[`examples/app`](https://github.com/monarcode/effetch/tree/main/examples/app)
+is a complete app in this layout, with two modules and two backends. Here
+are its files:
 
 ```text
-src/
+examples/app/
 ├── infrastructure/http/
-│   └── app-api-client.ts  the client: base URL, error body, plugins
+│   ├── app-api-client.ts     the main backend's client
+│   ├── wallet-api-client.ts  the wallet backend's client
+│   └── plugins.ts            plugins both clients use
 ├── modules/
 │   ├── todos/
-│   │   ├── contract/      schemas, and endpoints defined with Fetch.endpoint
-│   │   ├── data/          the endpoints, bound to AppApiClient
-│   │   ├── application/   workflows that take more than one call
-│   │   └── public.ts
+│   │   ├── contract/todos.ts schemas, and endpoints from Fetch.endpoint
+│   │   ├── data/todo.api.ts  the endpoints, bound to AppApiClient
+│   │   ├── todo.layer.ts     the module's layers, merged
+│   │   └── public.ts         what other code may import
 │   └── wallet/
-└── runtime.ts             modules, on top of clients, on top of HttpClient
+│       ├── application/      workflows that take more than one call
+│       ├── contract/
+│       ├── data/
+│       ├── wallet.layer.ts
+│       └── public.ts
+├── runtime.ts                modules, over the clients, over HttpClient
+└── main.ts                   the program: imports modules only through public.ts
 ```
 
 <Callout>
@@ -126,7 +191,9 @@ src/
   layer.
 </Callout>
 
-The following code shows each file of the layout, with the `todos` module:
+The following code puts the `todos` module's files in one block, each
+under a comment with its path. It's shortened from the example, which has
+more fields, endpoints and errors:
 
 ```ts
 import * as Config from "effect/Config";
@@ -137,7 +204,7 @@ import * as Schema from "effect/Schema";
 
 import { Fetch } from "@monarcode/effetch";
 
-// infrastructure/http/app-api-client.ts: how to reach the backend, nothing else
+// infrastructure/http/app-api-client.ts: how to reach the backend
 export class AppApiClient extends Fetch.Service<AppApiClient>()(
   "AppApiClient",
   { baseUrl: Config.String("APP_API_URL") },
@@ -156,7 +223,7 @@ export const createTodo = Fetch.endpoint("POST /todos", {
   output: Todo,
 });
 
-// modules/todos/data/todo.api.ts: the endpoints, bound, as the module's service
+// modules/todos/data/todo.api.ts: the endpoints, bound, as a service
 export class TodoApi extends Fetch.Endpoints<TodoApi>()(
   "TodoApi",
   AppApiClient,
@@ -167,8 +234,11 @@ export class TodoApi extends Fetch.Endpoints<TodoApi>()(
   },
 ) {}
 
-// runtime.ts
-export const AppLayer = TodoApi.layer.pipe(
+// modules/todos/todo.layer.ts: every layer the module has
+export const TodoModuleLive = Layer.mergeAll(TodoApi.layer);
+
+// runtime.ts: the modules, on top of the client, on top of HttpClient
+export const AppLayer = TodoModuleLive.pipe(
   Layer.provideMerge(AppApiClient.layer),
   Layer.provide(FetchHttpClient.layer),
 );
@@ -183,49 +253,94 @@ export const program = Effect.gen(function* () {
 
 ### Why this layout scales
 
-This scales well as the app grows:
+Each part of the app grows in its own place:
 
 - **The client file stays the same size,** however many endpoints the app
-  has, and it never imports a module: dependencies point from the modules to
-  the infrastructure.
+  has, and it never imports a module. Dependencies point from the modules
+  to the infrastructure.
 - **A module with 20 endpoints has 20 definitions** in its own `contract/`
   folder, beside their schemas, and 20 one-line entries in its
   `Fetch.Endpoints` class in `data/`. When they serve separate concerns,
   split them into several services, each in its own file.
-- **Every module's data service is its endpoints,** as `TodoApi` is here: one
-  line per operation, and every type inferred, so every module's `data/`
-  folder looks the same.
+- **Every module's data service is its endpoints,** as `TodoApi` is here.
+  There's one line per operation and every type is inferred, so every
+  module's `data/` folder looks the same.
 - **An operation that isn't one HTTP call** (it combines calls, reshapes a
-  response or adds a domain error) is a workflow over those endpoints, in the
-  module's `application/` folder.
+  response or adds a domain error) is a workflow over those endpoints, in
+  the module's `application/` folder, as `wallet` has.
 - **Declare a service's interface by hand only when you need another
   implementation,** such as an offline one or a fake for UI work, and
   implement it with the endpoints.
 
-### client.endpoint in this layout
+### api.endpoint in this layout
 
-`client.endpoint` fits this layout too: make the endpoints in `data/`, and
+`api.endpoint` fits this layout too. Make the endpoints in `data/`, and
 import only the schemas from `contract/`. Define them with `Fetch.endpoint`
-when something should read the routes and schemas without a client.
-[`examples/app`](https://github.com/monarcode/effetch/tree/main/examples/app)
-is a complete app in this layout, with two modules and two backends: `todos`
-declares its definitions with `Fetch.Endpoints`, and `wallet` uses
-`client.endpoint`.
+instead when something has to read the routes and schemas without a
+client, such as a test's fake backend.
+
+The example app does both. `todos` defines its endpoints with
+`Fetch.endpoint` in `contract/`, and binds them with `Fetch.Endpoints` in
+`data/`. `wallet` makes its endpoints with its client's `endpoint` method
+in `data/`, and shares them as a service the way
+[Endpoints made with api.endpoint](#endpoints-made-with-apiendpoint) shows.
 
 ## Several backends
 
-Declare one client per backend, each with its own id, `baseUrl`,
-`defaultError` and plugins. Each module uses the client of the backend it
-talks to, and one `HttpClient` layer serves them all.
+When the app talks to more than one backend, declare one client for each,
+with its own id, `baseUrl`, `defaultError` and plugins. Each module uses
+the client of the backend it talks to, and one `HttpClient` layer serves
+them all:
+
+```ts
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+declare const readToken: () => Promise<string | null>;
+
+// One plugin value, shared by both clients
+const auth = bearer({ token: () => readToken() });
+
+export class AppApiClient extends Fetch.Service<AppApiClient>()(
+  "AppApiClient",
+  {
+    baseUrl: "https://api.example.com",
+    defaultError: Schema.Struct({ code: Schema.String }),
+    plugins: [auth],
+  },
+) {}
+
+export class WalletApiClient extends Fetch.Service<WalletApiClient>()(
+  "WalletApiClient",
+  {
+    baseUrl: "https://wallet.example.com",
+    defaultError: Schema.Struct({ reason: Schema.String }),
+    plugins: [auth],
+  },
+) {}
+
+export const Clients = Layer.mergeAll(
+  AppApiClient.layer,
+  WalletApiClient.layer,
+).pipe(Layer.provide(FetchHttpClient.layer));
+```
 
 Keep the following in mind:
 
-- Plugins are values: one `bearer` can serve several clients.
-- `ctx.route` has no host. A plugin that groups by route and is shared by
-  several clients should take the backend's name, so each client gets its own
-  instance.
-- Catch a backend's `HttpError` next to its calls, where `body` has that
-  backend's error shape.
+- **Plugins are values,** so one `bearer` can serve several clients, as
+  `auth` does here.
+- **A route doesn't say which backend it's for.** Plugins get the call's
+  route as `ctx.route` (see [Write a plugin](/docs/plugins/writing)). It's
+  the method and the path as written, with no base URL, so both backends
+  can have a `GET /health`. Only a route written as a full URL keeps its
+  host. A plugin that groups by route and is shared by several clients
+  should take the backend's name, so each client gets its own instance.
+- **Catch a backend's `HttpError` next to its calls,** where `body` has
+  that backend's error shape.
 
 [`examples/backends.ts`](https://github.com/monarcode/effetch/blob/main/examples/backends.ts)
 does this in one file, and

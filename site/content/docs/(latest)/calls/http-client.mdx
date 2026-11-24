@@ -3,14 +3,17 @@ title: When the methods aren't enough
 description: Choose the method at runtime, read a stream, or use the HttpClient underneath a client.
 ---
 
-When the methods aren't enough, pick a method at runtime with `api.request`,
-read a stream with `api.sse` or `api.ndjson`, or use the `HttpClient`
-underneath the client.
+The client's methods cover most calls, but a few needs fall outside them:
+an HTTP method you only know at runtime, a response that arrives a piece at
+a time, or a request that Effetch doesn't model at all. This page shows the
+way out for each one: `api.request`, `api.sse` and `api.ndjson`, and the
+`HttpClient` underneath the client.
 
 ## Choose the method at runtime
 
 When the method is only known at runtime, use `api.request`. It takes the
-method as its first argument, before the path and the options:
+method as its first argument, then the path and the same options as the
+other methods:
 
 ```ts
 import type * as HttpMethod from "effect/http/HttpMethod";
@@ -23,16 +26,60 @@ export const send = (method: HttpMethod.HttpMethod, path: string) =>
   api.request(method, path);
 ```
 
+`api.request` also sends the methods that have no shorthand, such as
+`TRACE` or `QUERY`. The other methods are shorthand for it.
+
+`api.request` types `body` the same way for every method, a literal
+`"GET"` included, so TypeScript doesn't stop a body on a `GET`. When the
+call runs, a body on a `GET` or `HEAD` request makes it die, since those
+requests can't carry one.
+
 ## Read a stream of events or lines
 
-When the response is a stream of events or lines, use `api.sse` or
-`api.ndjson`. See [Streaming responses](/docs/streaming).
+When the response is a stream of Server-Sent Events or newline-delimited
+JSON, use `api.sse` or `api.ndjson`. Each gives you an Effect `Stream` of
+decoded items. See [Streaming responses](/docs/streaming).
 
 ## Use the underlying HttpClient
 
-When you need something the methods don't do, use `api.httpClient`. It's the
-configured `HttpClient` underneath, with the base URL, the default headers and
-the plugins, but no status check and no decoding.
+When you need something the methods don't do, such as reading a response
+your own way, use `api.httpClient`. It's the configured Effect `HttpClient`
+underneath the client, and it takes Effect's own requests:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+// Reads the export as text, whatever its status.
+export const download = Effect.flatMap(
+  api.httpClient.execute(HttpClientRequest.get("/export.csv")),
+  (response) => response.text,
+);
+```
+
+`api.httpClient` adds the base URL and the client's default headers to each
+request, and runs every plugin with its default options. Transport failures
+fail with `NetworkError`, next to the plugins' own errors.
+
+It leaves out the rest of what a call does:
+
+- **No status check.** A `404` succeeds with its response, so check
+  `response.status` yourself.
+- **No decoding.** There's no `output`, no `Accept` header picked for you,
+  and no `DecodeError`.
+- **No error schemas.** The client's `defaultError` and `statusErrors`
+  don't apply.
+- **No `onError` or `onExit` hooks.** A plugin that works from those, such
+  as `consoleLogger`, which logs from `onExit`, isn't run for these requests.
+- **No per-call plugin options.** You can't turn a plugin off, or change its
+  options, for one request.
+
+For a streamed body, use `api.sse` or `api.ndjson` rather than
+`api.httpClient`.
 
 ## What's next
 

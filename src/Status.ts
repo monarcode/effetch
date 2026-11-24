@@ -40,9 +40,10 @@ export type CaughtStatus<S extends number | ReadonlyArray<number>> =
  *
  * For a `404` that means "not found", {@link optional} gives an `Option`
  * instead. Use `statusErrors` when a status means the same domain error
- * for every caller. A status that `statusErrors` maps never reaches
- * `catchStatus`: the call fails with the mapped error, not an
- * `HttpError`.
+ * for every caller. When `statusErrors` maps a status and the body
+ * decodes with the mapped schema, the call fails with the mapped error, so
+ * `catchStatus` doesn't see it. An empty or non-matching body is still an
+ * `HttpError`, which `catchStatus` handles.
  *
  * @example
  * ```ts
@@ -102,8 +103,8 @@ export const catchStatus: {
  * `HttpError`s with other statuses included, pass through.
  *
  * It's {@link catchStatus}`(404, …)` for the common case of a resource that may not
- * exist. As there, a `404` that `statusErrors` maps fails with the mapped
- * error, and doesn't give `Option.none()`.
+ * exist. As there, a `404` whose body decodes with a schema `statusErrors`
+ * maps it to fails with the mapped error, and doesn't give `Option.none()`.
  *
  * @example
  * ```ts

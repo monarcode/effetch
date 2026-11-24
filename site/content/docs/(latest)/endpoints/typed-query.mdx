@@ -3,14 +3,17 @@ title: Typed query parameters
 description: Give an endpoint a schema that types each call's query and encodes it before it's sent.
 ---
 
-This page shows you how to give an endpoint a `query` schema, how each field
-is encoded into the URL, and what happens when a query doesn't match.
+A plain `query` object isn't checked, so a misspelled filter compiles, and
+a value such as a `Date` has to be converted by hand. Give the
+endpoint a `query` schema instead, and each call's query is typed by the
+schema and encoded with it before it's sent. This page shows how to add
+one, how each field is encoded, and what happens when a query doesn't
+match.
 
 ## Add a query schema
 
-Give an endpoint a `query` schema, usually a `Schema.Struct`, and each call's
-`query` is typed by it and encoded with it before it's sent. A `Schema.Class`
-works too, called with an instance:
+The following endpoint types its filters, sends a `Date` as an ISO string,
+and renames `pageSize` to `page_size` in the URL:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -45,36 +48,54 @@ export const program = Effect.gen(function* () {
 });
 ```
 
-The schema is the endpoint's `query` property. `client.bind`,
-`client.bindAll` and `Fetch.Endpoints` keep it, and `api.endpoint` takes one
-too.
+A query schema is usually a `Schema.Struct`, as here. A `Schema.Class`
+works too, and then each call's `query` is an instance of the class.
+
+Every field in `TodoFilters` is optional, so `query` is optional too, and
+`list()` sends `GET /todos`. When the schema has a required field, every
+call has to pass `query`, and TypeScript says so.
+
+The schema is the endpoint's `query` property. `api.bind`, `api.bindAll`
+and `Fetch.Endpoints` keep it, and `api.endpoint` takes one too.
 
 ## How each field is encoded
 
-The schema encodes the query as follows:
+The schema encodes each field to a string, as Effect's
+`Schema.toCodecStringTree` does:
 
-- Each field is encoded to a string: a `Date` to its ISO string, a boolean to
-  `"true"` or `"false"`, a number to its digits. An array repeats the key.
+- A `Date` becomes its ISO string, and a boolean `"true"` or `"false"`. A
+  number is written as `String()` writes it, such as `20` or `0.5`.
+- An array repeats the key, as in `tag=work&tag=home`.
 - Rename keys with `Schema.encodeKeys`, as in the example.
-- A field you leave out isn't sent, but a `null` is sent as the string
-  `"null"`, so prefer optional fields to nullable ones.
-- A `Schema.Redacted` field is sent as its value and, with Effect 4.1 or
-  later, stays redacted in Effect's logs and traces.
+- A field you leave out isn't sent. A `null` is sent as the string `"null"`,
+  unlike in a plain query, where it's left out. So prefer optional fields
+  to nullable ones.
+- A `Schema.Redacted` field is sent as its value. With Effect 4.1 or later,
+  it stays redacted in Effect's logs and traces.
+
+A schema whose encoding needs a service adds that service to the call's
+requirements, the way an `input` schema's does. Provide it where you run
+the call. Such an endpoint's `url` can't be called, since `url` encodes
+synchronously (see [Build an endpoint's URL](/docs/endpoints/urls)).
 
 ## Queries that don't match
 
-A query or a schema that can't be encoded fails early:
+A schema or a query that can't be encoded fails early, at one of two
+points:
 
-- A query that doesn't match the schema, or a field that encodes to an
-  object, is a bug, not an error to handle: the call dies before anything is
-  sent. See [Logging and defects](/docs/errors/logging-and-defects).
-- A schema with a field that has no string encoding, such as
-  `Schema.instanceOf(Uint8Array)`, throws when the endpoint is defined.
+- **When the endpoint is defined.** A schema with a field that has no
+  string encoding, such as `Schema.instanceOf(Uint8Array)`, throws there,
+  so the mistake shows up when the module is imported.
+- **When the call runs.** A query that doesn't match the schema, or a field
+  that encodes to an object, is a bug, not an error to handle. The call
+  dies before anything is sent, with an `Error` whose message starts with
+  `Invalid query:`. See
+  [Logging and defects](/docs/errors/logging-and-defects).
 
 ## What's next
 
 - [Build an endpoint's URL](/docs/endpoints/urls): get the URL, query
   included, without sending a request.
 - [Call an endpoint](/docs/endpoints/calling): see everything a call takes.
-- [Path and query parameters](/docs/calls/parameters): send a query from a
-  method call.
+- [Make a call](/docs/calls#build-a-query-string): send a plain query from
+  a method call.

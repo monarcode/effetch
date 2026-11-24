@@ -3,10 +3,12 @@ title: Log to the console
 description: Print every call's route, status, headers, bodies and error to the console during development.
 ---
 
-`logger` writes one structured entry per call for production logs, and leaves
-headers, query strings and bodies out. `consoleLogger` is for development: it
-prints everything about a call to the console, as a group devtools can
-expand. This page shows how to add it, what it prints, and how to tune it.
+While you develop, a failed call is easier to fix when you can see what was
+sent and what came back. `logger` writes one structured entry per call for
+production logs, and leaves headers, query strings and bodies out.
+`consoleLogger` is for development: it prints everything about a call to the
+console, as a group that devtools can expand. This page shows how to add it,
+how to read what it prints, and how to tune it.
 
 ## Add the console logger
 
@@ -33,45 +35,71 @@ export class Api extends Fetch.Service<Api>()("Api", {
 
 ## Read the output
 
-Each call prints a line, which opens a group with the details:
+Each call prints a summary line. With `detail: "full"`, the default, that
+line opens a group with the call's URL, headers, bodies and error. Here's
+what Node prints for six calls, with `slow: "1 second"`. The first five ran
+with `detail: "summary"`, so only the last one opens a group. The fourth was
+interrupted by `Effect.timeout`, and the fifth died because its `bearer`
+token function threw:
 
 ```text
-▸ GET /todos/:id  200 OK  35 ms  1.2 kB
-▸ ✗ GET /todos  3.0 s  → NetworkError: Failed to fetch
-▸ ⚠ GET /reports/:id  200 OK  2.4 s  (slow)
-▾ ✗ POST /users/:id/roles  400 Bad Request  120 ms  → InvalidRole: No such role
-    POST https://api.example.com/users/7/roles
-    request headers  { accept: "application/json", authorization: "<redacted>" }
-    request body     { role: "owner" }
-    response headers { "content-type": "application/json" }
-    response body    { code: "INVALID_ROLE", message: "No such role" }
-    error            InvalidRole { code: "INVALID_ROLE", message: "No such role" }
+GET /todos/:id  200 OK  18 ms  24 B
+✗ GET /todos  2 ms  → NetworkError: fetch failed
+⚠ GET /reports/:id  200 OK  1.2 s  8 B  (slow)
+⊘ GET /slow/:id  1.0 s  interrupted  (slow)
+✗ GET /broken  0 ms  → defect: Error: No token store
+✗ POST /users/:id/roles  400 Bad Request  2 ms  48 B  → InvalidRole: No such role
+  POST https://api.example.com/users/7/roles
+  request headers  {
+    'content-type': 'application/json',
+    'content-length': '16',
+    accept: 'application/json',
+    authorization: '<redacted>',
+    b3: '…',
+    traceparent: '…'
+  }
+  request body     { role: 'owner' }
+  response headers { 'content-length': '48', 'content-type': 'application/json' }
+  response body    { code: 'INVALID_ROLE', message: 'No such role' }
+  error            { _tag: 'InvalidRole', message: 'No such role', code: 'INVALID_ROLE' }
 ```
 
-It prints each call once it's over, with the error it ended with, after
+The summary line starts with a mark for how the call ended:
+
+- no mark: it succeeded in time;
+- `✗`: it failed, and the line ends with the error. A call that died shows
+  `→ defect:` and the defect;
+- `⚠`: it succeeded, but took at least as long as `slow`, and the line ends
+  with `(slow)`;
+- `⊘`: it was interrupted, such as by `Effect.timeout`.
+
+It prints each call after it's over, with the error it ended with, after
 [`statusErrors`](/docs/errors/status-errors) and decoding. Values are printed
-as objects, so devtools can expand them.
+as objects, so devtools can expand them. In browser devtools, the group
+starts collapsed under its summary line. Node, as the output shows, prints
+it expanded. The `b3` and `traceparent` headers are the tracing headers
+that Effect's `HttpClient` adds, with their IDs cut here.
 
 ## Options
 
 `consoleLogger` takes the following options:
 
-| Option          | Default  | What it does                                                                                                                                               |
-| --------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `enabled`       | `true`   | `false` prints nothing, and keeps the plugin's type, so it can stay in the list in production.                                                             |
-| `detail`        | `"full"` | `"summary"` prints the line alone; `"headers"` adds the URL, headers and error; `"full"` adds the bodies.                                                  |
-| `only`          | `"all"`  | `"errors"` prints failed calls only.                                                                                                                       |
-| `collapsed`     | `true`   | Whether groups start collapsed. `false` by default in React Native, where Metro's terminal drops collapsed groups. Node, Bun and Deno print them expanded. |
-| `slow`          | `false`  | A duration, such as `"1 second"`: slower calls are flagged.                                                                                                |
-| `maxBodyLength` | `10_000` | Body text longer than this is cut. JSON within it is printed as an object.                                                                                 |
-| `redact`        |          | `{ headers, query, body }`: more names to redact, as strings (ignoring case, `-` and `_`) or regular expressions. `false` redacts nothing.                 |
-| `filter`        |          | `(call) => boolean`: prints only the calls it accepts. `call` has the `route`, the `request`, the `response`, the `exit` and the `durationMs`.             |
-| `color`         | `"auto"` | `"css"` (browser devtools), `"ansi"` (terminals), or `false`. `"auto"` uses `"css"` where there's a `document`, else plain text.                           |
+| Option          | Default                         | What it does                                                                                                                                               |
+| --------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`       | `true`                          | `false` prints nothing, and keeps the plugin's type, so it can stay in the list in production.                                                             |
+| `detail`        | `"full"`                        | `"summary"` prints the line alone. `"headers"` adds the URL, headers and error. `"full"` adds the bodies.                                                  |
+| `only`          | `"all"`                         | `"errors"` prints failed calls only. An interrupted call isn't a failed one.                                                                               |
+| `collapsed`     | `true`, `false` in React Native | Whether groups start collapsed. Metro's terminal drops collapsed groups, so React Native defaults to `false`.                                              |
+| `slow`          | `false`                         | A duration, such as `"1 second"`. Calls that take at least this long are flagged.                                                                          |
+| `maxBodyLength` | `10_000`                        | Body text longer than this many characters is cut. A JSON body within it is printed as an object.                                                          |
+| `redact`        | Built-in names (see Details)    | `{ headers, query, body }`: more names to redact, as strings (ignoring case, `-` and `_`) or regular expressions. `false` redacts nothing.                 |
+| `filter`        | None: every call is printed     | `(call) => boolean`: prints only the calls it accepts. `call` has the `route`, the `request`, the `response`, the `exit` and the `durationMs`.             |
+| `color`         | `"auto"`                        | `"css"` (browser devtools and React Native DevTools), `"ansi"` (terminals), or `false`. `"auto"` uses `"css"` where there's a `document`, else plain text. |
 
 ## Change the output for one call
 
-Calls can change `detail`, `only`, `collapsed`, `slow` and `maxBodyLength`, or
-skip it with `false`:
+A call can change `detail`, `only`, `collapsed`, `slow` and `maxBodyLength`,
+or skip the plugin with `false`:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -118,43 +146,65 @@ It replaces these with `<redacted>`, matching names ignoring case, `-` and
   as `Redacted`, and credentials in the URL (`https://user:password@…`).
 
 They're exact names rather than patterns, so fields such as `total_tokens`
-stay visible. Plain-text bodies are printed as they are. A call's error is
-printed as a copy of its fields, redacted like a body, without an
-`HttpError`'s `text` or a `DecodeError`'s `issue`, which the response body
-line shows. Defects are printed as they are.
+stay visible. Plain-text bodies are printed as they are.
+
+A call's error is printed as a copy of its fields, with its `_tag` and
+`message`, redacted like a body, since errors can carry body data. The copy
+leaves out an `HttpError`'s `text` and a `DecodeError`'s `issue`, which the
+response body line shows. Defects are printed as they are, with their stack.
 
 </Accordion>
-<Accordion title="Details: bodies, platforms and timing">
+<Accordion title="Details: which bodies it reads">
 
-- It only reads a response body that's text: JSON, `text/*` other than event
-  streams, XML or a form, up to 1 MB. Effetch has read it already to check
-  the status or decode it, and Effect caches it. A call without `output`
-  returns the response itself, so its body isn't read, and stays yours to
-  stream. Neither is an interrupted call's.
-- It writes through Effect's `Console`, so you can provide another one, with
-  `console.log` and groups only. React Native turns `console.error` into an
-  error screen.
+- It reads a response body only with `detail: "full"`, and only when it's
+  text: JSON, `text/*` other than event streams, XML or a form. A body over
+  1 MB, or over 4 × `maxBodyLength` if that's larger, is shown by its type
+  and size instead.
+- Effect caches the body, so reading it here doesn't change what the call
+  decodes.
+- A call without `output` returns the response itself, so `consoleLogger`
+  doesn't read its body, which stays yours to stream. It doesn't read an
+  interrupted call's body either.
+- For `api.sse`, `api.ndjson` and stream endpoints, the entry is printed
+  when the response headers arrive, without the body. An error while the
+  stream reads, such as a `DecodeError`, isn't printed.
+- A `HEAD` request and a `204`, `205` or `304` response have no body to
+  print.
+
+</Accordion>
+<Accordion title="Details: platforms">
+
+- It writes through Effect's `Console`, so you can provide your own. It calls
+  only `console.log` and the group methods, never `console.error`, which
+  React Native turns into an error screen.
 - In React Native, groups start expanded: Metro's terminal silently drops
   `console.groupCollapsed` and everything logged inside it. React Native is
   detected by `navigator.product`, which it sets to `"ReactNative"`.
-- It runs when the call is over, so where it sits in the plugin list doesn't
-  matter: a retried call is one entry, and its duration covers every
-  attempt. The size comes from `content-length`, or from the body when it's
-  read.
-- When a plugin fails on a response, such as an auth plugin on a 401, that
+- Node, Bun and Deno print collapsed groups expanded.
+
+</Accordion>
+<Accordion title="Details: timing and what it shows">
+
+- It runs from an `onExit` hook after the call is over, so where it sits in
+  the plugin list doesn't matter. A retried call is one entry, and its
+  duration covers every attempt, until the status is checked and the body
+  decoded. `logger`'s duration stops earlier, at the response headers.
+- The size comes from `content-length`, or from the body when it's read.
+- When a plugin fails on a response, such as an auth plugin on a `401`, that
   response is shown with the plugin's error.
-- `slow` that isn't a duration throws when the plugin is made.
 - The request shown is the one that was sent, after plugins such as `bearer`
   changed it. When no response came back, it's the one the call built,
   before plugins ran.
+- A `slow` that isn't a duration throws when the plugin is made. A call's own
+  `slow` that isn't a duration flags nothing.
 
 </Accordion>
 </Accordions>
 
 ## What's next
 
-- [Built-in plugins](/docs/plugins): compare `consoleLogger` with `logger`
-  for production logs.
+- [Built-in plugins](/docs/plugins#logger): compare `consoleLogger` with
+  `logger` for production logs.
 - [Change plugins for one call](/docs/plugins/per-call): skip or adjust any
   plugin on a single call.
 - [Write a plugin](/docs/plugins/writing): build your own logging or metrics

@@ -3,15 +3,17 @@ title: Plugin recipes
 description: Copy a plugin that signs out on a 401, or one that sets a deadline with its own error.
 ---
 
-These plugins solve common problems, and you can copy them into your app.
-Each one shows a different part of the plugin API: hooks that need a service
-and add an error, and a `wrap` with an option calls can override.
+Some plugins come up in almost every app, and you can copy these two into
+yours. Each one also shows a different part of the plugin API: hooks that
+need a service and add an error, and a `wrap` with an option that calls can
+override.
 
 ## Sign out on a 401
 
-The classic plugin: send the session's token, and when the API answers `401`,
-sign out and fail with a typed `SessionExpired`. To renew the token instead,
-see [Refresh a token](/docs/plugins/token-refresh).
+When the API answers `401` to a request that carried the session's token,
+the session is over. This plugin sends the session's token, and on such a
+`401`, signs out and fails with a typed `SessionExpired`. To renew the token
+instead, see [Refresh a token](/docs/plugins/token-refresh).
 
 The plugin reads the token from a `Session` service in `onRequest`, and
 signs out in `onResponse`:
@@ -20,6 +22,7 @@ signs out in `onResponse`:
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 import { Fetch } from "@monarcode/effetch";
@@ -46,7 +49,8 @@ export const auth = Fetch.plugin({
     }),
   onResponse: (response) =>
     Effect.gen(function* () {
-      if (response.status !== 401) {
+      const sentToken = Headers.has(response.request.headers, "authorization");
+      if (response.status !== 401 || !sentToken) {
         return response;
       }
       const session = yield* Session;
@@ -55,16 +59,25 @@ export const auth = Fetch.plugin({
     }),
 });
 
-// Api.layer now needs Session; calls fail with SessionExpired too.
+// Api.layer needs Session, and calls can fail with SessionExpired too.
 export class Api extends Fetch.Service<Api>()("Api", {
   baseUrl: "https://api.example.com",
   plugins: [auth],
 }) {}
 ```
 
+The plugin signs out only when the refused request carried a token, as
+`bearer` checks before it refreshes. A request sent without one, such as a
+login with the wrong password while signed out, gets its `401` back as
+usual. To keep the plugin off a call entirely, pass
+`plugins: { auth: false }`.
+
 ## Set a deadline with its own error
 
-A `wrap` that adds its own error, with an option calls can override:
+`timeout` and `retry`'s `budget` both fail with `TimeoutError`. When one
+kind of slow call should fail with an error of its own, with its own fields,
+so you can catch it apart from every other timeout, write a `wrap` that adds
+that error:
 
 ```ts
 import * as Data from "effect/Data";
@@ -91,6 +104,50 @@ export const deadline = Fetch.plugin({
       }),
     ),
 });
+```
+
+Like `timeout`, the deadline covers only the plugins after it in the list
+and the network, up to the response headers. Reading the body isn't
+covered. Put it first to cover every retry, or after `retry` to limit each
+attempt.
+
+A call can change the deadline, because the plugin has `defaults`:
+
+```ts
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+
+import { Fetch } from "@monarcode/effetch";
+
+class TooSlow extends Data.TaggedError("TooSlow")<{ readonly url: string }> {}
+
+const deadline = Fetch.plugin({
+  name: "deadline",
+  defaults: { millis: 5000 },
+  wrap: (client, options) =>
+    HttpClient.transform(client, (response, request) =>
+      Effect.gen(function* () {
+        const { millis } = yield* options;
+        return yield* Effect.timeoutOrElse(response, {
+          duration: millis,
+          orElse: () => Effect.fail(new TooSlow({ url: request.url })),
+        });
+      }),
+    ),
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [deadline],
+}) {}
+
+export const report = Effect.gen(function* () {
+  const api = yield* Api;
+  return yield* api.get("/reports/export", {
+    plugins: { deadline: { millis: 30_000 } },
+  });
+}).pipe(Effect.catchTag("TooSlow", () => Effect.succeed(undefined)));
 ```
 
 ## What's next

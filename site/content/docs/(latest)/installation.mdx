@@ -3,37 +3,45 @@ title: Installation
 description: Add Effetch to a project and import its entry points.
 ---
 
-This page shows how to install Effetch and import it. After it, you can make
-your first call.
+Effetch is one package, and the only other package it needs is Effect. This
+page shows how to add both to your project and how to import Effetch, so
+you're ready to write your first call.
 
 ## Before you begin
 
 You need:
 
-- `effect` 4.x, which is a peer dependency;
-- an ESM project, since the package is ESM only;
-- TypeScript 5.4 or later. With `skipLibCheck: false`, Effect's own
-  declarations need TypeScript 5.7 or later.
+- an ESM project, such as one with `"type": "module"` in its
+  `package.json`, since the package is ESM only;
+- TypeScript 5.7 or later;
+- a supported runtime. [Compatibility](/docs/reference/compatibility) lists
+  them, and which of them CI tests.
+
+`effect` 4.x is a peer dependency: you install it next to Effetch, in the
+next step.
 
 ## Install the package
 
-To install Effetch and Effect, run the following command:
+To install Effetch and Effect, run the command for your package manager:
 
-```bash
-pnpm add @monarcode/effetch effect
-```
+- npm: `npm install @monarcode/effetch effect`
+- pnpm: `pnpm add @monarcode/effetch effect`
+- Yarn: `yarn add @monarcode/effetch effect`
+- Bun: `bun add @monarcode/effetch effect`
 
-In an Expo project, run the following commands instead:
+In an Expo project, add `effect` with Expo's installer:
 
 ```bash
 npx expo install effect
-pnpm add @monarcode/effetch
 ```
+
+Then add Effetch with your package manager, as in
+`npm install @monarcode/effetch`.
 
 ## Import Effetch
 
-Everything in the main entry is under one export, `Fetch`. Plugins and the
-test backend have their own entries:
+Everything in the main entry is under one export, `Fetch`. The plugins and
+the test backend each have an entry of their own:
 
 ```ts
 import { Fetch } from "@monarcode/effetch";
@@ -45,19 +53,21 @@ export const getTodo = Fetch.endpoint("GET /todos/:id");
 export const Backend = FetchTest.layer([]);
 ```
 
-Your editor offers to add the `Fetch` import as you type it. For types
-alone, use `import type { Fetch } from "@monarcode/effetch"`.
+Your editor offers to add the `Fetch` import as you type the name. When you
+need only its types, write `import type { Fetch } from "@monarcode/effetch"`.
 
-The package also has `@monarcode/effetch/Fetch` and
-`@monarcode/effetch/test/FetchTest`: the same exports, without the
-namespace, as `effect/Effect` is to `import { Effect } from "effect"`.
-TypeScript uses them to name Effetch's types in the `.d.ts` files it emits
-for your code. In your own code, import from the main entry.
+The package has two more entries, `@monarcode/effetch/Fetch` and
+`@monarcode/effetch/test/FetchTest`. They hold the same exports without the
+namespace, the way `effect/Effect` relates to `import { Effect } from
+"effect"`. TypeScript uses them to name Effetch's types in the `.d.ts` files
+it emits for your code. In your own code, import from the main entry.
 
-If you're upgrading a project from 0.1.0-rc.3, see
-[Upgrade from 0.1.0-rc.3](/docs/upgrading)
-to move its imports to `Fetch`.
+If your project was written for 0.1.0-rc.3 or earlier, its imports need to
+move to `Fetch`. See [Upgrade from 0.1.0-rc.3](/docs/upgrading).
 
 ## What's next
 
-- Make your first call: see [Getting started](/docs/getting-started).
+- [Getting started](/docs/getting-started): write a first program that makes
+  a typed call, and run it.
+- [Coming from axios or ky](/docs/coming-from-axios-or-ky): see how what
+  you know from those libraries maps to Effetch.

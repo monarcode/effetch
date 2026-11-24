@@ -1,13 +1,15 @@
 ---
 title: Built-in plugins
-description: Add a bearer token, retries, a timeout and logging to every call a client makes.
+description: Add a bearer token, retries, a timeout and logging to every call a client makes, and see the order they run in.
 ---
 
 Most APIs need the same things on every call: a token, retries when the
-network drops, a time limit, a log line. Plugins add that behavior to every
-call a client makes. You list them in the client's config, and any call can
-turn one off or adjust it. This page shows the plugins that ship with Effetch
-and what each one does.
+network drops, a time limit, a log line. Writing them into each call
+repeats them, and the one call that forgets is the one that breaks. Plugins
+add that behavior to every call a client makes. You list them in the
+client's config, and any call can turn one off or adjust it. This page shows
+the plugins that ship with Effetch, what each one does, and the order they
+run in.
 
 ## Add plugins to a client
 
@@ -15,8 +17,6 @@ The built-in plugins come from `@monarcode/effetch/plugins`. List them in the
 client's `plugins` option:
 
 ```ts
-import * as Effect from "effect/Effect";
-
 import { Fetch } from "@monarcode/effetch";
 import { bearer, logger, retry, timeout } from "@monarcode/effetch/plugins";
 
@@ -31,53 +31,215 @@ export class Api extends Fetch.Service<Api>()("Api", {
     bearer({ token: () => readToken() }),
   ],
 }) {}
-
-export const withEffectToken = bearer({ token: Effect.succeed("token") });
 ```
 
-The order in this example is the one to use. To learn why, see
-[Plugin order](/docs/plugins/order).
+The order in this example is the one to use: `logger` covers the whole
+call, and each retry gets its own time limit and asks for the token again. To
+learn why, see [How plugins nest](#how-plugins-nest).
 
 ## What each plugin does
 
 The following table lists each built-in plugin, what it does, and what a call
 can pass for it in its `plugins` option:
 
-| Plugin                                                                    | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                     | Per call                                             |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| `bearer({ token, scheme?, refresh? })`                                    | Sends `Authorization: Bearer <token>`. The token is a string, a function of the request (sync or async), or an Effect, read for every request. `null`, `undefined` and `""` send no header, and an existing `Authorization` header is kept. With `refresh`, a `401` gets a new token and the request is sent again, once. See [Refresh a token](/docs/plugins/token-refresh).                                                                    | `false`                                              |
-| `logger({ level? })`                                                      | Logs one entry per call at Debug (or Info): `GET <url> 200 (35ms)`, or `failed` with the cause, with the call's [route](/docs/plugins/writing#read-the-route) as an annotation. Never logs headers or query strings.                                                                                                                                                                                                                             | `false`                                              |
-| `consoleLogger(options?)`                                                 | Prints each call to the console while you develop: a line with the route, status, duration and outcome, opening a group with the full URL, headers, bodies and error. Sensitive headers, query parameters and body keys are redacted. See [Log to the console](/docs/plugins/console-logging).                                                                                                                                                   | `false`, its settings                                |
-| `retry({ times?, schedule?, methods?, statuses?, retryAfter?, budget? })` | Retries network errors and 408, 429, 500, 502, 503 and 504, 2 times by default, with jittered exponential backoff from 200ms. Only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) by default, so a `POST` is never sent twice. When retries run out, the last response is returned. `retryAfter` waits as `Retry-After` asks, and `budget` limits the whole call. See [Retry-After and a time limit](/docs/plugins/retry-after). | `false`, `{ times }`, and `{ budget }` with a budget |
-| `timeout({ duration })`                                                   | Fails with `TimeoutError` and aborts the request when the response headers don't arrive in time. Downloading the body isn't covered.                                                                                                                                                                                                                                                                                                             | `false`, `{ duration }`                              |
+| Plugin          | What it does                                          | Per call                                                           |
+| --------------- | ----------------------------------------------------- | ------------------------------------------------------------------ |
+| `bearer`        | Sends a token in the `Authorization` header.          | `false`                                                            |
+| `logger`        | Logs one entry per call with Effect's logger.         | `false`                                                            |
+| `consoleLogger` | Prints each call to the console while you develop.    | `false`, or `detail`, `only`, `collapsed`, `slow`, `maxBodyLength` |
+| `retry`         | Retries network errors and statuses such as `503`.    | `false`, `{ times }`, and `{ budget }` when it has a budget        |
+| `timeout`       | Fails the call when the response headers arrive late. | `false`, `{ duration }`                                            |
+
+The sections that follow describe each one.
+
+### bearer
+
+`bearer({ token, scheme?, refresh? })` sends `Authorization: <scheme> <token>`
+with every request. `scheme` is the word before the token, and defaults to
+`"Bearer"`.
+
+The token can be a string, a function of the request that returns it (sync
+or async), or an Effect. `bearer` reads it for every request and never
+caches it, so a token you change or clear applies to the next request. When
+the token is `null`, `undefined` or `""`, the request goes without the
+header. A request that already has an `Authorization` header keeps it, and
+`bearer` doesn't read the token for it.
+
+With `refresh`, a `401` gets a new token, and the request is sent again,
+once. See [Refresh a token](/docs/plugins/token-refresh).
+
+### logger
+
+`logger({ level? })` logs one entry per call with Effect's logger, such as
+`GET https://api.example.com/todos/1 200 (35ms)`. A failed call logs
+`… failed (35ms)` with the failure's cause. The entry is annotated with the
+`method`, `url`, `status` and `durationMs`, and the call's
+[route](/docs/plugins/writing#read-the-route), such as `GET /todos/:id`, to
+group entries by.
+
+It logs no headers, and the URL leaves out the query string, so tokens and
+cookies stay out of your logs. The failure's cause is logged as it is.
+
+Entries are logged at the Debug level by default. Effect's default minimum
+log level is Info, so with the default logger a plain `logger()` prints
+nothing. Pass `level: "Info"`, or lower the minimum level for your program
+with `Effect.provideService(References.MinimumLogLevel, "Debug")`.
+
+The duration runs until the response headers arrive. It doesn't include
+reading or decoding the body, which `consoleLogger` and `onExit` hooks do
+count. For a stream from `api.sse` or `api.ndjson`, the entry is logged when
+the headers arrive. An interrupted call isn't logged.
+
+### consoleLogger
+
+`consoleLogger(options?)` is for development. It prints each call to the
+console as a line with the route, status, duration and outcome, which opens a
+group with the full URL, headers, bodies and error. It redacts sensitive
+headers, query parameters and body keys. See
+[Log to the console](/docs/plugins/console-logging).
+
+### retry
+
+`retry({ times?, schedule?, methods?, statuses?, retryAfter?, budget? })`
+sends a request again when it fails with a `NetworkError`, or gets a status
+worth retrying. By default:
+
+- it retries `408`, `429`, `500`, `502`, `503` and `504` (`statuses`);
+- it retries 2 times after the first attempt (`times`);
+- it waits with jittered exponential backoff from 200ms (`schedule`, which
+  `times` still caps);
+- it retries only the idempotent methods, `GET`, `HEAD`, `OPTIONS`, `PUT`
+  and `DELETE` (`methods`), so a `POST` is never sent twice.
+
+When the retries run out, the call ends with the last response as it is, so
+a `503` still ends as an `HttpError` with that response's body. When the
+last attempt fails with a `NetworkError`, that's the call's error. Other
+failures, such as a `TimeoutError` from `timeout`, aren't
+retried.
+
+`retry` retries everything after it in the plugin list. For a stream, it
+retries getting the response, not a body that breaks off later.
+
+`retryAfter` waits as a `Retry-After` header asks, and `budget` limits the
+whole call. See [Retry-After and a time limit](/docs/plugins/retry-after).
+
+### timeout
+
+`timeout({ duration })` fails the call with a `TimeoutError`, and aborts the
+request, when the response headers don't arrive within `duration`.
+`TimeoutError` comes from `@monarcode/effetch/plugins`, and has the
+request's `method`, its `url` without the query string, and the `duration`
+that ran out, such as `"10s"`.
+
+It covers the plugins after it in the list and the network, but not reading
+the body. A large download, or a stream from `api.sse` or `api.ndjson`, that
+starts in time isn't cut off while the body arrives. To learn where to put
+it, see [Retry-After and a time limit](/docs/plugins/retry-after).
 
 ## Fail with a typed error from a token
 
 A `bearer` token function that throws, or whose promise rejects, makes the
-call die. To fail with a typed error instead, pass an Effect: its error and
-services become the client's, and the client's layer (or `Fetch.make`) asks
-for the services.
+call die (a defect: an Effect that dies, which you don't catch in normal
+code). To fail with a typed error instead, pass an Effect as the token:
+
+```ts
+import * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+
+import { Fetch } from "@monarcode/effetch";
+import { bearer } from "@monarcode/effetch/plugins";
+
+export class SignedOut extends Data.TaggedError("SignedOut")<{}> {}
+
+export class Session extends Context.Service<
+  Session,
+  { readonly accessToken: Effect.Effect<string, SignedOut> }
+>()("Session") {}
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  plugins: [
+    bearer({
+      token: Effect.gen(function* () {
+        const session = yield* Session;
+        return yield* session.accessToken;
+      }),
+    }),
+  ],
+}) {}
+
+// Api.layer needs Session, and every call can fail with SignedOut.
+export const todos = Effect.gen(function* () {
+  const api = yield* Api;
+  return yield* api.get("/todos");
+}).pipe(Effect.catchTag("SignedOut", () => Effect.succeed(undefined)));
+```
+
+The Effect's error joins the errors of every call the client makes. Its
+services, such as `Session` here, are required by the client's layer (or
+`Fetch.make`), once, so the calls themselves don't need them.
+
+## How plugins nest
+
+The order of a client's `plugins` list decides what each plugin covers. The
+first plugin is the outermost: a request passes through the plugins in list
+order on the way out, and the response comes back through them in reverse.
+
+A plugin's `wrap` hook encloses its own `onRequest` and `onResponse`, and
+every plugin after it. For two plugins, `a` then `b`, that use every hook, a
+call runs in this order:
+
+```text
+a.wrap
+  a.onRequest
+    b.wrap
+      b.onRequest
+        the network
+      b.onResponse
+  a.onResponse
+the status check and decoding
+a.onError, then b.onError   (only when the call failed or died)
+a.onExit, then b.onExit
+```
+
+Because a `wrap` encloses everything inside it, a `wrap` that retries runs
+its own `onRequest` and `onResponse` again on each attempt, along with every
+plugin after it.
+
+`onError` and `onExit` don't nest. They run after the call, in list order,
+wherever the plugin sits. To learn what each hook does, see
+[Write a plugin](/docs/plugins/writing).
+
+### The recommended order
+
+List the built-in plugins as `logger`, `retry`, `timeout`, `bearer`, as in
+the example on this page. With that order:
+
+- `logger` covers the whole call, retries included, and logs one entry for it.
+  After `retry`, it would log one entry per attempt.
+- `consoleLogger` runs from `onExit`, so it covers the whole call wherever
+  it sits.
+- Each retry gets its own timeout, and asks `bearer` for the token again.
+- A timed-out attempt isn't retried.
+- `retry`'s `budget` covers every attempt and wait, while `timeout` covers
+  one attempt.
+- A `401` that `bearer` refreshes is sent again inside the same attempt, so
+  it shares that attempt's timeout.
 
 ## Choose a time limit
 
-Time limits apply per attempt or to the whole call:
-
-- **Per attempt:** `timeout`, placed after `retry` in the plugin list, as in
-  the example on this page. Each attempt gets the full duration, and a
-  timed-out attempt isn't retried.
-- **For the whole call:** `retry({ budget })`, every attempt and wait
-  included. For one call, or on a client without `retry`, wrap the call in
-  `Effect.timeout`.
-
-To use both together, see
-[Retry-After and a time limit](/docs/plugins/retry-after).
+`timeout` limits each attempt, and `retry`'s `budget` limits the whole call,
+every attempt and wait included. Both stop at the response headers: neither
+covers reading the body. To choose between them, combine them, or cap the
+body too, see [Retry-After and a time limit](/docs/plugins/retry-after).
 
 ## What's next
 
 - [Refresh a token](/docs/plugins/token-refresh): renew an expired token
   without failing the call.
 - [Retry-After and a time limit](/docs/plugins/retry-after): honor
-  `Retry-After` and cap the whole call.
+  `Retry-After`, and limit each attempt and the whole call.
 - [Change plugins for one call](/docs/plugins/per-call): skip or adjust a
   plugin on a single call.
 - [Write a plugin](/docs/plugins/writing): add behavior the built-in plugins

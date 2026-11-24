@@ -245,7 +245,7 @@ export type MultipartSchema = Schema.Top & {
  *   to an object, such as `Schema.DateTimeUtc`, needs a string form, such
  *   as `Schema.DateTimeUtcFromString`.
  * - It works wherever `input` does: on methods such as `api.post`, on
- *   `client.endpoint` and `Fetch.endpoint`, and in `api.sse` and
+ *   `api.endpoint` and `Fetch.endpoint`, and in `api.sse` and
  *   `api.ndjson`.
  * - It returns `schema`, annotated. Pass it to `input` as it is, or with
  *   more checks or annotations. A schema built around it is sent as JSON
