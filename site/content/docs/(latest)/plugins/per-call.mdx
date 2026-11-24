@@ -5,12 +5,14 @@ description: Turn off or adjust a client's plugin for one call.
 
 A client's plugins run on every call, but some calls need something
 different: a login that sends no token, or a slow export that needs more
-time. This page shows how to change a client's plugins for one call.
+time. Rather than build a second client for them, you change the plugins for
+that one call. This page shows how, and how a call's changes combine with
+the plugin's defaults and with an endpoint's.
 
 ## Skip or adjust a plugin
 
-Any call can skip a plugin with `false`, and plugins with options take part of
-them. TypeScript checks the plugin names and the option types:
+Pass `plugins` in the call's options, keyed by the plugin's name. `false`
+skips that plugin, and an object changes some of its options:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -43,8 +45,30 @@ export const program = Effect.gen(function* () {
 });
 ```
 
-To see what each built-in plugin accepts per call, see the **Per call** column
-in [Built-in plugins](/docs/plugins).
+TypeScript checks the plugin names and the option types, so a misspelled
+name or a wrong option doesn't compile. Each plugin decides which options a
+call can change. To see what each built-in plugin accepts, see the
+**Per call** column in [Built-in plugins](/docs/plugins#what-each-plugin-does).
+A plugin you write accepts any of the options in its `defaults` (see
+[Write a plugin](/docs/plugins/writing)).
+
+## How a call's changes apply
+
+A call's changes combine with the rest as follows:
+
+- **Options you leave out keep their defaults.** A call that passes
+  `{ consoleLogger: { detail: "summary" } }` changes `detail` only, and
+  keeps the other settings. A key
+  whose value is `undefined` at runtime keeps its default too, rather than
+  replacing it with `undefined`.
+- **`false` skips the whole plugin.** Its `wrap`, `onRequest` and
+  `onResponse` don't run for that call, and neither do its `onError` and
+  `onExit`. A skipped `consoleLogger` prints nothing, for example.
+- **A call's changes go on top of an endpoint's.** When you bind an
+  endpoint with `plugins` overrides, a call to it can pass its own. For each
+  plugin, the call's value wins, and when both are option objects they're
+  merged, key by key. See
+  [Call an endpoint](/docs/endpoints/calling).
 
 ## What's next
 

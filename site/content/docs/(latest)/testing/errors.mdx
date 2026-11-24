@@ -3,16 +3,16 @@ title: Test errors and statuses
 description: Make the fake backend fail or answer with another status.
 ---
 
-This page shows how to make the [fake backend](/docs/testing) answer with an
-error, or with another status, so you can test how your code
-handles each one.
+The error paths of your code are the hardest to reach against a real API:
+you can't ask a server for a 503 on demand. With the
+[fake backend](/docs/testing), you can answer any request with an error, or
+with a status other than 200, and check that your code handles each one.
+This page shows both.
 
 ## Fail every request to an endpoint
 
 To answer every request to an endpoint with an error, use `FetchTest.fail`,
-with a status and an optional body. The body is encoded with the endpoint's
-`statusErrors` schema for that status, then its `error` schema, so the client
-decodes it back into your domain error:
+with a status and an optional body:
 
 ```ts
 import * as Schema from "effect/Schema";
@@ -27,31 +27,46 @@ class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
 const getTodo = Fetch.endpoint("GET /todos/:id", {
   statusErrors: { 404: TodoNotFound },
 });
+const listTodos = Fetch.endpoint("GET /todos");
 
 export const Backend = FetchTest.layer([
   // The call fails with a TodoNotFound.
   FetchTest.fail(getTodo, 404, new TodoNotFound({ message: "No todo 9" })),
+  // The call fails with an HttpError, status 503, asking to retry in 1 second.
+  FetchTest.fail(listTodos, 503, undefined, {
+    headers: { "retry-after": "1" },
+  }),
 ]);
 ```
 
+`FetchTest.fail` encodes the body as JSON with the first schema that
+encodes it: the endpoint's `statusErrors` schemas for that status, then its
+`error` schema. The client then decodes it back into your domain error, or
+into `HttpError.body`. Without a body, the response is empty, so the call
+fails with an `HttpError`.
+
+A few more rules apply:
+
+- **The status** must be from 300 to 599, since `fail` answers with an
+  error.
+- **Headers** go in the fourth argument, such as `retry-after` to test the
+  `retry` plugin.
+- **The client's maps.** A `Fetch.endpoint` definition doesn't carry the
+  client's `statusErrors` or `defaultError`. Without schemas of its own, the
+  body is sent by its runtime type, so an error class goes as JSON. The
+  client still decodes it with its own maps, so
+  `FetchTest.fail(getTodo, 401, new SessionExpired(…))` fails with
+  `SessionExpired` when only the client maps 401. You don't need to repeat
+  the map on the endpoint.
+- **A body that no schema encodes** is a defect, since it's a bug in the
+  test.
+
 ## Answer with another status
 
-A handler answers with another status by returning
-`FetchTest.reply(status, body)`, such as a `404` for one id and the todo for
-the others. A reply's body is sent as it is, as a call's `body` without
-`input` is:
-
-- no body
-- a string as text
-- bytes as bytes
-- a `Blob`, `FormData` or `URLSearchParams` as it is
-- anything else as JSON
-
-For a `2xx` with a typed body, such as a `201`, pass `{ status: 201 }` as
-`respond`'s third argument instead.
-
-The following backend answers `404` for every todo but the first, and `201`
-with a `location` header when a todo is created:
+To fail some requests and answer others, return `FetchTest.reply(status,
+body)` from a `respond` handler. The following backend answers `404` for
+every todo but the first, and `201` with a `location` header when a todo is
+created:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -85,6 +100,19 @@ export const Backend = FetchTest.layer([
   ),
 ]);
 ```
+
+A reply's body isn't checked against the endpoint's schemas. It's sent as
+it is, the way a call's `body` without `input` is:
+
+- `undefined` as no body;
+- a string as text;
+- bytes as bytes;
+- a `Blob`, `FormData` or `URLSearchParams` as it is;
+- anything else as JSON.
+
+For a 2xx with a typed body, such as a `201`, don't use `reply`. Pass
+`{ status: 201 }` as `respond`'s third argument instead, as `createTodo`
+does, so the body is still encoded with `output`.
 
 ## What's next
 

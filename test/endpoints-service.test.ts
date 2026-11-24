@@ -331,7 +331,7 @@ describe("client.bindAll", () => {
 			);
 			const bound = api.bind(getTodo);
 			expect(() => api.bind(bound as never)).toThrow(
-				/client\.bind takes an endpoint definition/,
+				/^bind takes an endpoint definition/,
 			);
 		}),
 	);

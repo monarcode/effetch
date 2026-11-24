@@ -263,9 +263,9 @@ export const Service =
 	};
 
 /**
- * Returns `true` if `u` is a class made by {@link Service}, or a class that
- * extends one. `false` for anything else, including a key made with
- * `Context.Service` and a {@link Client}.
+ * Checks whether `u` is a class made by {@link Service}, or a class that
+ * extends one: `true` if it is, `false` for anything else, including a key
+ * made with `Context.Service` and a {@link Client}.
  *
  * @example
  * ```ts

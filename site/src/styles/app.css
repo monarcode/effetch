@@ -331,6 +331,39 @@ html {
 	}
 }
 
+/* A specimen further down sets in the same way as it scrolls into view.
+   Script marks it to wait only when it starts off screen, so without
+   script, or already in view, it's simply set. Under reduced motion it
+   fades in at its weight. */
+@keyframes spec-fade {
+	from {
+		opacity: 0;
+	}
+}
+[data-set-in="wait"] .spec-set {
+	--spec-k: 0;
+	opacity: 0;
+}
+[data-set-in="view"] .spec-set {
+	animation: spec-set 1100ms var(--ease-out) backwards;
+	animation-delay: calc(var(--set-delay, 0ms) + 120ms + var(--i) * 110ms);
+}
+@media print {
+	[data-set-in="wait"] .spec-set {
+		--spec-k: 1;
+		opacity: 1;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	[data-set-in="wait"] .spec-set {
+		--spec-k: 1;
+	}
+	[data-set-in="view"] .spec-set {
+		animation: spec-fade 240ms var(--ease) backwards;
+		animation-delay: var(--set-delay, 0ms);
+	}
+}
+
 /* --- The controls ------------------------------------------------------ */
 
 .spec-controls {
@@ -581,10 +614,29 @@ html {
 	letter-spacing: -0.02em;
 }
 .spec-name {
-	font-weight: 760;
+	font-weight: calc(300 + 460 * var(--spec-k));
 	color: var(--color-paper);
 }
-/* Where TypeScript puts the error: paper, with a steel wave under it. */
+/* A new path's names rise after its segments: TypeScript reads them from
+   the path. */
+@media (prefers-reduced-motion: no-preference) {
+	.spec-names[data-entrance="load"] .spec-set {
+		animation: spec-set 900ms var(--ease-out) backwards;
+		animation-delay: calc(270ms + var(--i) * 90ms);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.spec-names[data-entrance="load"] .spec-set {
+		animation: spec-fade 240ms var(--ease) backwards;
+	}
+}
+/* Where TypeScript puts the error: paper, with a steel wave under it. The
+   wave comes in after the names, so the error is marked last. */
+@keyframes spec-flag {
+	from {
+		text-decoration-color: transparent;
+	}
+}
 .spec-squiggle {
 	color: var(--color-paper);
 	text-decoration-line: underline;
@@ -592,6 +644,7 @@ html {
 	text-decoration-color: var(--color-steel);
 	text-decoration-thickness: 1px;
 	text-underline-offset: 0.25em;
+	animation: spec-flag 400ms var(--ease) 500ms backwards;
 }
 
 /* --- The narrowing slider ------------------------------------------------ */
@@ -620,6 +673,7 @@ html {
 	border: 0;
 	border-radius: 999px;
 	background: var(--color-lime);
+	transition: transform 120ms var(--ease-out);
 }
 .spec-range::-moz-range-thumb {
 	width: 22px;
@@ -627,6 +681,14 @@ html {
 	border: 0;
 	border-radius: 999px;
 	background: var(--color-lime);
+	transition: transform 120ms var(--ease-out);
+}
+/* Pressed, the thumb grows a little: the slider has it. */
+.spec-range:active::-webkit-slider-thumb {
+	transform: scale(1.15);
+}
+.spec-range:active::-moz-range-thumb {
+	transform: scale(1.15);
 }
 
 /* --- The close ----------------------------------------------------------- */
@@ -644,6 +706,24 @@ html {
 	font-weight: 300;
 	color: var(--color-steel);
 }
+.spec-closing-heavy {
+	font-weight: calc(300 + 600 * var(--spec-k));
+}
+
+/* --- The install command ------------------------------------------------- */
+
+/* Copied: the check grows into place where the copy icon was. */
+.spec-copied {
+	transition:
+		transform 160ms var(--ease-out),
+		opacity 160ms var(--ease-out);
+}
+@starting-style {
+	.spec-copied {
+		transform: scale(0.6);
+		opacity: 0;
+	}
+}
 
 @media (prefers-reduced-motion: reduce) {
 	.spec-m,
@@ -655,5 +735,21 @@ html {
 	.spec-preset,
 	.spec-path-option {
 		transition: none;
+	}
+	/* One rule per engine: a browser drops a rule with a pseudo-element it
+	   doesn't know. */
+	.spec-range:active::-webkit-slider-thumb {
+		transform: none;
+	}
+	.spec-range:active::-moz-range-thumb {
+		transform: none;
+	}
+	.spec-copied {
+		transition: opacity 160ms var(--ease-out);
+	}
+	@starting-style {
+		.spec-copied {
+			transform: none;
+		}
 	}
 }

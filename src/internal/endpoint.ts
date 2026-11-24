@@ -289,7 +289,7 @@ export const bindEndpoint = (
 ): RuntimeEndpoint => {
 	if (!isUnboundEndpoint(unbound)) {
 		throw new Error(
-			"client.bind takes an endpoint definition: pass what Fetch.endpoint returns",
+			"bind takes an endpoint definition: pass what Fetch.endpoint returns",
 		);
 	}
 	return makeEndpointFrom(call, client, unbound, options ?? {});

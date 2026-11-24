@@ -1,37 +1,62 @@
 ---
 title: Limitations
-description: Check a known limit before you rely on it.
+description: The known limits of paths, plugins and streams, and how to work around them.
 ---
 
-This page lists the known limits of Effetch's paths, plugins and streams.
-Check one before you rely on the behavior it describes.
+A few things in Effetch work differently from what you might expect, or not
+at all. They're collected here, each with a way around it, so you can check
+one before your code depends on it.
 
 ## Paths
 
-Paths and their parameters have these limits:
+A path parameter is always a whole segment, from the `:` to the next `/`.
+`/files/:name.json` has one parameter, called `name.json`. To send a file
+name with its extension, make the whole segment the parameter, as in
+`/files/:file`, and pass `"report.json"`.
 
-- A path parameter is a whole segment: `/files/:name.json` has one parameter
-  called `name.json`.
-- Path parameters can't be optional. Define one endpoint per path, or pass
-  the value in `query`.
-- Paths shouldn't contain `?` or `#`. Pass query parameters with `query`.
+Path parameters can't be optional. Define one endpoint for each path, or
+pass the value in `query`.
+
+Don't put a query string or a fragment in a path. Effetch doesn't check
+for one, and it isn't sent as a query. A `?` after a parameter
+becomes part of its name, so `/items/:id?sort=asc` has a parameter called
+`id?sort=asc`. Pass query parameters with `query`. A `baseUrl` with a `?` or
+`#` is rejected outright: building the client dies.
 
 ## Plugins
 
-Plugins have these limits:
+Two plugins with the same name aren't a type error. Building the client, or
+the layer of a `Fetch.Service`, dies with `Two plugins are named "NAME"`
+instead.
 
-- `timeout`, and the duration `logger` logs, cover the time until the
-  response headers arrive, not downloading the body. `consoleLogger`'s
-  duration, and an `onExit` hook's `durationMs`, include decoding the body.
-- Two plugins with the same name are only caught when the client is made.
+Durations stop at different points:
+
+- `timeout`, `retry`'s `budget` and the duration `logger` logs end when the
+  response headers arrive. Downloading and decoding the body isn't covered.
+  To limit the whole call, body included, wrap it in `Effect.timeout`.
+- `consoleLogger`'s duration, and an `onExit` hook's `durationMs`, include
+  decoding the body.
 
 ## Streams
 
-Streamed responses have these limits:
+Streams don't reconnect. `api.sse` ignores `retry:` lines, and it doesn't
+send a `Last-Event-ID` header by itself. To pick up where a stream stopped,
+call it again with the last event's `id` in a header:
+`headers: { "last-event-id": lastId }`.
 
-- Streams don't reconnect: `api.sse` ignores `retry:` lines and the
-  `Last-Event-ID` header. Repeat the call, with the last `id` in a header,
-  to pick up where a stream stopped.
-- For a stream, plugins see the call end when the response's headers
-  arrive: they don't see the body being read, or a `DecodeError` while
-  reading it, and `timeout` doesn't bound it.
+An SSE event larger than 10 MiB fails the stream with a `DecodeError`.
+
+For a stream, the call ends, as far as plugins go, when the response's
+headers arrive. Their hooks don't run while the body is read, a
+`DecodeError` while it's read doesn't reach them, and `timeout` doesn't
+limit how long reading takes. Handle those on the stream
+itself (see [Streaming responses](/docs/streaming)).
+
+## What's next
+
+- [Compatibility](/docs/reference/compatibility): the Effect versions,
+  runtimes and TypeScript versions Effetch supports.
+- [Streaming responses](/docs/streaming): read Server-Sent Events and
+  newline-delimited JSON, and handle a stream's errors.
+- [Built-in plugins](/docs/plugins): see what each plugin does, and how to
+  pick a time limit.

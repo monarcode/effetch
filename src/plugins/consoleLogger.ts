@@ -1171,21 +1171,19 @@ const resolveColor = (color: ConsoleLoggerColor): Config["color"] =>
  * opening a group with its URL, headers, bodies and error.
  *
  * ```text
- * ▸ GET /todos/:id  200 OK  35 ms  1.2 kB
- * ▸ ✗ POST /users/:id/roles  400 Bad Request  120 ms  → InvalidRole: No such role
- * ▸ ✗ GET /todos  3.0 s  → NetworkError: Failed to fetch
- * ▸ ⚠ GET /reports/:id  200 OK  2.4 s  (slow)
- *
- * ▾ ✗ POST /users/:id/roles  400 Bad Request  120 ms  → InvalidRole: No such role
- *     POST https://api.example.com/users/7/roles
- *     request headers  { accept: "application/json", authorization: "<redacted>" }
- *     request body     { role: "owner" }
- *     response headers { "content-type": "application/json" }
- *     response body    { code: "INVALID_ROLE", message: "No such role" }
- *     error            InvalidRole { code: "INVALID_ROLE", message: "No such role" }
+ * GET /todos/:id  200 OK  35 ms  1.2 kB
+ * ✗ GET /todos  3.0 s  → NetworkError: Failed to fetch
+ * ⚠ GET /reports/:id  200 OK  2.4 s  8 B  (slow)
+ * ✗ POST /users/:id/roles  400 Bad Request  120 ms  48 B  → InvalidRole: No such role
+ *   POST https://api.example.com/users/7/roles
+ *   request headers  { accept: 'application/json', authorization: '<redacted>' }
+ *   request body     { role: 'owner' }
+ *   response headers { 'content-type': 'application/json' }
+ *   response body    { code: 'INVALID_ROLE', message: 'No such role' }
+ *   error            { _tag: 'InvalidRole', message: 'No such role', code: 'INVALID_ROLE' }
  * ```
  *
- * It logs each call once it's over, with its final outcome: the error a
+ * It logs each call after it's over, with its final outcome: the error a
  * call fails with after `statusErrors` and decoding, or `interrupted`.
  * Values are logged as objects, for devtools to expand. Everything goes
  * through Effect's `Console` with `console.log` and groups, never
@@ -1226,7 +1224,7 @@ const resolveColor = (color: ConsoleLoggerColor): Config["color"] =>
  * body. Effect caches the body, so reading it
  * doesn't affect decoding.
  *
- * It runs from the `onExit` hook, so it sees the whole call wherever it
+ * It runs from the `onExit` hook, so it covers the whole call wherever it
  * sits in the plugin list: retries are one entry, and `duration` includes
  * them. When a plugin fails on a response (such as a 401), that response
  * is shown. Without a response, the request shown is the one the call

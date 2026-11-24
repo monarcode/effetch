@@ -1,33 +1,104 @@
 ---
 title: Logging and defects
-description: Learn which errors are safe to log, and why bugs are defects rather than errors.
+description: Learn what stays out of a logged error, and why bugs are defects rather than errors.
 ---
 
-This page explains what Effetch keeps out of its errors so you can log them,
-and which mistakes make a call die as a defect instead of failing with a
-typed error.
+When a call fails in production, its error usually ends up in a log or an
+error reporter. Before you send it there, check what the error carries:
+Effetch keeps some secrets out for you, but not all of them. Some mistakes
+don't produce an error at all: they're bugs in your code, and the Effect
+dies instead. This page covers both.
 
-## Errors that are safe to log
+## What a logged error keeps out
 
-Errors are made to be logged and reported:
+Effetch's errors are made to be logged and reported. Two things are kept out
+of them:
 
-- `url` never includes the query string, so tokens in queries stay out of
-  logs.
-- `HttpError.headers` are Effect `Headers`: `authorization`, `set-cookie` and
-  other sensitive headers print as `<redacted>`.
+- **The query string.** `url` is the request URL without its query string
+  or fragment, so a token in `?api_key=…` stays out of logs.
+- **Sensitive headers.** `HttpError.headers` are Effect `Headers`, which
+  print sensitive values as `<redacted>` when the error is logged or turned
+  into JSON.
+
+By default, Effect redacts these headers:
+
+- `authorization`
+- `cookie`
+- `set-cookie`
+- `x-api-key`
+
+To change the list, provide `Headers.CurrentRedactedNames` with your own
+names or regular expressions. Your list replaces the defaults, so include
+them again if you still want them redacted:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
+
+declare const program: Effect.Effect<void>;
+
+export const main = program.pipe(
+  Effect.provideService(Headers.CurrentRedactedNames, [
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "x-api-key",
+    /^x-session-/,
+  ]),
+);
+```
+
+Effect reads the list when the error is printed. A log written with
+`Effect.logError` inside the provided Effect uses your list. An error
+printed outside any Effect, such as with `console.log` after
+`Effect.runPromise`, uses the defaults.
+Redaction only changes how headers print: `error.headers["set-cookie"]` in
+your code still gives you the value.
+
+### What isn't scrubbed
+
+Effetch doesn't scrub anything else, so check these before you log an error
+somewhere that others can read:
+
+- **`HttpError.text` and `body`** hold the response body in full. If the API
+  echoes a password or a token in an error, it's in there.
+- **`NetworkError.cause`** is the platform's error, as it is.
+- **`DecodeError.issue`** is the schema issue, the JSON `SyntaxError` or the
+  read error, as it is.
+
+To keep bodies and queries out of the logs the client writes for you, see
+[Console logging](/docs/plugins/console-logging).
 
 ## Bugs as defects
 
-Some mistakes are bugs in the calling code, not failures to recover from at
-runtime. Those make the Effect die, as a defect, rather than fail with a typed
-error:
+That covers errors you'll log. Some mistakes, though, are bugs in the calling
+code, not failures to recover from at runtime. Those make the Effect die, as
+a defect, rather than fail with a typed error. A defect isn't in the error
+type, so `catchTag` doesn't catch it, and it surfaces as a bug instead of
+passing as an `HttpError`.
+
+A call dies when it has one of these mistakes:
 
 - a missing path parameter;
 - a body that can't be encoded;
 - a query that doesn't match an endpoint's `query` schema;
 - a body on a `GET` or `HEAD` request;
-- a `baseUrl` with a query string;
-- two plugins with the same name;
-- a relative URL without a `baseUrl`, outside browsers.
+- a relative URL without a `baseUrl`, outside browsers;
+- on a stream call, a `responseMode`, or an `output` made by `Fetch.bytes()`.
+  A stream endpoint with the same mistake throws earlier, when it's
+  defined.
 
-For the errors a call can fail with, see [Call errors](/docs/errors).
+Two mistakes in the client's configuration make building the client die,
+before any call runs. That happens in `Fetch.make`, or when the client's
+layer is built:
+
+- a `baseUrl` with a query string or a fragment;
+- two plugins with the same name.
+
+## What's next
+
+- [Call errors](/docs/errors): see each error a call can fail with, and its
+  fields.
+- [Console logging](/docs/plugins/console-logging): log each call, with
+  bodies and queries redacted.
+- [Catch errors](/docs/errors/catching): handle the errors you've logged.

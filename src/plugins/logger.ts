@@ -45,14 +45,15 @@ export type LoggerPlugin = Plugin<"logger">;
 
 /**
  * Logs one entry per call with Effect's logger: the method, the URL, the
- * status and how long the response took, e.g.
+ * status and how long the response took, for example
  * `GET https://api.example.com/todos 200 (35ms)`, or `… failed (35ms)`
- * with the failure's cause.
+ * with the failure's cause. An interrupted call isn't logged. Placed after
+ * `retry`, it logs each attempt instead of the call.
  *
  * The same values are log annotations (`method`, `url`, `status`,
  * `durationMs`), along with `route`: the call's method and unfilled path,
  * such as `GET /users/:id`, the same for every call to that path, to group
- * entries by (left out for requests sent through `client.httpClient`). The
+ * entries by (left out for requests sent through `api.httpClient`). The
  * URL has no query string, and no headers are logged, so tokens and
  * cookies stay out of logs. The duration is measured with
  * Effect's `Clock` until the response headers arrive, in whole

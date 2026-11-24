@@ -7,11 +7,14 @@ import { errorUrl } from "../internal/url.js";
 import { type Plugin, plugin } from "../Plugin.js";
 
 /**
- * No response arrived within the {@link timeout} plugin's duration. The
- * request was aborted.
+ * The error a call fails with when a time limit runs out: the
+ * {@link timeout} plugin's `duration` before the response headers arrive,
+ * or `retry`'s `budget` for the whole call. The request in flight is
+ * aborted. Its fields:
  *
- * - `url` is the request URL without its query string.
- * - `duration` is the limit that was exceeded, formatted (`"10s"`).
+ * - `method`: the request's HTTP method.
+ * - `url`: the request URL without its query string.
+ * - `duration`: the limit that ran out, formatted (`"10s"`).
  *
  * @example
  * ```ts

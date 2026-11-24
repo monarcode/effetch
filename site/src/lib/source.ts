@@ -1,4 +1,5 @@
 import {
+	findPath,
 	flattenTree,
 	getPageTreeRoots,
 	type Folder,
@@ -89,6 +90,24 @@ function plainProse(text: string, url: string) {
 			.replace(/\]\(#/g, `](${SITE_URL}${url}#`)
 			.replace(/\]\(\/(?!\/)/g, `](${SITE_URL}/`)
 	);
+}
+
+/**
+ * The folders the page at `url` sits in, outermost first, without the
+ * release line's root, each with the URL of its first page. A folder whose
+ * first page is this page is left out, since it would name the page twice.
+ */
+export function pageFolders(url: string): { name: string; url: string }[] {
+	const path = findPath(
+		source.getPageTree().children,
+		(node) => node.type === "page" && node.url === url,
+	);
+	return (path ?? []).flatMap((node) => {
+		if (node.type !== "folder" || node.root) return [];
+		const first = node.index ?? flattenTree(node.children)[0];
+		if (!first || first.url === url) return [];
+		return [{ name: String(node.name), url: first.url }];
+	});
 }
 
 /**

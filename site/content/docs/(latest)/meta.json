@@ -5,19 +5,22 @@
 		"index",
 		"installation",
 		"getting-started",
-		"upgrading",
+		"coming-from-axios-or-ky",
+		"---Guides---",
 		"clients",
 		"calls",
 		"errors",
-		"plugins",
 		"endpoints",
+		"plugins",
+		"---Going further---",
 		"streaming",
 		"pagination",
-		"structuring-an-app",
 		"testing",
+		"structuring-an-app",
 		"platforms",
-		"coming-from-axios-or-ky",
+		"---Resources---",
+		"reference",
 		"examples",
-		"reference"
+		"upgrading"
 	]
 }

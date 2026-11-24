@@ -30,6 +30,18 @@ All notable changes to `@monarcode/effetch`, newest first.
   entries name, such as "Upgrading from 0.1.0-rc.3" and "Uploading files",
   are now [Upgrade from 0.1.0-rc.3](https://effetch.pages.dev/docs/upgrading)
   and [Upload files](https://effetch.pages.dev/docs/calls/uploads).
+- Error messages for an endpoint passed to the wrong place no longer name
+  the client `client` (as in `client.bind`). They say "bind" or "your
+  client's endpoint or bind method", so they read the same whatever you
+  name your client.
+
+### Fixed
+
+- The documented TypeScript requirement is 5.7 or newer, not 5.4. Effetch's
+  declarations use typed arrays with a type argument, such as
+  `Uint8Array<ArrayBuffer>`, which TypeScript 5.6 and older reject. With
+  `skipLibCheck: true`, an older TypeScript compiles a project that uses
+  Effetch, but some of its types become `any`.
 
 ## 0.1.0-rc.4
 

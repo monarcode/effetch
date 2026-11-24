@@ -14,3 +14,6 @@ coverage
 routeTree.gen.ts
 .tanstack
 site/.impeccable
+
+# Cloudflare's local Pages server
+.wrangler

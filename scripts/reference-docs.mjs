@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Writes the docs site's API reference from the JSDoc: a page per namespace
-// or entry point, listing every export with the first paragraph of its docs,
-// grouped by the guide that covers it.
+// or entry point, listing every export with the first paragraph of its docs
+// (plus, for a value, the paragraphs that say what it needs and how it
+// fails), grouped by the guide that covers it.
 //
 //   pnpm run docs:reference
 //
@@ -31,22 +32,21 @@ const PAGES = [
 		slug: "fetch",
 		title: "Fetch",
 		description:
-			"Every member of the Fetch namespace: clients, calls, errors, plugins, endpoints, streams and pages.",
+			"Every member of the Fetch namespace: clients, calls, responses, uploads, errors, plugins, endpoints, streaming and pagination.",
+		related: "every member of the `Fetch` namespace.",
 		module: "src/Fetch.ts",
 		qualifier: "Fetch",
 		importLine: 'import { Fetch } from "@monarcode/effetch";',
-		intro: "`@monarcode/effetch` exports one name, the `Fetch` namespace. Its members, grouped by the guide that covers them:",
+		intro: "`@monarcode/effetch` exports one name, the `Fetch` namespace. Import it as follows:",
+		first: ["Service", "make"],
 		groups: [
 			["Clients", ["Declare a client", "/docs/clients"]],
-			["Calls", ["Methods", "/docs/calls"]],
+			["Calls", ["Make a call", "/docs/calls"]],
 			["Responses", ["Read the response", "/docs/calls/responses"]],
 			["Uploads", ["Upload files", "/docs/calls/uploads"]],
 			["Errors", ["Call errors", "/docs/errors"]],
 			["Plugins", ["Write a plugin", "/docs/plugins/writing"]],
-			[
-				"Endpoints and services",
-				["Endpoints or methods", "/docs/endpoints"],
-			],
+			["Endpoint definitions", ["Endpoints or methods", "/docs/endpoints"]],
 			["Streaming", ["Streaming responses", "/docs/streaming"]],
 			["Pagination", ["Pagination", "/docs/pagination"]],
 		],
@@ -60,14 +60,14 @@ const PAGES = [
 			"src/Errors.ts": "Errors",
 			"src/Status.ts": "Errors",
 			"src/Plugin.ts": "Plugins",
-			"src/Endpoint.ts": "Endpoints and services",
-			"src/Endpoints.ts": "Endpoints and services",
+			"src/Endpoint.ts": "Endpoint definitions",
+			"src/Endpoints.ts": "Endpoint definitions",
 			"src/Streams.ts": "Streaming",
 			"src/Paginate.ts": "Pagination",
 		},
 		names: {
 			CallError: "Errors",
-			QuerySchema: "Endpoints and services",
+			QuerySchema: "Endpoint definitions",
 			ResponseMode: "Responses",
 			StatusError: "Errors",
 			StatusErrorMap: "Errors",
@@ -81,8 +81,9 @@ const PAGES = [
 		title: "Plugins",
 		description:
 			"Every export of @monarcode/effetch/plugins: the built-in plugins and their options.",
+		related: "the built-in plugins and their options.",
 		module: "src/plugins/index.ts",
-		intro: "`@monarcode/effetch/plugins` exports the built-in plugins, their options and the types they return:",
+		intro: "`@monarcode/effetch/plugins` exports the built-in plugins, their options, the types they return and `TimeoutError`. Import what you use:",
 		groups: [
 			["Bearer tokens", ["Refresh a token", "/docs/plugins/token-refresh"]],
 			[
@@ -91,12 +92,9 @@ const PAGES = [
 			],
 			[
 				"Time limits",
-				["Choose a time limit", "/docs/plugins#choose-a-time-limit"],
+				["Retry-After and a time limit", "/docs/plugins/retry-after"],
 			],
-			[
-				"Logging",
-				["Built-in plugins", "/docs/plugins#what-each-plugin-does"],
-			],
+			["Logging", ["Built-in plugins", "/docs/plugins#logger"]],
 			[
 				"Console logging",
 				["Log to the console", "/docs/plugins/console-logging"],
@@ -116,10 +114,11 @@ const PAGES = [
 		title: "FetchTest",
 		description:
 			"Every member of the FetchTest namespace: the fake backend for tests and the requests it records.",
+		related: "the fake backend for tests.",
 		module: "src/test/FetchTest.ts",
 		qualifier: "FetchTest",
 		importLine: 'import { FetchTest } from "@monarcode/effetch/test";',
-		intro: "`@monarcode/effetch/test` exports one name, the `FetchTest` namespace. Its members:",
+		intro: "`@monarcode/effetch/test` exports one name, the `FetchTest` namespace. Import it as follows:",
 		groups: [
 			["Fake backend", ["Test with a fake backend", "/docs/testing"]],
 			[
@@ -130,8 +129,6 @@ const PAGES = [
 		files: { "src/test/FetchTest.ts": "Fake backend" },
 		names: {
 			Recorder: "Recorded requests",
-			RequestBody: "Recorded requests",
-			RequestQuery: "Recorded requests",
 			requests: "Recorded requests",
 			SentRequest: "Recorded requests",
 		},
@@ -304,12 +301,25 @@ ${page.intro}
 \`\`\`ts
 ${importLine}
 \`\`\`
+
+Its exports follow, grouped by the guide that covers them. Each one has the
+first paragraph of its docs, and what it needs and how it fails; your
+editor shows the rest, with an example, when you hover the name.
 `;
 	for (const [title, [guide, guideUrl]] of page.groups) {
 		body += `\n## ${title} [#${slug(title)}]\n\nGuide: [${guide}](${guideUrl}).\n`;
+		const first = (entry) => {
+			const index = (page.first ?? []).indexOf(entry.short);
+			return index === -1 ? Infinity : index;
+		};
 		const entries = page.top
 			.filter((entry) => entry.group === title)
-			.sort((a, b) => Number(b.value) - Number(a.value) || byName(a, b));
+			.sort(
+				(a, b) =>
+					first(a) - first(b) ||
+					Number(b.value) - Number(a.value) ||
+					byName(a, b),
+			);
 		for (const entry of entries.flatMap((entry) => [
 			entry,
 			...entry.members,
@@ -323,12 +333,24 @@ ${importLine}
 			}
 		}
 	}
+	body += "\n## Related pages\n\n";
+	body +=
+		"- [Entry points](/docs/reference): what each entry point exports.\n";
+	for (const other of PAGES)
+		if (other.slug !== page.slug)
+			body += `- [${other.title}](/docs/reference/${other.slug}): ${other.related}\n`;
+	body +=
+		"- [Compatibility](/docs/reference/compatibility): the Effect, runtime and TypeScript versions Effetch supports.\n";
 	return body;
 }
 
+/** A paragraph that says what a value needs, or how it fails or dies. */
+const BEHAVIOR = /\b(?:fails|dies|throws|is a defect|needs|requires)\b/i;
+
 /**
  * An entry's first paragraph, and the list after it, such as a type's
- * values or a function's behavior. An entry with a type table keeps the list
+ * values or a function's behavior, plus, for a value, each later paragraph
+ * that says what it needs or how it fails. An entry with a type table keeps the list
  * only when the paragraph leads into it ("…, and"), since the table lists the
  * properties. A link to an export on the reference becomes a link to its
  * entry; others become code.
@@ -349,11 +371,27 @@ function summaryOf(entry, page, checker, targets) {
 			text += link(part, page, checker, targets);
 		} else text += part.text;
 	}
-	const blocks = text.trim().split(/\n\s*\n/);
+	const blocks = text
+		.replace(/```[\s\S]*?```/g, "")
+		.trim()
+		.split(/\n\s*\n/);
 	const kept = [blocks[0] ?? ""];
 	const unfinished = !/[.!?]\s*$/.test(blocks[0] ?? "");
-	if ((unfinished || !entry.table) && /^\s*- /.test(blocks[1] ?? ""))
+	let next = 1;
+	if ((unfinished || !entry.table) && /^\s*- /.test(blocks[1] ?? "")) {
 		kept.push(blocks[1]);
+		next = 2;
+	}
+	// A value also keeps what it needs and how it goes wrong, so the page
+	// says when a call fails or dies without opening the declaration.
+	if (entry.value)
+		for (let i = next; i < blocks.length; i++) {
+			const block = blocks[i];
+			if (/^\s*- /.test(block) || !BEHAVIOR.test(block)) continue;
+			kept.push(block);
+			if (/:\s*$/.test(block) && /^\s*- /.test(blocks[i + 1] ?? ""))
+				kept.push(blocks[++i]);
+		}
 	return kept.map(toMarkdown).join("\n\n");
 }
 

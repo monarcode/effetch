@@ -171,7 +171,7 @@ export interface Client<
 	 * The configured `HttpClient` underneath. It adds the base URL and the
 	 * default headers to the requests you give it and runs every plugin
 	 * with its defaults, but does no status check, no decoding, no
-	 * `statusErrors` and no `onError` hooks.
+	 * `statusErrors`, and runs no `onError` or `onExit` hooks.
 	 *
 	 * Transport failures are `NetworkError`s, next to the plugins' own
 	 * errors. Use it for what the methods don't cover, such as a response
@@ -536,7 +536,7 @@ export interface Client<
 
 	/**
 	 * Binds an endpoint defined with `Fetch.endpoint` to this client. You get
-	 * back the same endpoint `client.endpoint` makes from the same route and
+	 * back the same endpoint `api.endpoint` makes from the same route and
 	 * definition: `api.bind(Fetch.endpoint("GET /users/:id", { output: User }))`
 	 * is `api.endpoint("GET /users/:id", { output: User })`.
 	 *
@@ -597,7 +597,7 @@ export interface Client<
 	 * Binds a record of endpoint definitions at once: each entry is bound as
 	 * {@link Client.bind} binds it, and keeps its name. An entry is a definition
 	 * made with `Fetch.endpoint`, or a `[definition, options]` pair, where
-	 * `options` are the options (`BindOptions`) `client.bind` takes.
+	 * `options` are the options (`BindOptions`) `api.bind` takes.
 	 *
 	 * Binding does nothing on its own: no request is sent until an endpoint
 	 * is called. An entry that isn't a definition throws, since that's a
@@ -652,13 +652,15 @@ export interface Client<
 }
 
 /**
- * Makes a {@link Client}.
+ * Makes a {@link Client}. `make` is an Effect: it needs an `HttpClient`
+ * (for example `FetchHttpClient.layer`, or a mock in tests), whatever the
+ * `baseUrl` Effect needs, and the services the plugins need, and it fails
+ * with the `baseUrl` Effect's error.
  *
- * `make` is an Effect: it needs an `HttpClient` (for example
- * `FetchHttpClient.layer`, or a mock in tests), whatever the `baseUrl`
- * Effect needs, and the services the plugins need. The client holds on to
- * all of them, so its calls need nothing from the environment apart from
- * the services of the schemas they decode and encode with.
+ * The client holds on to those services, so its calls need nothing from
+ * the environment apart from the services of the schemas they decode and
+ * encode with (the call's or endpoint's own, and the client's
+ * `defaultError` and `statusErrors`).
  *
  * Calls run with the services and references `make` had, plus those of
  * the calling fiber, which win: a reference provided around one call (such

@@ -1,10 +1,14 @@
 ---
 title: Catch errors
-description: Handle an error by its tag, or one status.
+description: Handle an error by its tag or its status, and read the API's error body.
 ---
 
-This page shows how to handle a call's errors: by their tag, or by the
-response's status. For the errors themselves, see
+When a call fails, you usually want to do something specific: show "You're
+offline" for a network error, treat a 404 as "nothing there", or show the
+message the API sent back. Effetch's errors are tagged, so you can pick out
+each one by name and leave the rest for code further up. This page shows how
+to catch errors by tag, read the body the API sent with an error, and handle
+one status at a time. For the errors themselves, see
 [Call errors](/docs/errors).
 
 ## Catch errors by tag
@@ -37,18 +41,94 @@ export const todo = (id: number) =>
 
 Each handler gets the error with its fields. You don't have to handle them
 all: the ones you leave out stay in the type, for code further up to handle.
-For a single error, `Effect.catchTag` does the same.
+To catch a single error, use `Effect.catchTag`.
 
-`Fetch.FetchError` is the union of the three errors, and `Fetch.isFetchError`
-tells them apart from other values.
+For your own helpers, `Fetch.FetchError` is the union of the three errors,
+and `Fetch.isFetchError` tells them apart from other values.
+
+## Read the error body
+
+APIs usually explain an error in its body, such as
+`{ "code": "not_found" }`. Give Effetch a schema for that body, and
+`HttpError.body` is decoded and typed. You can set the schema in two places:
+
+- `defaultError`, on the client, applies to every call.
+- `error`, on a call or an [endpoint](/docs/endpoints), replaces it for that
+  call.
+
+The following client sets `defaultError`, and one call replaces it with a
+schema of its own:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+// Most errors: { "code": "not_found" }
+const ApiError = Schema.Struct({ code: Schema.String });
+// Errors from POST /todos: { "code": "invalid", "fields": ["title"] }
+const ValidationError = Schema.Struct({
+  code: Schema.String,
+  fields: Schema.Array(Schema.String),
+});
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  defaultError: ApiError,
+}) {}
+
+export const program = Effect.gen(function* () {
+  const api = yield* Api;
+
+  // error.body is { code } | undefined, from defaultError
+  const todo = yield* api
+    .get("/todos/1", { output: Todo })
+    .pipe(
+      Effect.catchTag("HttpError", (error) =>
+        Effect.succeed(`Failed: ${error.body?.code ?? error.status}`),
+      ),
+    );
+
+  // error.body is { code, fields } | undefined, from error
+  const created = yield* api
+    .post("/todos", {
+      body: { title: "" },
+      output: Todo,
+      error: ValidationError,
+    })
+    .pipe(
+      Effect.catchTag("HttpError", (error) =>
+        Effect.succeed(`Check ${error.body?.fields.join(", ") ?? "the form"}`),
+      ),
+    );
+
+  return { todo, created };
+});
+```
+
+`body` is typed as your schema or `undefined`, because the server doesn't
+always send what the schema expects:
+
+- With a schema, `body` is the decoded body, or `undefined` when it doesn't
+  match.
+- Without one, `body` is the parsed JSON, typed `unknown`.
+- With or without one, `body` is `undefined` when the response body is empty
+  or isn't JSON.
+
+Reading the body never fails the call: you always get the `HttpError`. The
+raw body is always on `text`, or `""` if it couldn't be read.
+
+For your own function signatures, `Fetch.HttpError.With<B>` is the type of an
+`HttpError` whose `body` is `B | undefined`.
 
 ## Catch a status
 
-To handle one or more statuses, use `Fetch.catchStatus`. For the common "a
-404 means there's nothing there", `Fetch.optional` succeeds with
-`Option.none()` on a 404 and `Option.some(value)` otherwise.
-
-The following example uses both:
+That covers errors by tag. Often, though, you care about one status rather
+than every `HttpError`. For that, use `Fetch.catchStatus`, or `Fetch.optional`
+for the common "a 404 means there's nothing there":
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -74,25 +154,35 @@ export const me = api
   );
 ```
 
-Keep the following in mind when you catch a status:
+`Fetch.optional` succeeds with `Option.some(value)` when the call succeeds,
+and with `Option.none()` on a 404. Every other error, other statuses
+included, passes through.
+
+`Fetch.catchStatus` takes one status or a list. Keep the following in mind
+when you use it:
 
 - The handler gets the `HttpError`, with `status` narrowed to the statuses you
   gave, and what it returns joins the call's type.
 - `HttpError` stays in the error type, since other statuses still fail with
   it.
-- Both work on endpoint calls too, and `catchStatus` also takes the effect
-  first: `Fetch.catchStatus(effect, 404, handler)`.
-- A status that [`statusErrors`](/docs/errors/status-errors) maps fails with
-  your error, not an `HttpError`, so `catchStatus` and `optional` never see
-  it. Catch your error by its tag instead.
-- The handler's `error.body` is `unknown`. For the typed body of an `error`
-  schema, use `Effect.catchTag("HttpError", …)`.
+- The handler's `error.body` is `unknown`. For the body typed by an `error`
+  schema, use `Effect.catchTag("HttpError", …)` and check `error.status`
+  yourself.
+- Both work on endpoint calls too, and on any Effect whose errors include
+  `HttpError`. `catchStatus` also takes the effect first:
+  `Fetch.catchStatus(effect, 404, handler)`.
+
+A status that [`statusErrors`](/docs/errors/status-errors) maps fails with
+your error, not an `HttpError`, so `catchStatus` and `optional` don't get it.
+Catch your error by its tag instead. That only holds when the body decodes
+with your schema, though: a mapped status whose body is empty or doesn't
+match still fails with an `HttpError`, which `catchStatus` does catch.
 
 ## What's next
 
-- [Typed error bodies](/docs/errors/error-bodies): type `error.body` with a
-  schema.
 - [Errors by status](/docs/errors/status-errors): fail with your own error
   for a status, and catch it by its tag.
-- [Test errors and statuses](/docs/testing/errors): check your handlers against a fake
-  backend.
+- [Client configuration](/docs/clients/configuration): set `defaultError`
+  with the client's other options.
+- [Test errors and statuses](/docs/testing/errors): check your handlers
+  against a fake backend.

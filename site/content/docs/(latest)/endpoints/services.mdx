@@ -3,15 +3,17 @@ title: Share endpoints as a service
 description: Bind a record of endpoint definitions to a client once, and share them as an Effect service.
 ---
 
-This page shows you how to bind your endpoint definitions to a client with
-`Fetch.Endpoints`, so code anywhere in your app can call them through one
-service.
+Your definitions can't make calls until they're bound to a client, and you
+want that done once, not in every function that calls them. `Fetch.Endpoints`
+binds a record of definitions when its layer is built, and shares the result
+as an Effect service, so any code in your app can `yield*` it. This page
+shows how to declare one, and what the class gives you.
 
 ## Declare the service
 
-`Fetch.Endpoints` binds a record of definitions to a client and shares them as
-a service, the way `Fetch.Service` does for the client. It takes the
-service's id, the client's service and the record:
+`Fetch.Endpoints` does for endpoints what `Fetch.Service` does for the
+client. It takes the service's id, the client's service and the record of
+definitions:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -33,7 +35,10 @@ const Credentials = Schema.Struct({
 const Session = Schema.Struct({ token: Schema.String });
 
 const getUser = Fetch.endpoint("GET /users/:id", { output: User });
-const listUsers = Fetch.endpoint("GET /users", { output: Schema.Array(User) });
+const listUsers = Fetch.endpoint("GET /users", {
+  query: Schema.Struct({ page: Schema.optional(Schema.Finite) }),
+  output: Schema.Array(User),
+});
 const createUser = Fetch.endpoint("POST /users", {
   input: NewUser,
   output: User,
@@ -70,6 +75,15 @@ export const AppLayer = UserApi.layer.pipe(
 );
 ```
 
+Most entries are a definition. An entry can also be a
+`[definition, options]` pair, with the options `api.bind` takes: `headers`,
+and `plugins` overrides, which are checked against the client's plugins.
+Here, `login` turns off the `bearer` plugin, so logging in sends no token
+(see [Built-in plugins](/docs/plugins)).
+
+`Layer.provideMerge` keeps `Api` in the layer's output, so code can still
+`yield* Api` for one-off calls.
+
 ## What the class gives you
 
 Like `Fetch.Service`, the class gives you three things:
@@ -77,25 +91,28 @@ Like `Fetch.Service`, the class gives you three things:
 - **`UserApi` is the service.** `yield* UserApi` gives the endpoints, each
   typed with the client's plugins, `defaultError` and `statusErrors`.
 - **`UserApi.layer` binds them** to the client once, when it's built. It
-  needs the client's service, here `Api`. The client can also be a service
-  you wrote by hand.
+  needs the client's service, here `Api`, and never fails. The client can
+  also be a service you wrote by hand.
 - **`UserApi.definitions` is the record you passed**, frozen. You can read
-  it when the module loads.
+  it when the module loads, without building anything.
 
-`Layer.provideMerge` keeps `Api` in the layer's output, so code can still
-`yield* Api` for one-off calls.
+Two things to keep in mind when you declare one:
 
-## Give options that depend on the client
+- **Give each class its own id.** The id, `"UserApi"` here, is the
+  service's identity at run time, as with any Effect service. Two classes
+  with the same id are the same service.
+- **Each entry is checked when the class is declared.** An entry that isn't
+  a definition or a `[definition, options]` pair throws then, so the mistake
+  shows up when the module is imported.
 
-A definition doesn't know its client, so the following options depend on
-the binding:
+## How bound endpoints get the client's defaults
 
-- **Plugin overrides are given when binding,** as in the `login` pair in the
-  example, where they're checked against the client's plugins. A definition
-  takes no `plugins`.
-- **A definition without an `error` schema** uses the `defaultError` of the
-  client it's bound to.
-- **Headers can be given in both.** The binding's win over the definition's.
+Each endpoint is bound to the client, so it picks up what the client
+holds. A definition without an `error` schema decodes error bodies with the
+client's `defaultError`, and the client's `statusErrors` are tried after
+the endpoint's. Headers can come from the definition and from the pair,
+and the pair's win. The rules for headers, plugin overrides and schemas are
+in [How defaults combine](/docs/endpoints/defining#how-defaults-combine).
 
 ## What's next
 

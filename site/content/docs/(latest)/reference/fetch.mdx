@@ -1,31 +1,41 @@
 ---
 title: "Fetch"
-description: "Every member of the Fetch namespace: clients, calls, errors, plugins, endpoints, streams and pages."
+description: "Every member of the Fetch namespace: clients, calls, responses, uploads, errors, plugins, endpoints, streaming and pagination."
 ---
 
 {/* Written by scripts/reference-docs.mjs from the JSDoc. Run `pnpm run docs:reference` after changing it; don't edit this page. */}
 
-`@monarcode/effetch` exports one name, the `Fetch` namespace. Its members, grouped by the guide that covers them:
+`@monarcode/effetch` exports one name, the `Fetch` namespace. Import it as follows:
 
 ```ts
 import { Fetch } from "@monarcode/effetch";
 ```
 
+Its exports follow, grouped by the guide that covers them. Each one has the
+first paragraph of its docs, and what it needs and how it fails; your
+editor shows the rest, with an example, when you hover the name.
+
 ## Clients [#clients]
 
 Guide: [Declare a client](/docs/clients).
 
-### Fetch.isService [#isservice]
-
-Returns `true` if `u` is a class made by [`Service`](#service), or a class that extends one. `false` for anything else, including a key made with `Context.Service` and a [`Client`](#client).
-
-### Fetch.make [#make]
-
-Makes a [`Client`](#client).
-
 ### Fetch.Service [#service]
 
 Declares a client as a service class: one class that is the client's service key, its layer and its config.
+
+It replaces writing `make`, `Context.Service` and `Layer.effect` by hand. The config has to be known when the module loads: a `baseUrl` Effect (such as a `Config`) works, since it only runs when the layer is built. A config that is itself the result of an Effect, or one made per request, needs `make` and a hand-written service.
+
+### Fetch.make [#make]
+
+Makes a [`Client`](#client). `make` is an Effect: it needs an `HttpClient` (for example `FetchHttpClient.layer`, or a mock in tests), whatever the `baseUrl` Effect needs, and the services the plugins need, and it fails with the `baseUrl` Effect's error.
+
+Invalid input is a defect, not a typed error, because it's a mistake in the calling code: two plugins with the same name, a missing path param, a body that can't be encoded, a body on a `GET` or `HEAD` request, a `baseUrl` with a query string or a fragment, and, outside browsers, a relative URL without a `baseUrl` (browsers resolve it against the page's URL).
+
+An `HttpClient` that fails on non-2xx statuses (`filterStatusOk`) works too: Effetch takes the response back and reports the usual `HttpError`.
+
+### Fetch.isService [#isservice]
+
+Checks whether `u` is a class made by [`Service`](#service), or a class that extends one: `true` if it is, `false` for anything else, including a key made with `Context.Service` and a [`Client`](#client).
 
 ### Fetch.Client [#client]
 
@@ -55,7 +65,7 @@ Any class made by [`Service`](#service), whatever its config. What [`isService`]
 
 ## Calls [#calls]
 
-Guide: [Methods](/docs/calls).
+Guide: [Make a call](/docs/calls).
 
 ### Fetch.AnySchema [#anyschema]
 
@@ -175,7 +185,7 @@ Reads a 2xx body as bytes, a `Uint8Array`, for `output`. Use it for images, PDFs
 Reads a 2xx body as text, for `output`. Use it for plain-text tokens, CSV and other bodies that aren't JSON.
 
 - `Fetch.text()` gives the text as it was sent, as a `string`. An empty body is `""`.
-- `Fetch.text(schema)` reads a single value, such as a count or a status: it trims the text, then decodes it with `schema`, whose encoded side is a string, such as `Schema.NumberFromString`. An empty body fails, as for JSON.
+- `Fetch.text(schema)` reads a single value, such as a count or a status: it trims the text, then decodes it with `schema`, whose encoded side is a string, such as `Schema.NumberFromString`. An empty body fails with a `DecodeError`, where JSON would decode it as `null`.
 
 ### Fetch.BytesSchema [#bytesschema]
 
@@ -203,6 +213,8 @@ Guide: [Upload files](/docs/calls/uploads).
 ### Fetch.multipart [#multipart]
 
 Sends a body as `multipart/form-data`, for `input`: the body is typed and checked by `schema`, as for JSON, then sent as `FormData`. Use it for file uploads.
+
+A form can't hold a nested object or a list of lists: TypeScript rejects most schemas that encode to one, and a value that does at runtime makes the call die. A struct shaped like a [`NativeFile`](#nativefile), `{ uri, name }`, passes TypeScript, but isn't a file unless it's an [`UploadFile`](#uploadfile), so it dies too. To send one, encode it to a string in the schema, such as with `Schema.fromJsonString`.
 
 ### Fetch.UploadFile [#uploadfile]
 
@@ -247,13 +259,32 @@ Handles an `HttpError` with one of the given statuses, for one call: `f` gets th
 - `HttpError` stays in the error type, since other statuses can still fail. `f`'s own errors are added.
 - It works on any Effect whose errors include `HttpError`: calls, endpoints, and Effects built on them.
 
+For a `404` that means "not found", [`optional`](#optional) gives an `Option` instead. Use `statusErrors` when a status means the same domain error for every caller. When `statusErrors` maps a status and the body decodes with the mapped schema, the call fails with the mapped error, so `catchStatus` doesn't see it. An empty or non-matching body is still an `HttpError`, which `catchStatus` handles.
+
 ### Fetch.DecodeError [#decodeerror]
 
-A 2xx response body didn't match the call's `output` schema, wasn't valid JSON, or couldn't be read.
+The error a call fails with when a 2xx response body doesn't match the call's `output` schema, isn't valid JSON, or can't be read. A stream fails with it too, when a value doesn't decode or the body breaks off. Its fields:
+
+- `method`: the request's HTTP method.
+- `url`: the request URL without its query string.
+- `status`: the response's status code.
+- `issue`: what went wrong: the schema issue when the body doesn't match `output`, the `SyntaxError` when the body isn't valid JSON, or the `HttpClientError` when the body couldn't be read.
+- `message`: a readable summary of `issue`.
+
+An empty body (204, HEAD, …) is decoded as JSON `null`, so it only passes schemas that accept nothing, such as `Schema.Void`. With `Fetch.text(schema)`, an empty body fails too.
+
+A stream (`api.sse`, `api.ndjson` or a `stream` endpoint) fails with a `DecodeError` while it's read: when an event's data or a line doesn't decode (the message names it, as in `Line 3 doesn't match the output schema`), when the body breaks off, and, for `api.sse`, when the response's `Content-Type` isn't `text/event-stream`.
 
 ### Fetch.HttpError [#httperror]
 
-The server answered with a non-2xx status.
+The error a call fails with when the server answers with a status outside 200–299. Its fields:
+
+- `method`: the request's HTTP method.
+- `url`: the request URL without its query string, so secrets in query parameters stay out of logs.
+- `status`: the response's status code.
+- `headers`: the response headers. They're Effect `Headers`, so sensitive ones (`set-cookie`, `authorization`, …) print as `<redacted>` when the error is logged or serialized.
+- `text`: the raw response body, always (`""` if it couldn't be read).
+- `body`: the body decoded with the call's `error` schema (or the client's `defaultError`), or `undefined` if it didn't match. Without an `error` schema, `body` is the parsed JSON when `text` is valid JSON, else `undefined`. An empty body is always `undefined`. Reading `body` never fails the call.
 
 ### Fetch.HttpError.With [#httperror-with]
 
@@ -261,15 +292,21 @@ An [`HttpError`](#httperror) whose `body` was decoded as `B`. `body` is `undefin
 
 ### Fetch.isFetchError [#isfetcherror]
 
-Returns `true` if `u` is a [`NetworkError`](#networkerror), [`HttpError`](#httperror) or [`DecodeError`](#decodeerror).
+Checks whether `u` is a [`NetworkError`](#networkerror), [`HttpError`](#httperror) or [`DecodeError`](#decodeerror): `true` if it is, `false` otherwise.
 
 ### Fetch.NetworkError [#networkerror]
 
-The request never produced a response: DNS failure, connection refused, CORS rejection, the device is offline, and so on.
+The error a call fails with when its request gets no response: a DNS failure, a refused connection, a CORS rejection, a device that's offline, and so on. Its fields:
+
+- `method`: the request's HTTP method.
+- `url`: the request URL without its query string, so secrets in query parameters stay out of logs.
+- `cause`: the underlying error from the platform's HTTP client.
 
 ### Fetch.optional [#optional]
 
 Turns a `404` into `Option.none()`, and a success into `Option.some`, for one call: the call succeeds with an `Option` of its value. Other errors, `HttpError`s with other statuses included, pass through.
+
+It's [`catchStatus`](#catchstatus)`(404, …)` for the common case of a resource that may not exist. As there, a `404` whose body decodes with a schema `statusErrors` maps it to fails with the mapped error, and doesn't give `Option.none()`.
 
 ### Fetch.CallError [#callerror]
 
@@ -336,7 +373,7 @@ The `onError` hook. `error` is a `FetchError`, another plugin's error, one of th
 
 ### Fetch.Plugin.OnExit [#plugin-onexit]
 
-The `onExit` hook: runs once per call, when it's over, with the call's `Exit`. On success that holds the call's result: the decoded `output`, or the response for a call without one, or, with `responseMode: "decoded-and-response"`, a pair of that and the response. Otherwise it holds the cause of its failure, defect or interruption. To tell whether the body was read, compare the result, or its first item, with `ctx.response`: a call returns the response itself only when it didn't decode it. It sees the final outcome, `statusErrors` and decoding included, which suits logging and metrics.
+The `onExit` hook: runs one time per call, after it's over, with the call's `Exit`. On success that holds the call's result: the decoded `output`, or the response for a call without one, or, with `responseMode: "decoded-and-response"`, a pair of that and the response. Otherwise it holds the cause of its failure, defect or interruption. To tell whether the body was read, compare the result, or its first item, with `ctx.response`: a call returns the response itself only when it didn't decode it. It sees the final outcome, `statusErrors` and decoding included, which suits logging and metrics.
 
 ### Fetch.Plugin.OnRequest [#plugin-onrequest]
 
@@ -352,7 +389,7 @@ The options type of plugin `P`.
 
 ### Fetch.Plugin.Override [#plugin-override]
 
-What one plugin accepts as a per-request override: `false` to skip it, or a partial of its options. Plugins without options accept only `false`. Keys set to `undefined` keep their default.
+What one plugin accepts as a per-request override: `false` to skip it, or a partial of its options. Plugins without options accept only `false`. A key whose value is `undefined` at runtime keeps its default.
 
 ### Fetch.Plugin.Overrides [#plugin-overrides]
 
@@ -399,26 +436,28 @@ What a plugin's `onExit` hook receives besides the call's `Exit`: the fields of 
   name="PluginExitContext"
 />
 
-## Endpoints and services [#endpoints-and-services]
+## Endpoint definitions [#endpoint-definitions]
 
 Guide: [Endpoints or methods](/docs/endpoints).
 
 ### Fetch.endpoint [#endpoint]
 
-Defines an endpoint without a client: a route like `"GET /users/:id"` and the schemas and headers to call it with. You get back plain data, an [`UnboundEndpoint`](#unboundendpoint), that you can export from module level next to its schemas. `client.bind(definition)` turns it into an [`Endpoint`](#endpoint-type) of that client: the same one `client.endpoint(route, definition)` makes.
+Defines an endpoint without a client: a route like `"GET /users/:id"` and the schemas and headers to call it with. You get back plain data, an [`UnboundEndpoint`](#unboundendpoint), that you can export from module level next to its schemas. `api.bind(definition)` turns it into an [`Endpoint`](#endpoint-type) of that client: the same one `api.endpoint(route, definition)` makes.
 
-- The route is checked as you type, as with `client.endpoint`. A route that isn't valid (which the types prevent) throws here, when the module loads.
+- The route is checked as you type, as with `api.endpoint`. A route that isn't valid (which the types prevent) throws here, when the module loads.
 - With an `input` schema, `body` is required on every call and typed by it. `GET`, `HEAD`, `OPTIONS` and `TRACE` endpoints take no `input`.
 - Without `error`, the endpoint uses the `defaultError` of the client it's bound to.
 - `statusErrors` (see [`StatusErrorMap`](#statuserrormap)) are tried before those of the client it's bound to.
 - With a `query` schema (see [`QuerySchema`](#queryschema)), each call's `query` is typed and encoded by it, and required when the schema has required fields.
 - With `stream: "sse"` or `stream: "ndjson"`, each call of the bound endpoint returns a `Stream` of the body's values. A `stream` that isn't one of those, or that comes with `responseMode` or a `Fetch.bytes()` output, throws here.
-- Plugin overrides are given when binding: a definition doesn't know which plugins a client has.
+- Plugin overrides are given when binding: a definition has no client yet, so it can't check plugin names.
 - `definition.url(options)` builds the URL a call would go to, without the client's `baseUrl`.
 
 ### Fetch.Endpoints [#endpoints]
 
 Declares a module's endpoints as a service class: one class that is the service key, its layer and its definitions.
+
+Each entry is checked when the class is declared: one that isn't a definition throws then, as a malformed route does in `Fetch.endpoint`.
 
 ### Fetch.AnyUnboundEndpoint [#anyunboundendpoint]
 
@@ -426,11 +465,11 @@ Any [`UnboundEndpoint`](#unboundendpoint), whatever its route and schemas. Use i
 
 ### Fetch.BindAllMethod [#bindallmethod]
 
-The signature of `client.bindAll`: binds a record of definitions at once, as `client.bind` binds each one. `Ps`, `DefaultEB` and `ClientSE` are the client's, as in [`BindMethod`](#bindmethod).
+The signature of `api.bindAll`: binds a record of definitions at once, as `api.bind` binds each one. `Ps`, `DefaultEB` and `ClientSE` are the client's, as in [`BindMethod`](#bindmethod).
 
 ### Fetch.BindMethod [#bindmethod]
 
-The signature of `client.bind`: turns an [`UnboundEndpoint`](#unboundendpoint) into an [`Endpoint`](#endpoint-type) of the client, the same one `client.endpoint` makes from the same route and definition.
+The signature of `api.bind`: turns an [`UnboundEndpoint`](#unboundendpoint) into an [`Endpoint`](#endpoint-type) of the client, the same one `api.endpoint` makes from the same route and definition.
 
 - `Ps`: the client's plugins.
 - `DefaultEB`: the client's `defaultError` schema, used when the definition has no `error`.
@@ -438,7 +477,7 @@ The signature of `client.bind`: turns an [`UnboundEndpoint`](#unboundendpoint) i
 
 ### Fetch.BindOptions [#bindoptions]
 
-What `client.bind` takes besides the definition: headers and plugin overrides for every call of the bound endpoint.
+What `api.bind` takes besides the definition: headers and plugin overrides for every call of the bound endpoint.
 
 <auto-type-table
   path="node_modules/@monarcode/effetch/dist/Endpoint.d.ts"
@@ -447,15 +486,15 @@ What `client.bind` takes besides the definition: headers and plugin overrides fo
 
 ### Fetch.BoundEndpoint [#boundendpoint]
 
-The endpoint a client makes from one entry of [`EndpointDefinitions`](#endpointdefinitions): what `client.bind` returns for that definition. `Ps`, `DefaultEB` and `ClientSE` are the client's, as in [`BindMethod`](#bindmethod).
+The endpoint a client makes from one entry of [`EndpointDefinitions`](#endpointdefinitions): what `api.bind` returns for that definition. `Ps`, `DefaultEB` and `ClientSE` are the client's, as in [`BindMethod`](#bindmethod).
 
 ### Fetch.BoundEndpoints [#boundendpoints]
 
-The endpoints `client.bindAll` makes from a record of [`EndpointDefinitions`](#endpointdefinitions): one [`Endpoint`](#endpoint-type) for each entry, under the same name.
+The endpoints `api.bindAll` makes from a record of [`EndpointDefinitions`](#endpointdefinitions): one [`Endpoint`](#endpoint-type) for each entry, under the same name.
 
 ### Fetch.Endpoint [#endpoint-type]
 
-An endpoint made by `client.endpoint` or `client.bind`: a function that sends its request with the options of one call, and returns the same Effect as the equivalent client method. With `stream`, it returns a `Stream` of the body's values instead, as `api.sse` and `api.ndjson` do. To page through a list endpoint, pass it to `Fetch.paginate`.
+An endpoint made by `api.endpoint` or `api.bind`: a function that sends its request with the options of one call, and returns the same Effect as the equivalent client method. With `stream`, it returns a `Stream` of the body's values instead, as `api.sse` and `api.ndjson` do. To page through a list endpoint, pass it to `Fetch.paginate`.
 
 ### Fetch.EndpointArgs [#endpointargs]
 
@@ -476,15 +515,15 @@ What an endpoint is defined with, besides its route. Everything is optional.
 
 ### Fetch.EndpointDefinitions [#endpointdefinitions]
 
-What `client.bindAll` and `Fetch.Endpoints` take: a record of definitions made with [`endpoint`](#endpoint), by the name each endpoint gets, each entry checked by [`EndpointEntry`](#endpointentry). `D` is the record's own type, and `Ps` the client's plugins. Names are strings: symbol keys are left out.
+What `api.bindAll` and `Fetch.Endpoints` take: a record of definitions made with [`endpoint`](#endpoint), by the name each endpoint gets, each entry checked by [`EndpointEntry`](#endpointentry). `D` is the record's own type, and `Ps` the client's plugins. Names are strings: symbol keys are left out.
 
 ### Fetch.EndpointEntry [#endpointentry]
 
-How `client.bindAll` and `Fetch.Endpoints` check one entry of a record of definitions, given the entry's own type `E` and the client's plugins `Ps`. An entry is a definition made with [`endpoint`](#endpoint), or a pair of a definition and the [`BindOptions`](#bindoptions) to bind it with. A pair's options are checked as `client.bind` checks them, so a misspelt option or plugin name is an error.
+How `api.bindAll` and `Fetch.Endpoints` check one entry of a record of definitions, given the entry's own type `E` and the client's plugins `Ps`. An entry is a definition made with [`endpoint`](#endpoint), or a pair of a definition and the [`BindOptions`](#bindoptions) to bind it with. A pair's options are checked as `api.bind` checks them, so a misspelled option or plugin name is an error.
 
 ### Fetch.EndpointMethod [#endpointmethod]
 
-The signature of `client.endpoint`: defines an [`Endpoint`](#endpoint-type) from a route and an [`EndpointDefinition`](#endpointdefinition).
+The signature of `api.endpoint`: defines an [`Endpoint`](#endpoint-type) from a route and an [`EndpointDefinition`](#endpointdefinition).
 
 - `Ps`: the client's plugins.
 - `DefaultEB`: the client's `defaultError` schema, used when the endpoint has no `error`.
@@ -545,7 +584,7 @@ What [`endpoint`](#endpoint) defines an endpoint with, besides its route: an [`E
 
 ### Fetch.UnboundEndpoint [#unboundendpoint]
 
-An endpoint defined without a client, by [`endpoint`](#endpoint): its route, schemas and headers, as plain data. `client.bind` turns it into an [`Endpoint`](#endpoint-type) of that client, the same one `client.endpoint` makes from the same route and definition.
+An endpoint defined without a client, by [`endpoint`](#endpoint): its route, schemas and headers, as plain data. `api.bind` turns it into an [`Endpoint`](#endpoint-type) of that client, the same one `api.endpoint` makes from the same route and definition.
 
 ### Fetch.ValidRoute [#validroute]
 
@@ -603,9 +642,13 @@ Guide: [Pagination](/docs/pagination).
 
 Pages through a list, as a `Stream` of pages: it calls `endpoint` (a [`PageEndpoint`](#pageendpoint)) for the first page, then for the next one while `next` gives a state, and stops after the page for which it gives `Option.none()`. See [`PaginateOptions`](#paginateoptions) for `start`, `request` and `next`. Each page is one value of the stream, so a page that is a list stays a list: `Stream.flattenIterable` gives its items instead.
 
+The stream is lazy: it sends a page's call only when the page is pulled, so `Stream.take(1)` sends one. A call that fails fails the stream with the call's error.
+
+Throws when `endpoint` isn't a bound endpoint (bind a definition made by `Fetch.endpoint` first), or is a stream endpoint.
+
 ### Fetch.PageEndpoint [#pageendpoint]
 
-An endpoint [`paginate`](#paginate) can page through: one made by `client.endpoint` or `client.bind`, whose calls return an `Effect`. A definition made by `Fetch.endpoint` needs binding first, and a stream endpoint can't be paged.
+An endpoint [`paginate`](#paginate) can page through: one made by `api.endpoint` or `api.bind`, whose calls return an `Effect`. A definition made by `Fetch.endpoint` needs binding first, and a stream endpoint can't be paged.
 
 ### Fetch.PageOf [#pageof]
 
@@ -627,3 +670,10 @@ How [`paginate`](#paginate) goes from page to page, with a state `S`, such as a 
   path="node_modules/@monarcode/effetch/dist/Paginate.d.ts"
   name="PaginateOptions"
 />
+
+## Related pages
+
+- [Entry points](/docs/reference): what each entry point exports.
+- [Plugins](/docs/reference/plugins): the built-in plugins and their options.
+- [FetchTest](/docs/reference/fetch-test): the fake backend for tests.
+- [Compatibility](/docs/reference/compatibility): the Effect, runtime and TypeScript versions Effetch supports.

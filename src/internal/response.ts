@@ -191,7 +191,7 @@ export const decodeText = (
  * `Schema.NullOr` accept. A JSON `null` body is therefore
  * indistinguishable from an empty one. Read as text by `Fetch.text()`, an
  * empty body is `""`. Read by `Fetch.text(schema)`, the text is trimmed,
- * and an empty one fails, as for JSON. Read as bytes, it's a `Uint8Array`
+ * and an empty one fails with a `DecodeError`. Read as bytes, it's a `Uint8Array`
  * of length 0, a copy of the body.
  *
  * Fails with a `DecodeError` whose `issue` is:

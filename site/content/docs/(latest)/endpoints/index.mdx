@@ -3,49 +3,102 @@ title: Endpoints or methods
 description: Learn what endpoints add over methods, and when to use each.
 ---
 
-This page explains what an endpoint is, what it adds over the methods, and
-how to choose between them for each call.
+When the same call shows up in a few places, its path and schemas start to
+repeat, and a typo in one copy still compiles. An endpoint saves the call
+once, so every place that uses it stays in step. This page shows what that
+buys you, and when a plain method is still the better choice.
 
-The methods spell out a call's path and schemas where the call is made.
-That's fine for a call made once. Once a call is made from several places,
-you start repeating its path, its schemas and its rules, and a mistake in one
-copy still compiles. An endpoint saves them once, and gives you a function to
-call.
+## What an endpoint is
+
+An endpoint is a call you've saved under a name. Here's the same request as
+a method call and as an endpoint:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+const User = Schema.Struct({ id: Schema.Finite, name: Schema.String });
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+// Saved once, with its route and schema, and bound to the client
+const getUser = Fetch.endpoint("GET /users/:id", { output: User });
+
+class Users extends Fetch.Endpoints<Users>()("Users", Api, {
+  get: getUser,
+}) {}
+
+export const program = Effect.gen(function* () {
+  const api = yield* Api;
+  const users = yield* Users;
+
+  // A method call spells out the path and the schema
+  const ada = yield* api.get("/users/:id", {
+    params: { id: 1 },
+    output: User,
+  });
+
+  // An endpoint call passes only what changes
+  const grace = yield* users.get({ params: { id: 2 } });
+
+  return [ada, grace];
+});
+```
+
+Both calls send `GET /users/:id`, and decode the response with `User`. The
+difference is in what you write at the call site.
+
+There are two ways to define an endpoint:
+
+- **`Fetch.endpoint(route, definition)`** gives a definition: plain data,
+  with no client. You can export it from a file next to its schemas, then
+  bind it to a client with `api.bind`, or share a group of them as a
+  service with `Fetch.Endpoints`.
+- **`api.endpoint(route, definition)`** defines and binds in one step, on a
+  client you already have.
+
+Both give the same kind of bound endpoint, which is the function you call.
+[Call an endpoint](/docs/endpoints/calling) compares them.
 
 ## What endpoints add
 
-An HTTP call mixes two kinds of information:
+An HTTP call mixes two kinds of information. Some of it is fixed by the
+API: the route, the schemas for the response, the error body and the
+request body, and rules for that route, such as "logging in sends no
+token". The rest changes on every call: the path's parameters, the query
+values, the body, and the odd one-off header.
 
-| Fixed by the API                                     | Different on every call             |
-| ---------------------------------------------------- | ----------------------------------- |
-| the route; the response, error and body schemas      | path params, query values, the body |
-| rules for that route, such as "login sends no token" | a one-off header or plugin override |
-
-With the methods, you write both at every call site. Three calls to
-`GET /users/:id` repeat the path and the `User` schema three times, and a
-mistake in one of them, such as the wrong schema or a forgotten
-`bearer: false`, still compiles. An endpoint takes the first column once, when
-it's defined, and only the second column when it's called. That gives you:
+With methods, you write both kinds at every call site. Three calls to
+`GET /users/:id` repeat the path and the `User` schema three times. A
+mistake in one of them, such as the wrong schema, or a forgotten
+`bearer: false` (which turns off the `bearer` auth plugin for that call),
+still compiles. An endpoint takes the fixed part once, when it's defined,
+and only the changing part when it's called. That gives you:
 
 - **One place per route.** A path or a schema changes in one line, and the
   service that holds your endpoints lists the API you use.
-- **Stricter types than a method can have.** A method only learns its HTTP
-  method and its `input` at the call, so it has to accept both ways. An
-  endpoint knows them up front: `body` is required when there's an `input`
-  (it's optional with `api.post`), a `GET` endpoint rejects a `body` at
-  compile time (`api.request("GET", …)` only dies at runtime), and the route
-  is checked as you type.
+- **Stricter types than a method can have.** A method gets its HTTP method
+  and its `input` schema only at the call, so its types have to allow every
+  case. An endpoint has both from its definition. `body` is required when
+  there's an `input` (it's optional with `api.post`). A `GET` endpoint
+  rejects a `body` at compile time, while `api.request("GET", …)` only dies
+  at runtime. The route is checked as you type.
 - **Defaults that can't be forgotten.** An endpoint's headers and plugin
   overrides apply to every call.
-- **A name instead of a URL.** Call sites read `users.get(…)`, and `route`,
-  `method` and `path` are there for query keys and log labels.
+- **A name instead of a URL.** Call sites read `users.get(…)`, and the
+  endpoint's `route`, `method` and `path` are there for query keys and log
+  labels.
 
-Endpoints add no new behavior: a call goes through the same plugins,
+Endpoints add no new behavior. A call goes through the same plugins,
 decoding and errors as the method it stands for, so everything in
-[Declare a client](/docs/clients), [Methods](/docs/calls),
+[Declare a client](/docs/clients), [Make a call](/docs/calls),
 [Call errors](/docs/errors) and [Built-in plugins](/docs/plugins) applies to
-both. An endpoint is a saved
-call, not a contract shared with a server. For that, use Effect's `HttpApi`.
+both. An endpoint is a saved call, not a contract shared with a server. For
+that, use Effect's `HttpApi`.
 
 ## When to use an endpoint
 
@@ -60,23 +113,30 @@ Use an endpoint when a call:
 ## When to use a method
 
 Use a method for one-off calls, and for calls whose method or path is only
-known at runtime. Mixing them is normal: keep the client next to its
-endpoints, for the calls that aren't worth one.
+known at runtime. Mixing the two is normal. Keep the client available next
+to its endpoints, for the calls that aren't worth one.
 
 ## Patterns to avoid
 
-Avoid the following:
+The following patterns compile, but cost you what endpoints are for:
 
 - **`api.endpoint(…)(…)` at a call site.** That's a method call written
-  twice: use the method.
+  twice. Use the method.
 - **Making or binding endpoints in code that runs on every request.** Do it
-  once, when the layer that holds them is built, as `Fetch.Endpoints` does.
-- **Passing a bound endpoint's plugin overrides at every call.** A definition
-  can't hold them, since it doesn't know the client's plugins: give them once,
-  when binding, as in `api.bind(login, { plugins: { bearer: false } })`.
-- **Spreading several groups of endpoints into one object.** When two use the
-  same name, the later one silently wins. Nest them instead:
+  once, when the layer that holds them is built, as `Fetch.Endpoints`
+  does.
+- **Passing an endpoint's plugin overrides at every call.** Give them once
+  instead. A `Fetch.endpoint` definition can't hold them, since
+  overrides are checked against a client's plugins, so give them when
+  binding, as in `api.bind(login, { plugins: { bearer: false } })`. An
+  `api.endpoint` definition can hold them directly.
+- **Spreading several groups of endpoints into one object.** When two use
+  the same name, the later one silently wins. Nest them instead, as in
   `{ users, todos }`, or give each group its own `Fetch.Endpoints` class.
+
+How an endpoint's headers, overrides and schemas combine with the client's
+and the call's is in
+[Define endpoints](/docs/endpoints/defining#how-defaults-combine).
 
 ## What's next
 

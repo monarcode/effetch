@@ -3,30 +3,38 @@ title: Test with a fake backend
 description: Test calls against a fake backend made from your endpoints.
 ---
 
-This tutorial builds a fake backend from your endpoints and runs a call
-against it, so you can test your code without a network.
+Tests that call a real API are slow, flaky, and hard to point at an error
+case. Effetch never touches the network itself: it sends every request
+through the `HttpClient` you provide. In tests, `@monarcode/effetch/test`
+gives you a fake one, made from your endpoints, so your code runs as it does
+in production: the real client, with its plugins, `defaultError` and
+`statusErrors`.
 
-Effetch never touches the network itself: it sends every request through the
-`HttpClient` you provide. In tests, `@monarcode/effetch/test` gives you a fake
-one, made from your endpoints, so your code runs as it does in production:
-the real client, with its plugins, `defaultError` and `statusErrors`.
+In this tutorial, you write a test file that answers three endpoints from a
+fake backend, then run it and check what comes back.
 
-## Build a fake backend from your endpoints
+## Before you begin
 
-`FetchTest.layer` takes a list of handlers, one per route, and is an
-`HttpClient` layer. Provide it where `FetchHttpClient.layer` goes.
+You need:
 
-<Callout type="warn">
-  A client whose `layer` is
-  [overridden](/docs/clients/providing#build-the-httpclient-into-the-layer) to
-  provide its own `HttpClient` ignores the fake backend, so test with a layer
-  that doesn't.
-</Callout>
+- endpoints defined with `Fetch.endpoint` (see
+  [Define endpoints](/docs/endpoints/defining));
+- a test runner. This tutorial uses [Vitest](https://vitest.dev) with
+  `@effect/vitest`, which runs an Effect as a test:
 
-The following example defines three endpoints, answers each one from the fake
-backend, and gets a todo through the real client:
+  ```bash
+  npm install --save-dev vitest @effect/vitest
+  ```
+
+`FetchTest` doesn't depend on a test runner, so the same code works with Jest,
+Bun or Deno: see [Run it without Vitest](#run-it-without-vitest).
+
+## Write the test
+
+Create a file named `todos.test.ts` with the following content:
 
 ```ts
+import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -34,6 +42,7 @@ import * as Schema from "effect/Schema";
 import { Fetch } from "@monarcode/effetch";
 import { FetchTest } from "@monarcode/effetch/test";
 
+// 1. The endpoints, the client and the service your app already has
 const Todo = Schema.Struct({
   id: Schema.Finite,
   title: Schema.String,
@@ -65,6 +74,7 @@ class TodoApi extends Fetch.Endpoints<TodoApi>()("TodoApi", Api, {
   list: listTodos,
 }) {}
 
+// 2. A handler for each endpoint
 const Backend = FetchTest.layer([
   FetchTest.respond(getTodo, ({ params }) =>
     // params are strings, as they are in the URL
@@ -80,53 +90,171 @@ const Backend = FetchTest.layer([
   FetchTest.fail(listTodos, 503),
 ]);
 
+// 3. The real client, sending its requests to the fake backend
 const TestLayer = TodoApi.layer.pipe(
   Layer.provide(Api.layer),
   Layer.provide(Backend),
 );
 
-export const test = Effect.gen(function* () {
-  const todos = yield* TodoApi;
-  const todo = yield* todos.get({ params: { id: 1 } });
-  // todo.due is a Date again: it went over the wire as a string
-  return todo;
-}).pipe(Effect.provide(TestLayer));
+// 4. The tests, each one an Effect
+it.effect("gets a todo", () =>
+  Effect.gen(function* () {
+    const todos = yield* TodoApi;
+    const todo = yield* todos.get({ params: { id: 1 } });
+    expect(todo.title).toBe("Write docs");
+    // A Date again: it went over the wire as a string
+    expect(todo.due).toBeInstanceOf(Date);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("fails when the list is unavailable", () =>
+  Effect.gen(function* () {
+    const todos = yield* TodoApi;
+    const error = yield* Effect.flip(todos.list());
+    expect(error).toMatchObject({ _tag: "HttpError", status: 503 });
+  }).pipe(Effect.provide(TestLayer)),
+);
 ```
+
+Each numbered part of the file is one step:
+
+1. **Define the endpoints.** These are the same `Fetch.endpoint` definitions,
+   client and `Fetch.Endpoints` class your app uses. In a real project, you
+   import them rather than declare them in the test.
+2. **Write a handler for each endpoint.** `FetchTest.respond` answers an
+   endpoint with what its handler returns, and `FetchTest.fail` answers every
+   request with an error status. `FetchTest.layer` turns the list into a fake
+   backend.
+3. **Provide the fake backend.** `FetchTest.layer` is an `HttpClient` layer
+   (a layer is how Effect builds a service, such as the client, for a
+   program that needs it), so it goes where `FetchHttpClient.layer` goes in
+   your app. Here it's provided under `Api.layer`, so the real client sends
+   its requests to it.
+4. **Write the tests.** Each test gets the service, makes a call, and
+   checks what comes back. `Effect.flip` turns the failure into a value, so
+   the second test can check the error.
+
+<Callout type="warn">
+  A client whose `layer` is
+  [overridden](/docs/clients/providing#build-the-httpclient-into-the-layer) to
+  provide its own `HttpClient` ignores the fake backend, so test with a layer
+  that doesn't.
+</Callout>
+
+## Run the test
+
+Run Vitest:
+
+```bash
+npx vitest run
+```
+
+Both tests pass:
+
+```text
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+```
+
+The first test checks that `todo.due` is a `Date`. The handler returned a
+`Date`, the fake backend encoded it as a string, and the client decoded it
+back, as it would with a real server. The second checks that `GET /todos`
+failed with an `HttpError` whose status is 503.
 
 ## What a handler gets and returns
 
 What a handler gets and returns is typed by its endpoint, and checked as a
-real backend would check it:
+real backend would check it. The handler gets one object, with these
+properties:
 
 - **`params`** has the route's params, as strings.
 - **`body`** is decoded with the endpoint's `input` schema, so `body.due` is a
-  `Date` here. A [multipart](/docs/calls/uploads) body is read back from the
-  form, with its files as `File`s.
+  `Date` in the test. A [multipart](/docs/calls/uploads) body is read back
+  from the form, with its files as `File`s.
 - **`query`** is decoded with the endpoint's
-  [query schema](/docs/endpoints/typed-query), if it has one, and is the raw
-  query, as strings, otherwise.
+  [query schema](/docs/endpoints/typed-query), if it has one. Otherwise, it's
+  the raw query, as strings.
+- **`headers`** are the request's headers, with lowercase names.
+- **`url`** is the URL the request was sent to.
+- **`request`** is the request itself, for anything else.
+
+A handler returns an Effect that can't fail. What it succeeds with is sent
+back to the client:
+
 - **The result** has `output`'s type, and is encoded with `output` before
   it's sent, so a `Date` goes over the wire as a string, as in production.
   With [`Fetch.text()` or `Fetch.bytes()`](/docs/calls/responses), it's sent
   as text or bytes.
+- **Without `output`,** the result is sent by its runtime type, as a call's
+  `body` without `input` is, and `undefined` sends no body.
+- **The status** is 200, or 204 when there's no body to send.
+
+To answer with another status or an error, return `FetchTest.reply` instead
+(see [Test errors and statuses](/docs/testing/errors)).
 
 A body, query or result that doesn't match its schema is a defect that names
 the route: it's a bug in the code under test, or in the test. Handlers work
 the same for definitions made with `Fetch.endpoint`, endpoints made with
-`client.endpoint` or `client.bind`, and a `Fetch.Endpoints` class's
+`api.endpoint` or `api.bind`, and a `Fetch.Endpoints` class's
 `definitions`.
 
 ### Handlers that use services
 
 A handler can use services, such as a clock or a store of fake data. The
-layer then needs them, and runs its handlers with the services it was built
-with, and those of the call they answer, which win when both have one.
+layer then needs those services to be built. Each handler runs with the
+services the layer was built with, plus those of the call it answers. When
+both have the same service, the call's wins.
 
-## Run the test
+### Slow responses
 
-`FetchTest` doesn't depend on a test runner: a test is an Effect, so run it
-with `it.effect` from `@effect/vitest`, or with `Effect.runPromise` in Jest,
-Bun or Deno.
+A handler is an Effect, so it can wait before it answers, which lets you
+test a `timeout` plugin or a loading state:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { FetchTest } from "@monarcode/effetch/test";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
+
+// Answers after 2 seconds
+export const SlowBackend = FetchTest.layer([
+  FetchTest.respond(getTodo, () =>
+    Effect.as(Effect.sleep("2 seconds"), { id: 1, title: "Write docs" }),
+  ),
+]);
+```
+
+`it.effect` runs a test on a test clock, which only moves when you move it,
+so a handler that sleeps waits forever. Run the test with `it.live` instead,
+or fork the call and move the clock with `TestClock.adjust`.
+
+What the fake backend can't do is send a body in pieces: it sends the whole
+body at once. For a body that arrives slowly or breaks off, see
+[Use a hand-written HttpClient](/docs/testing/http-client).
+
+## Run it without Vitest
+
+A test is an Effect, so any runner can run it with `Effect.runPromise`. With
+Jest, Bun or Deno, write the test as an Effect that uses your runner's
+`expect`, as in [Write the test](#write-the-test), and run it inside the
+runner's test function:
+
+```ts
+import * as Effect from "effect/Effect";
+
+// The Effect of a test, with Effect.provide(TestLayer) applied
+declare const getsATodo: Effect.Effect<void>;
+
+// Inside your runner's test function:
+await Effect.runPromise(getsATodo);
+```
+
+A failed `expect` throws inside the Effect, so `runPromise` rejects and the
+test fails. A call that fails with an error you didn't catch rejects it too.
 
 ## What's next
 
@@ -137,4 +265,4 @@ Bun or Deno.
 - [Test stream endpoints](/docs/testing/streams): answer a stream endpoint
   with a list of events or values.
 - [Use a hand-written HttpClient](/docs/testing/http-client): fake a network
-  failure or a slow response.
+  failure, or a body that arrives slowly or breaks off.

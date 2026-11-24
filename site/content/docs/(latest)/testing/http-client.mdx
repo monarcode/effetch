@@ -1,17 +1,21 @@
 ---
 title: Use a hand-written HttpClient
-description: Fake the transport with your own HttpClient for what a fake backend doesn't do.
+description: Fake the transport with your own HttpClient, for a network failure or a body that arrives slowly or breaks off.
 ---
 
-This page shows how to provide an `HttpClient` of your own in tests, for what
-a [fake backend](/docs/testing) doesn't do, such as a network failure or a
-slow response.
+The [fake backend](/docs/testing) covers most tests, slow responses
+included. Two things are out of its reach: a request that never gets a
+response, since a handler can't fail, and a body that arrives in pieces or
+breaks off partway, since the fake backend sends each body in one piece. For
+those, you provide an `HttpClient` of your own, which answers however you
+need. This page shows how, with a sample for each case.
 
 ## Provide your own HttpClient
 
 Effetch sends every request through the `HttpClient` layer you provide, so a
-test can provide one that answers however you need. The following client
-records each request and answers with a todo:
+test can provide one made with `HttpClient.make`. Its function gets each
+request and its URL, and returns the response. The following client records
+each request and answers with a todo:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -54,11 +58,141 @@ const todo = await Effect.runPromise(
 // todo: { id: 1, title: "Write docs" }; sent: ["GET https://api.test/todos/1"]
 ```
 
+`HttpClientResponse.fromWeb` turns a standard `Response` into Effect's
+response, so you can build the answer with anything `Response` accepts.
+
+## Fail with a network error
+
+To test how your code handles a request that gets no response, such as when
+the device is offline, fail with a transport error. Effetch turns it into a
+`NetworkError`, as it does when `fetch` itself fails:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.test",
+}) {}
+
+// Every request fails, as if the device were offline
+const Offline = Layer.succeed(
+  HttpClient.HttpClient,
+  HttpClient.make((request) =>
+    Effect.fail(
+      new HttpClientError.HttpClientError({
+        reason: new HttpClientError.TransportError({
+          request,
+          cause: new TypeError("Failed to fetch"),
+        }),
+      }),
+    ),
+  ),
+);
+
+const program = Effect.gen(function* () {
+  const api = yield* Api;
+  return yield* api.get("/todos/:id", { params: { id: 1 }, output: Todo });
+}).pipe(
+  Effect.catchTag("NetworkError", (error) =>
+    Effect.succeed(`${error.message} (${String(error.cause)})`),
+  ),
+);
+
+const result = await Effect.runPromise(
+  program.pipe(Effect.provide(Api.layer.pipe(Layer.provide(Offline)))),
+);
+// "GET https://api.test/todos/1: network error (TypeError: Failed to fetch)"
+```
+
+The `NetworkError` carries the request's method and URL, and its `cause` is
+the `cause` you gave the `TransportError`. Only a `TransportError` becomes a
+`NetworkError`. A `StatusCodeError` is handled as the response it carries,
+and any other reason, such as an `InvalidUrlError`, makes the call die as a
+defect.
+
+## Send a body that breaks off
+
+To test a stream that slows down or drops partway, answer with a `Response`
+whose body is a `ReadableStream` you control. The following client sends one
+line of newline-delimited JSON, waits, then breaks the connection:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import { Fetch } from "@monarcode/effetch";
+
+const Progress = Schema.Struct({ percent: Schema.Finite });
+
+class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.test",
+}) {}
+
+const encoder = new TextEncoder();
+
+// One value, a pause, then the connection drops
+const body = () =>
+  new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controller.enqueue(encoder.encode('{"percent":50}\n'));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      controller.error(new Error("Connection reset"));
+    },
+  });
+
+const Dropping = Layer.succeed(
+  HttpClient.HttpClient,
+  HttpClient.make((request) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        new Response(body(), {
+          headers: { "content-type": "application/x-ndjson" },
+        }),
+      ),
+    ),
+  ),
+);
+
+const program = Effect.gen(function* () {
+  const api = yield* Api;
+  yield* api
+    .ndjson("/jobs/1/progress", { output: Progress })
+    .pipe(Stream.runForEach((value) => Effect.log(value.percent)));
+}).pipe(Effect.catchTag("DecodeError", (error) => Effect.log(error.message)));
+
+await Effect.runPromise(
+  program.pipe(Effect.provide(Api.layer.pipe(Layer.provide(Dropping)))),
+);
+// Logs 50, then, 200 ms later:
+// "Failed to read the response body: Connection reset"
+```
+
+Your code gets the first value as soon as it arrives. When the body breaks
+off, the stream fails with a `DecodeError`. To test a slow stream that ends
+normally, call `controller.close()` instead of `controller.error(…)`. For an
+SSE endpoint, send `content-type: text/event-stream`, since `api.sse` checks
+it.
+
 ## What's next
 
 - [Test with a fake backend](/docs/testing): answer requests from your
   endpoints, with typed handlers.
 - [Test stream endpoints](/docs/testing/streams): fake a stream whose whole
   body arrives at once.
-- [Platform notes](/docs/platforms): the `HttpClient` setup each platform
-  needs.
+- [Streaming responses](/docs/streaming): see how a stream reads its body,
+  and how it fails.
+- [Platform notes](/docs/platforms): see the `HttpClient` setup each
+  platform needs.

@@ -12,7 +12,7 @@ import {
 import type { Example, TypedPath } from "@/lib/landing";
 
 import { GetStarted, GITHUB, Install, SectionHead, Wordmark } from "./chrome";
-import { breakable, CodeLine, CodeLines, effectOf } from "./code";
+import { breakable, CodeLine, CodeLines, effectOf, useSetIn } from "./code";
 import {
 	Caption,
 	CompiledCall,
@@ -119,13 +119,21 @@ function PathType({ path }: { path: string }) {
 	);
 }
 
-/** `"postId" | "userId"`, with its quotes and bars as punctuation. */
+/**
+ * `"postId" | "userId"`, with its quotes and bars as punctuation. Each name
+ * rises to its weight after the path's segments, one after another.
+ */
 function NamesType({ names }: { names: string }) {
+	let n = 0;
 	return (
-		<span className="spec-names">
+		<span className="spec-names" data-entrance="load">
 			{names.split(/("[^"]*")/).map((piece, i) =>
 				piece.startsWith('"') ? (
-					<span key={i}>
+					<span
+						key={i}
+						className="spec-set"
+						style={{ "--i": n++ } as CSSProperties}
+					>
 						<span className="spec-punct">"</span>
 						<span className="spec-name">{piece.slice(1, -1)}</span>
 						<span className="spec-punct">"</span>
@@ -200,7 +208,7 @@ export function Paths({ paths }: { paths: TypedPath[] }) {
 						<div className="spec-fact">
 							<dt className="spec-label">params needs</dt>
 							<dd>
-								<NamesType names={typed.names} />
+								<NamesType key={typed.path} names={typed.names} />
 							</dd>
 						</div>
 						<div className="spec-fact">
@@ -223,7 +231,10 @@ export function Paths({ paths }: { paths: TypedPath[] }) {
 											style={{ "--indent": 0 } as CSSProperties}
 										>
 											{breakable(text.slice(0, start))}
-											<span className="spec-squiggle">
+											<span
+												key={typed.path}
+												className="spec-squiggle"
+											>
 												{breakable(text.slice(start, end))}
 											</span>
 											{breakable(text.slice(end))}
@@ -392,7 +403,18 @@ const FAILURES: Record<string, string> = {
 	never: "Needs nothing more to run.",
 };
 
-function Specimen({ title, example }: { title: string; example: Example }) {
+function Specimen({
+	title,
+	example,
+	delay = 0,
+}: {
+	title: string;
+	example: Example;
+	/** How long its signature waits to set in, in milliseconds. */
+	delay?: number;
+}) {
+	const ref = useRef<HTMLDivElement>(null);
+	useSetIn(ref);
 	const effect = effectOf(example, "getTodo");
 	const rows = [...effect.errors, effect.context];
 	return (
@@ -401,7 +423,11 @@ function Specimen({ title, example }: { title: string; example: Example }) {
 			<pre className="spec-code spec-code-wrap mt-5 overflow-x-auto text-[12px] leading-[1.8] sm:text-[13px]">
 				<CodeLines lines={example.lines} />
 			</pre>
-			<div className="mt-8 border-t border-rule pt-6">
+			<div
+				ref={ref}
+				className="mt-8 border-t border-rule pt-6"
+				style={{ "--set-delay": `${delay}ms` } as CSSProperties}
+			>
 				<SpecimenSignature
 					values={members(effect.value)}
 					slots={slotsOf(
@@ -447,7 +473,7 @@ export function Compare({
 			</SectionHead>
 			<div className="mt-12 grid grid-cols-1 gap-x-6 gap-y-16 sm:mt-16 lg:grid-cols-2 lg:gap-x-12">
 				<Specimen title="With HttpClient alone" example={byHand} />
-				<Specimen title="With Effetch" example={withEffetch} />
+				<Specimen title="With Effetch" example={withEffetch} delay={200} />
 			</div>
 		</section>
 	);
@@ -498,19 +524,19 @@ export function Specifications({ version }: { version: string }) {
 						))}
 					</ul>
 					<p className="mt-3 max-w-[56ch] text-[15px] text-steel">
-						No Node.js modules and no{" "}
+						Built for each of them: no Node.js modules and no{" "}
 						<code className="spec-mono text-[0.92em] text-paper">
 							new URL()
 						</code>
-						, so it runs on Hermes too.
+						, so it runs on Hermes too. CI tests on Node.js 24.
 					</p>
 				</Spec>
 				<Spec term="Built on">Effect v4's HttpClient and Schema.</Spec>
 				<Spec term="Status">
 					A release candidate,{" "}
-					<span className="spec-mono text-[0.9em]">{version}</span>. The
-					API is settled: release candidates add small, opt-in features and
-					fixes.
+					<span className="spec-mono text-[0.9em]">{version}</span>, on the
+					way to 0.1.0. When a release candidate changes the API, the
+					changelog says what to change in your code.
 				</Spec>
 				<Spec term="Checked">
 					Every example in the docs and the README is compiled against the
@@ -545,15 +571,22 @@ export function Specifications({ version }: { version: string }) {
 // --- The close, the footer --------------------------------------------------
 
 export function Closing() {
+	const ref = useRef<HTMLHeadingElement>(null);
+	useSetIn(ref);
 	return (
 		<section
 			aria-labelledby="closing"
 			className="spec-column pt-12 pb-24 sm:pt-16 sm:pb-32"
 		>
 			<div className="grid grid-cols-1 gap-x-6 gap-y-10 border-t border-rule pt-10 lg:grid-cols-12 lg:pt-14">
-				<h2 id="closing" className="spec-closing lg:col-span-8">
+				<h2 ref={ref} id="closing" className="spec-closing lg:col-span-8">
 					<span className="spec-closing-light">Set the options.</span>{" "}
-					<span>Read the type.</span>
+					<span
+						className="spec-closing-heavy spec-set"
+						style={{ "--i": 0 } as CSSProperties}
+					>
+						Read the type.
+					</span>
 				</h2>
 				<div className="flex flex-col items-start gap-3 lg:col-span-4 lg:col-start-9 lg:self-end">
 					<Install />

@@ -5,11 +5,15 @@ description: "Every member of the FetchTest namespace: the fake backend for test
 
 {/* Written by scripts/reference-docs.mjs from the JSDoc. Run `pnpm run docs:reference` after changing it; don't edit this page. */}
 
-`@monarcode/effetch/test` exports one name, the `FetchTest` namespace. Its members:
+`@monarcode/effetch/test` exports one name, the `FetchTest` namespace. Import it as follows:
 
 ```ts
 import { FetchTest } from "@monarcode/effetch/test";
 ```
+
+Its exports follow, grouped by the guide that covers them. Each one has the
+first paragraph of its docs, and what it needs and how it fails; your
+editor shows the rest, with an example, when you hover the name.
 
 ## Fake backend [#fake-backend]
 
@@ -18,6 +22,10 @@ Guide: [Test with a fake backend](/docs/testing).
 ### FetchTest.fail [#fail]
 
 Makes a handler that answers every request to `endpoint` with the error status `status`, for [`layer`](#layer). To answer some requests with an error and others with data, return a [`reply`](#reply) from [`respond`](#respond) instead.
+
+`body` is encoded as JSON with the first schema that encodes it: the endpoint's `statusErrors` schemas for `status`, then its `error` schema. So the client decodes it back into your domain error, or into `HttpError.body`. A definition made with `Fetch.endpoint` has no access to the client's `statusErrors` and `defaultError`, so without its own schemas, the body is sent by its runtime type (see [`reply`](#reply)). A body that no schema encodes is a defect. Without `body`, the response is empty.
+
+Throws when `endpoint` isn't one, `status` isn't from 300 to 599, or a `304` has a body.
 
 ### FetchTest.layer [#layer]
 
@@ -32,9 +40,15 @@ Makes a fake backend: an `HttpClient` layer that answers requests with `handlers
 
 Makes a response that a [`respond`](#respond) handler sends as it is, for any status: a `201` with a `location` header, a `404` for a missing item, a `500`. The body isn't checked against the endpoint's schemas.
 
+Throws when the status isn't from 200 to 599, or when a `204`, `205` or `304` reply has a body.
+
 ### FetchTest.respond [#respond]
 
 Makes a handler that answers `endpoint`'s requests with `handler`, for [`layer`](#layer).
+
+The handler succeeds with a value of `output`'s `Type`, which is encoded with `output` before it's sent, so a `Date` goes over the wire as a string, as in production. With `Fetch.text()` or `Fetch.bytes()`, it's sent as text or bytes. A value that doesn't match `output` is a defect. Without `output`, the value is sent by its runtime type (see [`reply`](#reply)), and `undefined` sends no body.
+
+Throws when `endpoint` isn't one, or `options.status` isn't from 200 to 599.
 
 ### FetchTest.FailBody [#failbody]
 
@@ -83,6 +97,18 @@ Options for a [`reply`](#reply) or a [`fail`](#fail) handler.
   name="ReplyOptions"
 />
 
+### FetchTest.RequestBody [#requestbody]
+
+The body a handler gets for route `R`, whose endpoint has the `input` schema `I`:
+
+- `undefined` for a route whose method takes no body, such as `GET`;
+- the decoded body, typed by `I`, with an `input` schema;
+- `unknown` otherwise: the JSON value for a JSON body, the text for a text or form body, the bytes for other bytes, the `FormData` or stream as it was sent, and `undefined` without a body.
+
+### FetchTest.RequestQuery [#requestquery]
+
+The query a handler gets: decoded with the endpoint's query schema `QS` when it has one, as the call gave it, and the raw [`QueryParams`](#queryparams) otherwise.
+
 ### FetchTest.RespondOptions [#respondoptions]
 
 Options for the responses of a [`respond`](#respond) handler that aren't a [`Reply`](#reply-type).
@@ -119,7 +145,7 @@ The path params a handler gets for route `R`: one key per `:param`, each a `stri
 
 ### FetchTest.TestEndpoint [#testendpoint]
 
-An endpoint the fake backend can answer for: one made by `Fetch.endpoint`, `client.endpoint` or `client.bind`. The fake backend reads its route and its schemas.
+An endpoint the fake backend can answer for: one made by `Fetch.endpoint`, `api.endpoint` or `api.bind`. The fake backend reads its route and its schemas.
 
 ### FetchTest.TestEvent [#testevent]
 
@@ -142,17 +168,7 @@ The service that keeps the requests the fake backend received, in the order it r
 
 The requests the fake backend received so far, oldest first.
 
-### FetchTest.RequestBody [#requestbody]
-
-The body a handler gets for route `R`, whose endpoint has the `input` schema `I`:
-
-- `undefined` for a route whose method takes no body, such as `GET`;
-- the decoded body, typed by `I`, with an `input` schema;
-- `unknown` otherwise: the JSON value for a JSON body, the text for a text or form body, the bytes for other bytes, the `FormData` or stream as it was sent, and `undefined` without a body.
-
-### FetchTest.RequestQuery [#requestquery]
-
-The query a handler gets: decoded with the endpoint's query schema `QS` when it has one, as the call gave it, and the raw [`QueryParams`](#queryparams) otherwise.
+It needs the [`Recorder`](#recorder), which [`layer`](#layer) provides. Under a client's layer, `Layer.provide` hides it, so when a test reads it, provide the fake backend with `Layer.provideMerge` instead.
 
 ### FetchTest.SentRequest [#sentrequest]
 
@@ -162,3 +178,10 @@ A request the fake backend received, as the [`Recorder`](#recorder) keeps it.
   path="node_modules/@monarcode/effetch/dist/test/FetchTest.d.ts"
   name="SentRequest"
 />
+
+## Related pages
+
+- [Entry points](/docs/reference): what each entry point exports.
+- [Fetch](/docs/reference/fetch): every member of the `Fetch` namespace.
+- [Plugins](/docs/reference/plugins): the built-in plugins and their options.
+- [Compatibility](/docs/reference/compatibility): the Effect, runtime and TypeScript versions Effetch supports.

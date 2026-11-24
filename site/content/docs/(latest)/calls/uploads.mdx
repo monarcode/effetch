@@ -3,58 +3,84 @@ title: Upload files
 description: Upload files with a typed multipart body.
 ---
 
-Upload files with a body that's typed and checked by a schema, as for JSON,
-then sent as `multipart/form-data`.
+Most APIs take a file upload as a `multipart/form-data` body: the file in
+one part, and the other fields in parts beside it. Effetch builds that form
+from a schema, so an upload's body is typed and checked the way a JSON body
+is. This page shows how to send one, how each platform passes its files,
+and how the schema's fields become form parts.
 
 ## Send a multipart body
 
 To upload files, wrap the `input` schema in `Fetch.multipart`, and use
-`Fetch.UploadFile` for a file field:
+`Fetch.UploadFile` for each file field:
 
 ```ts
-import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { Fetch } from "@monarcode/effetch";
 
+declare const api: Fetch.Client;
+
 const Document = Schema.Struct({ id: Schema.String });
+
+const NewDocument = Fetch.multipart(
+  Schema.Struct({
+    file: Fetch.UploadFile,
+    kind: Schema.Literals(["PASSPORT", "DRIVERS_LICENSE"]),
+    pages: Schema.optional(Schema.Finite),
+  }),
+);
+
+// In a browser, `file` comes from an <input type="file">.
+export const upload = (file: File) =>
+  api.post("/documents", {
+    input: NewDocument,
+    body: { file, kind: "PASSPORT" },
+    output: Document,
+  });
+```
+
+`Fetch.multipart` marks the schema, so the body is encoded with it and then
+sent as a form rather than as JSON. TypeScript checks `body` against the
+schema, as it does for any `input`.
+
+The same schema works in an endpoint definition (see
+[Endpoints or methods](/docs/endpoints)), so the upload's route and schemas live in one
+place:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
 
 export const uploadDocument = Fetch.endpoint("POST /documents", {
   input: Fetch.multipart(
     Schema.Struct({
       file: Fetch.UploadFile,
       kind: Schema.Literals(["PASSPORT", "DRIVERS_LICENSE"]),
-      pages: Schema.optional(Schema.Finite),
     }),
   ),
-  output: Document,
+  output: Schema.Struct({ id: Schema.String }),
 });
 
-class Api extends Fetch.Service<Api>()("Api", {
-  baseUrl: "https://api.example.com",
-}) {}
+const send = api.bind(uploadDocument);
 
-class DocumentApi extends Fetch.Endpoints<DocumentApi>()("DocumentApi", Api, {
-  upload: uploadDocument,
-}) {}
-
-// In a browser, `file` comes from an <input type="file">.
 export const upload = (file: File) =>
-  Effect.gen(function* () {
-    const documents = yield* DocumentApi;
-    return yield* documents.upload({ body: { file, kind: "PASSPORT" } });
-  });
+  send({ body: { file, kind: "PASSPORT" } });
 ```
 
 ## Files on each platform
 
-`Fetch.UploadFile` takes the files each platform can send:
+A file field takes the kind of file each platform can send. That differs
+between platforms, so `Fetch.UploadFile` accepts each of them:
 
-- in browsers, Node, Bun and Deno, a `Blob` or `File`;
-- in React Native, the `{ uri, name, type }` object its pickers give, typed
-  `Fetch.NativeFile`. `uri` and `name` are required: a server only treats a
-  part as a file when it has a file name. `type` is optional, and a file
-  without one is sent as `application/octet-stream`.
+- **In browsers, Node.js, Bun and Deno:** a `Blob` or `File`.
+- **In React Native:** the `{ uri, name, type }` object its pickers give,
+  typed `Fetch.NativeFile`. `uri` and `name` are required, because a server
+  only treats a part as a file when it has a file name. `type` is optional,
+  and a file without one is sent as `application/octet-stream`.
 
 Use `Fetch.UploadFile` rather than `Schema.File`. `Schema.File` only takes a
 `File`, not the `{ uri, name, type }` objects React Native's pickers give,
@@ -62,8 +88,9 @@ and `FetchTest` can't read it back from a form.
 
 ## Send a file from React Native
 
-In React Native, send a `NativeFile`, not a `Blob`: React Native's `fetch`
-reads a form's files from disk by `uri`, and can't send a `Blob` in a form.
+In React Native, send a `NativeFile`, not a `Blob`. React Native's `fetch`
+reads a form's files from disk by their `uri`, and can't send a `Blob` in a
+form.
 
 The following example builds a `NativeFile` from an image picker's asset:
 
@@ -86,13 +113,15 @@ export const photo: Fetch.NativeFile = {
 
 ## How fields become form parts
 
-Effetch turns the schema's fields into form parts as follows:
+A form holds only strings and files, so Effetch encodes the body with the
+schema, then turns each field into form parts as follows:
 
-- strings as they are; numbers, booleans and bigints as strings; a `Date` as
-  its ISO string;
-- a file as a file part;
-- a list as one part per item, under the same name;
-- `null` and `undefined` left out.
+- A string is sent as it is.
+- A number, boolean or bigint is sent as a string, and a `Date` as its ISO
+  string.
+- A file becomes a file part.
+- A list becomes one part per item, all under the field's name.
+- `null` and `undefined` are left out.
 
 A form can't hold a nested object or a list of lists, so TypeScript rejects
 most schemas that have one, and a value that has one makes the call die. To
@@ -101,8 +130,8 @@ send one, encode it to a string in the schema, such as
 
 ## Check a file's size
 
-To check a file's size, add a check to `Fetch.UploadFile`. A `NativeFile` has
-no size until it's read, so the check only looks at a `Blob`:
+To check a file's size, add a check to `Fetch.UploadFile`. A `NativeFile`
+has no size until it's read, so the check only looks at a `Blob`:
 
 ```ts
 import * as Schema from "effect/Schema";
@@ -119,37 +148,55 @@ export const SmallFile = Fetch.UploadFile.check(
 
 ## Headers, errors and where it works
 
-The following details cover the request's headers, how a bad body fails, and
-where multipart bodies work.
+Most uploads need nothing more than the sections on this page. The
+following details cover the request's `content-type`, how a bad body fails, where multipart
+bodies work, and how `FetchTest` reads a form back.
 
 <Accordions>
-<Accordion title="Details: headers, errors and where it works">
+<Accordion title="Details: the content-type header">
 
-- The request sets no `Content-Type`, so the platform adds the multipart
-  boundary. A `content-type` header from the call, the endpoint or the client
-  is removed, for any `FormData` body.
-- The request sets no `Content-Type` before your plugins run. A plugin's
-  `onRequest` that sets one replaces the boundary, so leave it out for forms.
+- Effetch sets no `content-type` on a form, so the platform adds
+  `multipart/form-data` with its boundary. A `content-type` from the call,
+  the endpoint or the client is removed, as for any `FormData` body (see
+  [Set the content type](/docs/calls/body#set-the-content-type)).
+- That happens before your plugins run. A plugin's `onRequest` that sets a
+  `content-type` replaces the boundary, so leave it out for forms.
+
+</Accordion>
+<Accordion title="Details: bodies that make the call die">
+
 - A body that doesn't match the schema, or a value a form can't hold, makes
-  the call die with an `Invalid request body:` defect, as for JSON (see
-  [Logging and defects](/docs/errors/logging-and-defects)). So does a
-  `{ uri, name, type }` file outside React Native, where `FormData` would send
-  `"[object Object]"`, or in a field that isn't a `Fetch.UploadFile`.
-- `Fetch.UploadFile` in an `input` schema without `Fetch.multipart` makes the
-  call die too: a file has no JSON form.
-- It works wherever `input` does: on methods such as `api.post`, on endpoints,
-  and in `api.sse` and `api.ndjson`.
+  the call die with an `Invalid request body:` defect, the same as a JSON
+  body that doesn't match its `input` (see
+  [Logging and defects](/docs/errors/logging-and-defects)).
+- So does a `{ uri, name, type }` file outside React Native, where
+  `FormData` would send `"[object Object]"`, or one in a field that isn't a
+  `Fetch.UploadFile`.
+- `Fetch.UploadFile` in an `input` schema without `Fetch.multipart` makes
+  the call die too, since a file has no JSON form.
+- A field's encoded value must be a string, number, boolean, bigint,
+  `Date`, file, `null` or `undefined`, or a list of them. A schema such as
+  `Schema.DateTimeUtc` or `Schema.URL`, which encodes to an object, needs a
+  string form first, such as `Schema.DateTimeUtcFromString`.
+
+</Accordion>
+<Accordion title="Details: where Fetch.multipart works">
+
+- It works wherever `input` does: on methods such as `api.post`, on
+  endpoints, and in `api.sse` and `api.ndjson`.
 - `Fetch.multipart` returns the schema, marked. Add checks or annotations to
   it as you like. A schema built around it, such as with `Schema.NullOr`, is
   sent as JSON again.
-- A field's encoded value must be a string, number, boolean, bigint, `Date`,
-  file, `null` or `undefined`, or a list of them. A schema such as
-  `Schema.DateTimeUtc` or `Schema.URL`, which encodes to an object, needs a
-  string form first, such as `Schema.DateTimeUtcFromString`.
+- A `FormData` you build yourself still works as a `body` without `input`
+  (see [Send a body](/docs/calls/body#send-a-form-text-or-bytes)).
+
+</Accordion>
+<Accordion title="Details: reading a form back in FetchTest">
+
 - [`FetchTest`](/docs/testing) reads the form back into the body a handler
-  gets, decoded with the schema, with files as `File`s. In Node, test with a
-  `Blob` or `File`, since a `{ uri, name, type }` file only works in React
-  Native.
+  gets, decoded with the schema, with files as `File`s. In Node.js, test
+  with a `Blob` or `File`, since a `{ uri, name, type }` file only works in
+  React Native.
 - A form loses some of what the schema encodes, so `FetchTest` reads it back
   as best it can:
   - A `null` or `undefined` field and an empty list are left out. Such a
@@ -160,7 +207,6 @@ where multipart bodies work.
     `"null"` comes back as `null`, and in
     `Schema.Union([Schema.String, Schema.Finite])` the string `"12"` comes
     back as the number `12`.
-- A `FormData` you build yourself still works as a `body` without `input`.
 
 </Accordion>
 </Accordions>

@@ -3,19 +3,25 @@ title: Platform notes
 description: Set up Effetch for browsers and React Native.
 ---
 
-This page covers what to know, and what to set up, when you run Effetch in a
-browser or in React Native.
-
-Effetch has no platform-specific imports or builds, and runs wherever Effect's
-`HttpClient` does: browsers, React Native, Node 20 or newer, Bun and Deno.
-Two platforms need a little setup.
+Effetch runs the same code on every platform, with no platform-specific
+imports or builds. Requests go through Effect's `HttpClient`, so what a
+platform needs mostly comes from there. Two platforms need some setup:
+browsers, for calls to other origins, and React Native. This page covers
+both. For the full list of runtimes, and which of them CI tests, see
+[Compatibility](/docs/reference/compatibility).
 
 ## Browsers
 
+In a browser, a relative path in a client without a `baseUrl` is resolved
+against the page's URL. Calls to another origin need the setup in this
+section.
+
+### Turn off tracing headers
+
 Effect's `HttpClient` adds `traceparent` and `b3` tracing headers to every
-request. Cross-origin calls to APIs that don't allow those headers then fail
-the CORS preflight. Turn propagation off in the layer that makes the client,
-and it applies to all its calls:
+request. A cross-origin call to an API that doesn't allow those headers then
+fails the browser's CORS preflight. To stop sending them, turn propagation
+off in the layer that builds the client:
 
 ```ts
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -34,30 +40,103 @@ export const ApiLive = Api.layer.pipe(
 );
 ```
 
-In a browser, a relative path without a `baseUrl` is resolved against the
-page's URL.
+The client keeps what its layer was given, so the setting applies to all of
+its calls.
+
+### Send cookies
+
+By default, `fetch` sends cookies only to the page's own origin. To send
+them to an API on another origin, set `credentials: "include"` in
+`FetchHttpClient.RequestInit`, the default options for every `fetch` the
+client makes:
+
+```ts
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+
+import { Fetch } from "@monarcode/effetch";
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+export const ApiLive = Api.layer.pipe(
+  Layer.provide(
+    Layer.succeed(FetchHttpClient.RequestInit)({ credentials: "include" }),
+  ),
+  Layer.provide(FetchHttpClient.layer),
+);
+```
+
+The API has to allow it too: its CORS response needs
+`Access-Control-Allow-Credentials: true`, and an
+`Access-Control-Allow-Origin` that names your page's origin rather than `*`.
+
+`RequestInit` can set other `fetch` options the same way, such as `cache`
+or `redirect`. The call still sets the method, the body and the abort
+signal, and its headers win over any in `RequestInit`. A `RequestInit`
+provided around one call replaces the client's for that call.
 
 ## React Native
 
-React Native differs from the other platforms in these ways:
+React Native differs from the other platforms in the following ways:
 
-- Effetch doesn't use `URL` itself. Effect's `HttpClient` does, including
-  `searchParams`. Expo provides a standard `URL`. In a React Native app
-  without Expo, install a polyfill such as `react-native-url-polyfill`.
-- Effetch and Effect use package `exports` (`effect/http/HttpClient`,
-  `@monarcode/effetch/plugins`). Metro resolves them by default from React
-  Native 0.79 (Expo SDK 53). On older versions, set
-  `resolver.unstable_enablePackageExports = true` in `metro.config.js`.
-- `FetchHttpClient.layer` uses the global `fetch`.
-- React Native's `fetch` doesn't stream response bodies, so `api.sse`,
-  `api.ndjson` and stream endpoints fail with a `DecodeError` there. In
-  Expo, provide the `fetch` from `expo/fetch`, which streams, as
-  `FetchHttpClient.Fetch`:
-  `Layer.succeed(FetchHttpClient.Fetch)(expoFetch as typeof globalThis.fetch)`.
-- To upload a file a picker gave you, send its `{ uri, name, type }` in a
-  `Fetch.UploadFile` field (see [Upload files](/docs/calls/uploads)).
-  React Native's `FormData` reads the file from disk by `uri`, and can't send
-  a `Blob`.
-- Metro's terminal drops `console.groupCollapsed` and everything inside it,
-  so `consoleLogger` doesn't collapse its groups in React Native (see the
-  details in [Log to the console](/docs/plugins/console-logging)).
+- **`URL`.** Effetch joins URLs as strings and never calls `new URL()`
+  itself. Effect's `HttpClient` does use `URL`, `searchParams` included,
+  when it sends each request. An endpoint's `url` helper uses it too.
+  Expo provides a standard `URL`. In a React
+  Native app without Expo, install a polyfill such as
+  `react-native-url-polyfill`.
+- **Package `exports`.** Effetch and Effect use package `exports`, as in
+  `effect/http/HttpClient` and `@monarcode/effetch/plugins`. Metro resolves
+  them by default from React Native 0.79 (Expo SDK 53). On older versions,
+  set `resolver.unstable_enablePackageExports = true` in `metro.config.js`.
+- **Streams.** `FetchHttpClient.layer` sends requests with the global
+  `fetch`, and React Native's `fetch` doesn't stream response bodies. So
+  `api.sse`, `api.ndjson` and stream endpoints fail with a `DecodeError`
+  there. A stream also needs `TextDecoder`, and fails with a `DecodeError`
+  on a runtime without it. In Expo, use the `fetch` from `expo/fetch`, which
+  streams (see the sample after this list).
+- **File uploads.** To upload a file a picker gave you, send its
+  `{ uri, name, type }` in a `Fetch.UploadFile` field (see
+  [Upload files](/docs/calls/uploads)). React Native's `FormData` reads the
+  file from disk by its `uri`, and can't send a `Blob`.
+- **Console logging.** Metro's terminal drops `console.groupCollapsed` and
+  everything inside it, so `consoleLogger` doesn't collapse its groups in
+  React Native (see [Log to the console](/docs/plugins/console-logging)).
+
+To stream in Expo, provide the `fetch` from `expo/fetch` as
+`FetchHttpClient.Fetch`, in the layer that builds the client:
+
+```ts
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+
+import { Fetch } from "@monarcode/effetch";
+
+// In your app: import { fetch as expoFetch } from "expo/fetch";
+declare const expoFetch: unknown;
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+}) {}
+
+export const ApiLive = Api.layer.pipe(
+  Layer.provide(
+    Layer.succeed(FetchHttpClient.Fetch)(expoFetch as typeof globalThis.fetch),
+  ),
+  Layer.provide(FetchHttpClient.layer),
+);
+```
+
+The cast gives `expo/fetch`'s function the type of the global `fetch`,
+which `FetchHttpClient.Fetch` expects.
+
+## What's next
+
+- [Compatibility](/docs/reference/compatibility): check the Effect,
+  runtime and TypeScript versions Effetch supports.
+- [Upload files](/docs/calls/uploads): send a file from a picker in a typed
+  multipart form.
+- [Streaming responses](/docs/streaming): read Server-Sent Events and
+  newline-delimited JSON as a `Stream`.

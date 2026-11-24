@@ -1,12 +1,4 @@
 {
 	"title": "Calls",
-	"pages": [
-		"index",
-		"parameters",
-		"body",
-		"uploads",
-		"responses",
-		"options",
-		"http-client"
-	]
+	"pages": ["index", "body", "uploads", "responses", "options", "http-client"]
 }

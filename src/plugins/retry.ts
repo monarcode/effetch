@@ -66,7 +66,8 @@ export interface RetryOptions {
  * {@link RetryOptions}, plus `budget`.
  *
  * `budget` is how long the call may take, every attempt and every wait
- * between them included. Calls can override it.
+ * between them included, until the last response's headers arrive.
+ * Reading the body isn't covered. Calls can override it.
  *
  * - When the budget runs out during an attempt, the attempt is
  *   interrupted, and the call fails with `TimeoutError`.
@@ -194,8 +195,10 @@ const afterHeader = (
 
 /**
  * Retries a call that failed with a `NetworkError` or got a retryable
- * status, for the configured methods only (idempotent ones by default, so
- * a `POST` is never sent twice).
+ * status, for the configured methods only: the idempotent ones by default,
+ * so `retry` doesn't resend a `POST` unless you add it. With a `budget`, it
+ * also limits the whole call, every attempt and wait included, and fails
+ * with `TimeoutError` when the budget runs out.
  *
  * When the retries run out, the last response is returned unchanged, so a
  * `503` still ends as an `HttpError` with that response's body, and the
@@ -243,7 +246,8 @@ export function retry(
 /**
  * Retries a call that failed with a `NetworkError` or got a retryable
  * status, as {@link retry} without a budget does, within a time limit for
- * the whole call: `budget`, every attempt and wait included.
+ * the whole call: `budget`, every attempt and wait included, until the last
+ * response's headers arrive. Reading the body isn't covered.
  *
  * - No retry is made when its wait would end at or after the budget: the call
  *   ends with its last response or `NetworkError`, as when the retries run

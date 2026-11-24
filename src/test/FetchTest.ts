@@ -29,7 +29,7 @@ import type { StreamFormat } from "../Streams.js";
 
 /**
  * An endpoint the fake backend can answer for: one made by
- * `Fetch.endpoint`, `client.endpoint` or `client.bind`. The fake backend
+ * `Fetch.endpoint`, `api.endpoint` or `api.bind`. The fake backend
  * reads its route and its schemas.
  *
  * @example
@@ -755,8 +755,8 @@ export const respond = <const EP extends TestEndpoint, R = never>(
  * `body` is encoded as JSON with the first schema that encodes it: the
  * endpoint's `statusErrors` schemas for `status`, then its `error` schema.
  * So the client decodes it back into your domain error, or into
- * `HttpError.body`. A definition made with `Fetch.endpoint` doesn't know
- * the client's `statusErrors` and `defaultError`, so without its own
+ * `HttpError.body`. A definition made with `Fetch.endpoint` has no access
+ * to the client's `statusErrors` and `defaultError`, so without its own
  * schemas, the body is sent by its runtime type (see {@link reply}). A body
  * that no schema encodes is a defect. Without `body`, the response is
  * empty.

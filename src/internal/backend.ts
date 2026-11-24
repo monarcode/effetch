@@ -1001,7 +1001,7 @@ const isTestEndpoint = (u: unknown): u is RuntimeTestEndpoint =>
 const checkEndpoint = (endpoint: unknown, where: string): void => {
 	if (!isTestEndpoint(endpoint)) {
 		throw new TypeError(
-			`${where} takes an endpoint: pass what Fetch.endpoint, client.endpoint or client.bind returns`,
+			`${where} takes an endpoint: pass what Fetch.endpoint, or your client's endpoint or bind method, returns`,
 		);
 	}
 };

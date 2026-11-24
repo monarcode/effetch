@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { type CSSProperties, type RefObject, useEffect } from "react";
 
 import type { EffectParts, Example, Token } from "@/lib/landing";
 
@@ -6,6 +6,35 @@ import type { EffectParts, Example, Token } from "@/lib/landing";
 export function onScreen(element: Element) {
 	const rect = element.getBoundingClientRect();
 	return rect.width > 0 && rect.top < innerHeight && rect.bottom > 0;
+}
+
+/**
+ * Sets a specimen in as it scrolls into view, with the hero's entrance.
+ * Marks it to wait only when it starts off screen, so the prerendered page,
+ * and a specimen already in view, show it set. Its `.spec-set` groups
+ * animate; `--set-delay` on the element holds its start.
+ */
+export function useSetIn(ref: RefObject<HTMLElement | null>) {
+	useEffect(() => {
+		const element = ref.current;
+		if (!element || onScreen(element)) return;
+		element.dataset.setIn = "wait";
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (!entries.some((entry) => entry.isIntersecting)) return;
+				observer.disconnect();
+				element.dataset.setIn = "view";
+			},
+			// As soon as any of it rises above the screen's bottom fifth. A
+			// ratio of it in view can't be reached by one taller than the screen.
+			{ rootMargin: "0px 0px -20% 0px" },
+		);
+		observer.observe(element);
+		return () => {
+			observer.disconnect();
+			delete element.dataset.setIn;
+		};
+	}, [ref]);
 }
 
 /** The `Effect` a query found, or a build error naming the query. */

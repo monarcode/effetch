@@ -3,19 +3,14 @@ title: Read the response
 description: Decode the body with a schema, or read text, bytes or the whole response.
 ---
 
-Decode a response body with a schema, read it as text or bytes, or read the
-status and headers next to the decoded body.
+Most calls come back with a JSON body that you want as a typed value. Give
+the call an `output` schema, and Effetch decodes the body with it, so the
+call succeeds with the value your code expects. This page shows how, and
+how to read a body that isn't JSON, or the status and headers next to it.
 
 ## Decode the body with a schema
 
-Give a call an `output` schema, and the response body is decoded with it. The
-call succeeds with the decoded value, or fails with `DecodeError` if the body
-doesn't match. It also sends `Accept: application/json`, unless you set an
-`accept` header yourself.
-
-Without `output`, the call succeeds with the raw `HttpClientResponse`. That's
-handy when you only care that the call worked, or want to read the body
-yourself:
+Pass the schema as `output`:
 
 ```ts
 import * as Schema from "effect/Schema";
@@ -24,15 +19,20 @@ import type { Fetch } from "@monarcode/effetch";
 
 declare const api: Fetch.Client;
 
-// No output: succeeds with the HttpClientResponse.
-export const remove = api.del("/todos/:id", { params: { id: 1 } });
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
 
-// Nothing to decode: an empty body (204, HEAD) decodes as JSON null.
-export const archive = api.post("/todos/:id/archive", {
-  params: { id: 1 },
-  output: Schema.Void,
-});
+// Succeeds with { id: number, title: string }
+export const todo = api.get("/todos/:id", { params: { id: 1 }, output: Todo });
 ```
+
+The call succeeds with the decoded value, or fails with `DecodeError` if
+the body doesn't match. It also sends `Accept: application/json`, unless an
+`accept` header is set on the call, the endpoint or the client.
+
+Only a 2xx response is decoded. Any other status, 3xx included, fails with
+`HttpError` before `output` runs (see [Call errors](/docs/errors)). `fetch`
+follows redirects itself, so a 3xx only arrives with `redirect: "manual"`
+or from a conditional request, such as `304 Not Modified`.
 
 <Callout title="Use Schema.Finite for numbers">
   Use `Schema.Finite` rather than `Schema.Number` for numbers. Responses are
@@ -41,19 +41,58 @@ export const archive = api.post("/todos/:id/archive", {
   to strings. `Schema.Finite` accepts every JSON number and rejects the rest.
 </Callout>
 
+## Handle an empty body
+
+Some responses have no body, such as a `204 No Content` or any `HEAD`
+response. An empty body decodes as JSON `null`, so give such a call
+`output: Schema.Void`:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+export const archive = api.post("/todos/:id/archive", {
+  params: { id: 1 },
+  output: Schema.Void,
+});
+```
+
+`Schema.Undefined` and `Schema.NullOr(…)` accept an empty body too. A JSON
+`null` body and an empty one decode the same way, so a schema can't tell
+them apart.
+
+## Skip decoding
+
+Without `output`, the call succeeds with the raw `HttpClientResponse`.
+That's handy when you only care that the call worked, or want to read the
+body yourself:
+
+```ts
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+// Succeeds with the HttpClientResponse.
+export const remove = api.del("/todos/:id", { params: { id: 1 } });
+```
+
+The status is still checked: a response outside 2xx fails with `HttpError`
+whether or not the call has an `output`.
+
 ## Read text or bytes
 
-`output` reads the body as JSON. For other bodies, wrap the schema:
+`output` reads the body as JSON. For other bodies, wrap the schema in one of
+these:
 
 - `Fetch.text()` reads the body as a string, as it was sent.
-- `Fetch.text(schema)` reads a single value, such as a count or a status: it
+- `Fetch.text(schema)` reads a single value, such as a count or a status. It
   trims the text, then decodes it with a schema whose encoded side is a
   string, such as `Schema.NumberFromString`.
 - `Fetch.bytes()` reads the body as a `Uint8Array`, a copy of the body, for
   images, PDFs and other binary bodies.
-
-The call sends a matching `Accept` header: `text/*, */*;q=0.1` for text, and
-`*/*` for bytes, unless you set one.
 
 The following program reads a CSV export as text, a count as a number, and a
 PDF as bytes:
@@ -80,16 +119,25 @@ export const program = Effect.gen(function* () {
 });
 ```
 
-They work wherever `output` does, endpoints included.
+They work wherever `output` does, endpoints included. The one exception is
+`Fetch.bytes()`, which a stream (`api.sse`, `api.ndjson` or a stream
+endpoint) can't take.
 
-- An empty body is `""` for `Fetch.text()` and a `Uint8Array` of length 0 for
-  `Fetch.bytes()`. For `Fetch.text(schema)`, it fails with `DecodeError`, as
-  for JSON.
+The following rules apply to `Fetch.text` and `Fetch.bytes`:
+
+- The call sends a matching `Accept` header: `text/*, */*;q=0.1` for text,
+  and `*/*` for bytes, unless an `accept` header is set on the call, the
+  endpoint or the client.
+- An empty body is `""` for `Fetch.text()`, and a `Uint8Array` of length 0
+  for `Fetch.bytes()`.
+- For `Fetch.text(schema)`, an empty body fails with `DecodeError` before it
+  reaches the schema, so `Schema.NumberFromString` never reads it as `0`.
 - A body that can't be read, or doesn't match the schema, fails with
   `DecodeError`.
 - Error responses are still read as JSON for `error` and `statusErrors`.
-- Pass the schema they return to `output` as it is. A schema built around it,
-  such as with `Schema.NullOr`, is read as JSON again.
+- Pass the schema they return to `output` as it is, or with more checks or
+  annotations. A schema built around it, such as with `Schema.NullOr`, is
+  read as JSON again.
 
 ## Read the body and the response
 
@@ -117,11 +165,14 @@ export const page = Effect.gen(function* () {
 });
 ```
 
+The following rules apply to `responseMode`:
+
+- The default, `"decoded"`, gives the decoded body alone.
 - It's allowed on calls, on endpoint definitions, and on each call of an
   endpoint, where the call's own mode wins.
 - Without `output`, both items are the response.
-- The body has already been read: use the decoded value.
-- The default, `"decoded"`, gives the decoded body alone.
+- The body has already been read, so use the decoded value rather than
+  reading the response's body again.
 
 ## What's next
 

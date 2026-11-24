@@ -1,22 +1,30 @@
 ---
 title: Getting started
-description: Declare a client, make a typed call and run it, from an empty file to a working program.
+description: Write a program that makes a typed call, run it and see what each part does.
 ---
 
-In this tutorial, you write a complete program that fetches a todo from an
-API, typed and checked by a schema. Along the way, you meet the four ideas
-the rest of Effetch builds on.
+The quickest way to see how Effetch works is to run a small program. In this
+tutorial, you write one that fetches a todo from a public API, checks it
+against a schema and prints its title. Then you go through it part by part,
+so you know what each line does before you write your own calls.
 
 ## Before you begin
 
-Install Effetch and Effect, and check that your project meets the
-requirements. For the commands, see [Installation](/docs/installation).
+To follow this tutorial, you need the following:
 
-## Write your first client
+- Effetch and Effect, installed in an ESM project, as
+  [Installation](/docs/installation) shows;
+- Node.js 24, to run the program as it is, since it runs TypeScript files
+  without a build step. On another runtime, the run step names a command
+  that works there.
 
-The following program fetches a todo from
-[JSONPlaceholder](https://jsonplaceholder.typicode.com), a free fake API.
-It's complete, so you can run it as it is:
+## Write and run the program
+
+The program calls [JSONPlaceholder](https://jsonplaceholder.typicode.com), a
+free fake API, so it needs no account or key.
+
+1. In your project, create a file named `main.ts`, with the following
+   program:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -54,71 +62,113 @@ const ApiLive = Api.layer.pipe(Layer.provide(FetchHttpClient.layer));
 await Effect.runPromise(program.pipe(Effect.provide(ApiLive)));
 ```
 
+2. Run the program with the following command:
+
+   ```bash
+   node main.ts
+   ```
+
+   On another version of Node.js, run `npx tsx main.ts` instead. With Bun,
+   run `bun main.ts`.
+
+3. Check the output. The program prints the title of todo 1:
+
+   ```text
+   delectus aut autem
+   ```
+
+If you see that line, the call worked: Effetch sent the request, checked
+the response against `Todo` and gave you a typed value.
+
 ## What each part does
 
 The numbered comments in the program mark its four parts:
 
-1. **`Todo` describes the response.** Effetch decodes the body with it, so
-   `todo` is typed, and checked when it arrives. If the API sends something
-   else, the call fails with a `DecodeError` instead of handing you bad data.
+1. **`Todo` describes the response.** It's a schema (a description of a
+   value's shape, from Effect's `Schema` module), and Effetch decodes the
+   body with it. That's why `todo` is typed, and why it's checked when it
+   arrives. If the API sends something else, the call fails with a
+   `DecodeError`, rather than handing you bad data.
 2. **`Api` is your client.** `Fetch.Service` declares it as an Effect
-   service, with everything its calls have in common: here the base URL,
-   later the headers, error schemas and plugins.
+   service: a value your program asks for by name, and gets from a layer
+   when it runs. The client holds what all its calls have in common. Here
+   that's the base URL. Later, it can also hold headers, error schemas and
+   plugins.
 3. **`api.get` makes the call.** `yield* Api` gives you the client, and the
-   `:id` in the path is filled in from `params`.
-4. **`Api.layer` builds the client.** It needs an `HttpClient` to send the
-   requests. `FetchHttpClient.layer` uses the global `fetch`. Node's works
-   too, and in tests you'd use a fake one (see
+   `:id` in the path is filled in from `params`. The call is an Effect, so
+   nothing is sent until the program runs.
+4. **`Api.layer` builds the client.** A layer is a recipe for building a
+   service, and this one needs an `HttpClient` to send the requests.
+   `FetchHttpClient.layer` sends them with the global `fetch`. Any other
+   `HttpClient` layer works too, such as a fake backend in tests (see
    [Test with a fake backend](/docs/testing)).
 
 <Callout>
-  Calling an API from a web page on another origin? Read the browser notes in
-  [Platform notes](/docs/platforms) first.
+  If your program runs in a web page and calls an API on another origin, read
+  [Browsers](/docs/platforms#browsers) first. Effect adds tracing headers to
+  each request, and the browser blocks the call when the API doesn't allow them.
 </Callout>
 
 ## How the pieces fit
 
-Everything in Effetch builds on four ideas, from the bottom up:
+Effetch has four building blocks. The program used the first three, and the
+fourth is plugins. From the bottom up:
 
-- **An `HttpClient`** sends requests. It's Effect's, and you choose it when
-  you run your program: the global `fetch`, Node's, or a fake in tests.
-- **A client** is one backend: its base URL, default headers, error schemas
-  and plugins. You declare it once, with `Fetch.Service`.
+- **An `HttpClient`** sends the requests. It comes from Effect, and you pick
+  it when you run your program: the global `fetch`, another `HttpClient`
+  layer, or a fake one in tests.
+- **A client** stands for one backend, with its base URL, default headers,
+  error schemas and plugins. You declare it once, with `Fetch.Service`.
 - **A call** is one request: a method such as `api.get`, or an
   [endpoint](/docs/endpoints) you saved. It returns an Effect, typed by your
   schemas, that fails with typed errors.
-- **Plugins** wrap every call a client makes, for auth, retries, timeouts
-  and logging.
+- **Plugins** wrap every call a client makes, to add auth, retries,
+  timeouts or logging.
 
-The sidebar follows the same order:
-[clients](/docs/clients), [calls](/docs/calls) and
-[errors](/docs/errors), then [plugins](/docs/plugins), including
-[your own](/docs/plugins/writing), and [endpoints](/docs/endpoints). After
-those come [streams](/docs/streaming), [pagination](/docs/pagination),
-[how to structure an app](/docs/structuring-an-app) and
-[testing](/docs/testing).
+The guides in the sidebar follow the same order. They start with
+[Clients](/docs/clients), [Calls](/docs/calls) and [Errors](/docs/errors).
+Then come [Endpoints](/docs/endpoints), for calls you save once and reuse,
+and [Plugins](/docs/plugins), including [your own](/docs/plugins/writing).
+After those, the sidebar goes further, with
+[Streaming responses](/docs/streaming), [Pagination](/docs/pagination),
+[Testing](/docs/testing), [Structure an app](/docs/structuring-an-app) and
+[Platform notes](/docs/platforms).
 
 ## The examples in these docs
 
-To stay short, many examples start from `declare const api: Fetch.Client`: a
-client without plugins, like the one `yield* Api` gives you when `Api` has
-none. In your app, get the client with `yield* Api`. To type a client in a
-function signature, use `Effect.Success<typeof Api>`, which includes your
-plugins and error schemas.
+Most examples in these docs leave out the setup you wrote in this tutorial,
+to stay short. They start from a client that's already there:
 
-Some examples also bind an endpoint inline, with `api.bind`, to stay short.
-In your app, bind endpoints once, with `Fetch.Endpoints` (see
+```ts
+import type { Fetch } from "@monarcode/effetch";
+
+declare const api: Fetch.Client;
+
+export const todos = api.get("/todos");
+```
+
+`Fetch.Client` is the type of a client with no plugins, `defaultError` or
+`statusErrors`, like the `Api` in this tutorial. In your app, get the client
+with `yield* Api`, as the program does. To type a client in a function
+signature, use `Effect.Success<typeof Api>`, which includes your plugins and
+error schemas.
+
+Some examples also bind an endpoint inline, with `api.bind`, for the same
+reason. In your app, bind endpoints once, with `Fetch.Endpoints` (see
 [Share endpoints as a service](/docs/endpoints/services)).
 
-Every TypeScript example in these docs is compiled with the package, so
-they all match the API.
+Every TypeScript example in these docs is compiled against the package when
+the site is built, so each one matches the version the docs describe.
 
 ## What's next
 
-- [Declare a client](/docs/clients): see what the client class gives you
+- [Declare a client](/docs/clients): see what the client class gives you,
   and how to type it.
 - [Client configuration](/docs/clients/configuration): add headers, error
   schemas and plugins to your client.
-- [Methods](/docs/calls): make calls with each HTTP method.
-- [Call errors](/docs/errors): see what can go wrong in a call and how to
+- [Make a call](/docs/calls): pick a method, fill in path parameters and
+  build a query string.
+- [Call errors](/docs/errors): see what can go wrong in a call, and how to
   catch it.
+- [Examples](/docs/examples): read complete programs that use Effetch, from
+  one file to a whole app.

@@ -3,26 +3,21 @@ title: Errors by status
 description: Turn an error status into your own domain error.
 ---
 
-Often a status, or a status with a given body, means a specific error in
-your app: a 404 from `GET /todos/:id` is "todo not found", a 400 with
-`"code": "INVALID_ROLE"` is "invalid role", a 401 from anywhere is "session
-expired". `statusErrors` maps statuses to your own error schemas, and the
-call fails with your error instead of an `HttpError`. This page shows how to
-set up those maps and how Effetch picks the error for a response.
-
-## Choose where a map applies
-
-You can give a map in three places, and they add up:
-
-- on the client, for every call, such as a `401` from anywhere;
-- on an [endpoint](/docs/endpoints), for every call to it, which is where most
-  of them live;
-- on a single call.
+An error status often means something specific in your app. A 404 from
+`GET /todos/:id` means "todo not found", a 400 with
+`"code": "INVALID_ROLE"` means "invalid role", and a 401 with a message
+from any endpoint means "session expired". Catching each of these as an
+`HttpError` and checking its status at every call gets repetitive.
+`statusErrors` maps statuses to error schemas of your own, so the call fails
+with your error instead of an `HttpError`, and the error's tag says what
+went wrong. This page shows how to set up those maps, and how Effetch picks
+the error for a response.
 
 ## Map statuses to your errors
 
-The following program gives a map in all three places, then catches the
-errors by their tags:
+A map's keys are statuses, and each value is an error schema, or a list of
+them to try in order. The following program gives a map on the client, on
+an endpoint and on one call, then catches the errors by their tags:
 
 ```ts
 import * as Effect from "effect/Effect";
@@ -93,18 +88,33 @@ export const program = Effect.gen(function* () {
 
 Before the `catchTags`, the role call fails with
 `InvalidRole | RoleTaken | SessionExpired | HttpError.With<{ readonly code: string }> | NetworkError | DecodeError`.
-`HttpError` stays: a response can always fail to match.
+`HttpError` stays in the type, because a response can always fail to match
+your schemas.
+
+## Choose where a map applies
+
+As the program shows, you can give a map in three places, and they add up:
+
+- **On the client,** for every call, such as a 401 from anywhere.
+- **On an [endpoint](/docs/endpoints),** for every call to it. Most maps live
+  here, next to the route they describe.
+- **On a single client call,** such as `api.get` or `api.post`.
+
+An endpoint call takes no map of its own. It uses the endpoint's map and the
+client's, so to add a status for one endpoint, put it on the endpoint's
+definition.
 
 ## How a response is resolved
 
-Effetch resolves a non-2xx response in the following order:
+When a response comes back with a non-2xx status, Effetch picks the error in
+the following order:
 
 1. If the body is empty or isn't JSON, it's an `HttpError`.
-2. Otherwise the schemas listed for its status are tried in order: the
-   call's, then the endpoint's, then the client's. The first one that
-   decodes the body is the error.
-3. If none does, it's the `HttpError` you'd get without `statusErrors`, its
-   `body` decoded with `error` or `defaultError`.
+2. Otherwise, the schemas listed for its status are tried in order: the
+   call's or the endpoint's, then the client's. The first one that decodes
+   the body is the error.
+3. If none does, it's the `HttpError` you'd get without `statusErrors`, with
+   its `body` decoded by `error` or `defaultError`.
 
 With the maps from the program in
 [Map statuses to your errors](#map-statuses-to-your-errors), responses fail
@@ -116,8 +126,15 @@ as follows:
 | 400 `{ "code": "ROLE_TAKEN", "message": "…" }`   | `RoleTaken`                  |
 | 400 `{ "code": "MISSING_FIELD" }`                | `HttpError` with `body.code` |
 | 400 with an empty or non-JSON body               | `HttpError`                  |
-| 401 from any endpoint                            | `SessionExpired`             |
+| 401 `{ "message": "…" }` from any endpoint       | `SessionExpired`             |
+| 401 with an empty body                           | `HttpError`                  |
 | 500                                              | `HttpError`                  |
+
+The empty 401 is the case to watch for. Some servers send a 401 or a 404
+with no body at all, and `statusErrors` can't map a body that isn't there.
+For a status whose body may be empty, catch the `HttpError` with
+[`Fetch.catchStatus`](/docs/errors/catching#catch-a-status), alongside your
+error's tag.
 
 <Accordions>
 <Accordion title="Details: tags, renamed fields, unions and types">
@@ -129,24 +146,35 @@ as follows:
   `Schema.encodeKeys`:
   `InvalidRole.pipe(Schema.encodeKeys({ code: "error_code" }))`.
 - **Lists, not unions.** A `Schema.Union` is decoded as it is, without a
-  `_tag`: list its members instead.
-- **2xx entries never apply**, since a 2xx is decoded with `output`.
-- Plugins see the response before any of this, so `retry` still retries by
-  status. `onError` receives your error, and `api.httpClient` stays raw.
-- Maps are copied when they're given, so changing one afterwards changes
+  `_tag`, so list its members instead.
+- **2xx entries never apply,** since a 2xx is decoded with `output`.
+- **Plugins get the response first.** They run before any of this, so
+  `retry` still retries by status. `onError` receives your error, and
+  `api.httpClient` stays raw.
+- **Maps are copied when they're given,** so changing one afterwards changes
   nothing. `api.statusErrors` and a `Fetch.endpoint` definition's
-  `statusErrors` are those copies, frozen; an endpoint's `statusErrors`
-  joins its own with the client's, each status listing its schemas in the
-  order they're tried.
-- `Fetch.StatusError<M>` is the union of the errors in a map `M`, and
-  `Fetch.StatusErrorSchema<M>` the union of its schemas, for your own
+  `statusErrors` are those copies, frozen. An endpoint made with
+  `api.endpoint` or `api.bind` has `statusErrors` that join its own with the
+  client's, each status listing its schemas in the order they're tried.
+- **Types.** `Fetch.StatusError<M>` is the union of the errors in a map `M`,
+  and `Fetch.StatusErrorSchema<M>` the union of its schemas, for your own
   function signatures.
-- A client's type includes its map: `Fetch.Client<Ps, EB, SE>`. A client
-  with a map can't be passed where a plain `Fetch.Client` is expected,
-  since that would hide its errors.
+- **A client's type includes its map:** `Fetch.Client<Ps, EB, SE>`. A client
+  with a map can't be passed where a plain `Fetch.Client` is expected, since
+  that would hide its errors.
 
 </Accordion>
 </Accordions>
+
+## Test a map
+
+To check that a status turns into your error, make a fake backend answer
+with it. `FetchTest.fail(getTodo, 401, new SessionExpired({ message: "…" }))`
+sends the error as JSON, and the client decodes it back into
+`SessionExpired`. When the endpoint has no `error` or `statusErrors` schema
+of its own, this works with a map that's only on the client, so you don't
+need to repeat it on the endpoint. See
+[Test errors and statuses](/docs/testing/errors).
 
 ## See it in a full program
 
@@ -161,5 +189,5 @@ uses it across modules.
   you didn't map.
 - [Define endpoints](/docs/endpoints/defining): put each endpoint's
   `statusErrors` on its definition.
-- [Test errors and statuses](/docs/testing/errors): make a fake backend answer with an
-  error status.
+- [Test errors and statuses](/docs/testing/errors): make a fake backend
+  answer with an error status.

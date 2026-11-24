@@ -112,7 +112,7 @@ export function Install() {
 			>
 				{copied ? (
 					<Check
-						className="size-4 text-paper"
+						className="spec-copied size-4 text-paper"
 						strokeWidth={2}
 						aria-hidden="true"
 					/>
