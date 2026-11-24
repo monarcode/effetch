@@ -66,13 +66,6 @@ The guides and the API reference are at
 pnpm add @monarcode/effetch effect
 ```
 
-With Expo:
-
-```bash
-npx expo install effect
-pnpm add @monarcode/effetch
-```
-
 You'll need:
 
 - `effect` 4.x, which is a peer dependency;

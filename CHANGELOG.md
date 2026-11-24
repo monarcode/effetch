@@ -2,7 +2,7 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
-## Unreleased
+## 0.1.0-rc.5
 
 ### Added
 

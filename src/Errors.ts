@@ -139,9 +139,8 @@ export declare namespace HttpError {
 
 /**
  * The error a call fails with when a 2xx response body doesn't match the
- * call's `output` schema, isn't valid JSON, or can't be read. A stream fails
- * with it too, when a value doesn't decode or the body breaks off. Its
- * fields:
+ * call's `output` schema, isn't valid JSON, or can't be read, and the error
+ * a stream fails with while it's read (see below). Its fields:
  *
  * - `method`: the request's HTTP method.
  * - `url`: the request URL without its query string.

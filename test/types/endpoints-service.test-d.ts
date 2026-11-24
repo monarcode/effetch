@@ -7,7 +7,6 @@ import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import type * as Stream from "effect/Stream";
 
 import { describe, expectTypeOf, it } from "vitest";
 
