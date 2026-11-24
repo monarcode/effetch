@@ -313,6 +313,36 @@ describe("Fetch.paginate", () => {
 		});
 	});
 
+	it("leaves plugin overrides to the binding", () => {
+		const bound = withAuth.bind(listTodos, {
+			plugins: { timeout: { duration: "5 seconds" } },
+		});
+		const request: Fetch.PageRequest<typeof bound> = {
+			params: { org: "acme" },
+			query: { page: 1 },
+			// @ts-expect-error: give plugin overrides when binding
+			plugins: { timeout: false },
+		};
+		void request;
+	});
+
+	it("keeps a literal query value's type", () => {
+		const sorted = Fetch.endpoint("GET /rows", {
+			query: Schema.Struct({
+				sort: Schema.Literals(["asc", "desc"]),
+				page: Schema.Finite,
+			}),
+			output: Todos,
+		});
+		Fetch.paginate(api.bind(sorted), {
+			start: 1,
+			request: (page) => ({
+				query: { sort: page === 1 ? "asc" : "desc", page },
+			}),
+			next: () => Option.none(),
+		});
+	});
+
 	it("leaves responseMode to the endpoint", () => {
 		Fetch.paginate(api.bind(listByCursor), {
 			start: 1,

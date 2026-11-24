@@ -256,6 +256,37 @@ describe("Plugin.Overrides", () => {
 		expectTypeOf({ retry: { times: "0" } }).not.toExtend<Overrides>();
 	});
 
+	it("accepts undefined for an option, which keeps its default", () => {
+		expectTypeOf<Plugin.Override<typeof retry>>().toEqualTypeOf<
+			false | { times?: number | undefined }
+		>();
+		const times = 0 as number | undefined;
+		const maybe: Overrides = { retry: { times } };
+		const missing: Overrides = { retry: { times: undefined } };
+		void [maybe, missing];
+	});
+
+	it("keeps each member of a union of options apart", () => {
+		type Union = Plugin<
+			"union",
+			never,
+			never,
+			{ kind: "a"; a: string } | { kind: "b"; b: number }
+		>;
+		expectTypeOf<Plugin.Override<Union>>().toEqualTypeOf<
+			| false
+			| { kind?: "a" | undefined; a?: string | undefined }
+			| { kind?: "b" | undefined; b?: number | undefined }
+		>();
+		type Maybe = Plugin<"maybe", never, never, { n: number } | undefined>;
+		const ok: Plugin.Override<Maybe> = { n: 1 };
+		// @ts-expect-error: n is a number
+		const wrong: Plugin.Override<Maybe> = { n: "x" };
+		// @ts-expect-error: not an override
+		const nonsense: Plugin.Override<Maybe> = "nonsense";
+		void [ok, wrong, nonsense];
+	});
+
 	it("types option keys", () => {
 		// @ts-expect-error times is a number
 		const wrongType: Overrides = { retry: { times: "0" } };

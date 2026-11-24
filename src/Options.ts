@@ -436,8 +436,9 @@ export interface BaseOptions<
 	readonly statusErrors?: SE;
 	/**
 	 * Per-request plugin overrides, by plugin name: `false` skips the
-	 * plugin's hooks and `wrap` for this call, and a partial of its options
-	 * is merged over its `defaults`.
+	 * plugin's hooks and `wrap` for this call, and some of its options are
+	 * merged over its `defaults`. An option set to `undefined` keeps the
+	 * value it would have without it.
 	 */
 	readonly plugins?: Plugin.Overrides<Ps> | undefined;
 }

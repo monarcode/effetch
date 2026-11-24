@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -826,6 +827,52 @@ describe("Fetch.paginate", () => {
 				"https://api.test/todos?page=1",
 				"https://api.test/todos?page=2",
 				"https://api.test/todos?page=3",
+			]);
+		}),
+	);
+
+	it.effect("keeps the endpoint's plugin overrides, ignoring a page's", () =>
+		Effect.gen(function* () {
+			const tag = Fetch.plugin({
+				name: "tag",
+				defaults: { source: "client" },
+				onRequest: (request, ctx) =>
+					Effect.succeed(
+						HttpClientRequest.setHeader(
+							request,
+							"x-source",
+							ctx.options.source,
+						),
+					),
+			});
+			const sent = yield* Effect.gen(function* () {
+				const api = yield* Fetch.make({ baseUrl: base, plugins: [tag] });
+				yield* collect(
+					Fetch.paginate(
+						api.bind(listTodos, {
+							plugins: { tag: { source: "endpoint" } },
+						}),
+						{
+							start: 1,
+							// The type doesn't allow plugins; JavaScript can still pass them.
+							request: (page) =>
+								({
+									query: { page },
+									plugins: { tag: { source: "page" } },
+								}) as never,
+							next: (todos, page) =>
+								todos.length === 0
+									? Option.none()
+									: Option.some(page + 1),
+						},
+					),
+				);
+				return yield* FetchTest.requests;
+			}).pipe(Effect.provide(backend()));
+			expect(sent.map((request) => request.headers["x-source"])).toEqual([
+				"endpoint",
+				"endpoint",
+				"endpoint",
 			]);
 		}),
 	);

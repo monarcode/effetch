@@ -55,8 +55,9 @@ export const allTodos = Effect.gen(function* () {
   cursor.
 - **`request(state)`** gives the options for that page's call: `params`,
   `query`, `body` and `headers`, typed by the endpoint. Plugin overrides
-  aren't among them, so give those when you bind the endpoint. The
-  endpoint's `responseMode` always decides what each page is.
+  aren't among them, so give those when you bind the endpoint, and every
+  page's call uses them. The endpoint's `responseMode` always decides what
+  each page is.
 - **`next(page, state, response)`** gives the next page's state, or
   `Option.none()` after the last page. `response` is the page's
   `HttpClientResponse` when the endpoint's `responseMode` is

@@ -389,7 +389,7 @@ The options type of plugin `P`.
 
 ### Fetch.Plugin.Override [#plugin-override]
 
-What one plugin accepts as a per-request override: `false` to skip it, or a partial of its options. Plugins without options accept only `false`. A key whose value is `undefined` at runtime keeps its default.
+What one plugin accepts as a per-request override: `false` to skip it, or some of its options. Plugins without options accept only `false`. A key set to `undefined` keeps the value it would have without it: the endpoint's override, else the default. So a value that may be missing can be passed as it is.
 
 ### Fetch.Plugin.Overrides [#plugin-overrides]
 
@@ -656,7 +656,7 @@ One page of endpoint `EP`: its `output`'s type, or the raw response without `out
 
 ### Fetch.PageRequest [#pagerequest]
 
-The options of one page's call, as [`PaginateOptions`](#paginateoptions)' `request` returns them for endpoint `EP`: `params`, `body`, `query` and `headers`, typed as for any call of the endpoint.
+The options of one page's call, as [`PaginateOptions`](#paginateoptions)' `request` returns them for endpoint `EP`: `params`, `body`, `query` and `headers`, typed as for any call of the endpoint. Plugin overrides aren't among them: give those when binding the endpoint, and every page's call uses them.
 
 ### Fetch.PageResponse [#pageresponse]
 

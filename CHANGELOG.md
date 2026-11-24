@@ -42,6 +42,19 @@ All notable changes to `@monarcode/effetch`, newest first.
   `Uint8Array<ArrayBuffer>`, which TypeScript 5.6 and older reject. With
   `skipLibCheck: true`, an older TypeScript compiles a project that uses
   Effetch, but some of its types become `any`.
+- A plugin override can set an option to `undefined`, which keeps the
+  option's default, with `exactOptionalPropertyTypes` on too. Calls already
+  worked this way, but the type rejected it, so passing a value that may be
+  missing, as in `plugins: { retry: { times: maybeTimes } }`, needed a
+  cast.
+- `Fetch.paginate` ignores a `plugins` key returned from `request`, as its
+  type always said. The key reached each page's call, unchecked, so an
+  unknown plugin name or a wrong option went unnoticed. Give plugin
+  overrides when you bind the endpoint, and every page's call uses them.
+  `PageRequest`'s `plugins` key says so in its hover.
+- A literal value returned from `Fetch.paginate`'s `request` keeps its
+  type, so a query field typed `"asc" | "desc"` accepts `"asc"`. It was
+  widened to `string`, which failed to compile.
 
 ## 0.1.0-rc.4
 
