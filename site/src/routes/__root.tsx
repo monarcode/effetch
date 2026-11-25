@@ -24,6 +24,11 @@ export const Route = createRootRoute({
 			{ property: "og:locale", content: "en_US" },
 			// The browser's chrome in the page's ink.
 			{ name: "theme-color", content: "#16171d" },
+			// Proves to Google Search Console that we own the site.
+			{
+				name: "google-site-verification",
+				content: "7y8trQGlcdjBScPh8lbUxFfgVqx62EJ03olqqGvcmrE",
+			},
 		],
 		links: [
 			{ rel: "stylesheet", href: appCss },
