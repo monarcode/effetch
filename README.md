@@ -14,12 +14,12 @@
 [![license](https://img.shields.io/npm/l/@monarcode/effetch)](./LICENSE)
 
 [![Effect](https://img.shields.io/badge/Effect%204-20232a?logo=effect&logoColor=white)](https://effect.website)
-[![Browsers](https://img.shields.io/badge/Browsers-20232a?logo=googlechrome&logoColor=white)](https://effetch.pages.dev/docs/platforms#browsers)
-[![React Native](https://img.shields.io/badge/React%20Native-20232a?logo=react&logoColor=61dafb)](https://effetch.pages.dev/docs/platforms#react-native)
-[![Expo](https://img.shields.io/badge/Expo-20232a?logo=expo&logoColor=white)](https://effetch.pages.dev/docs/platforms#react-native)
-[![Node.js](https://img.shields.io/badge/Node.js%2020+-20232a?logo=nodedotjs&logoColor=5fa04e)](https://effetch.pages.dev/docs/platforms)
-[![Bun](https://img.shields.io/badge/Bun-20232a?logo=bun&logoColor=fbf0df)](https://effetch.pages.dev/docs/platforms)
-[![Deno](https://img.shields.io/badge/Deno-20232a?logo=deno&logoColor=white)](https://effetch.pages.dev/docs/platforms)
+[![Browsers](https://img.shields.io/badge/Browsers-20232a?logo=googlechrome&logoColor=white)](https://effetch.monarcode.dev/docs/platforms#browsers)
+[![React Native](https://img.shields.io/badge/React%20Native-20232a?logo=react&logoColor=61dafb)](https://effetch.monarcode.dev/docs/platforms#react-native)
+[![Expo](https://img.shields.io/badge/Expo-20232a?logo=expo&logoColor=white)](https://effetch.monarcode.dev/docs/platforms#react-native)
+[![Node.js](https://img.shields.io/badge/Node.js%2020+-20232a?logo=nodedotjs&logoColor=5fa04e)](https://effetch.monarcode.dev/docs/platforms)
+[![Bun](https://img.shields.io/badge/Bun-20232a?logo=bun&logoColor=fbf0df)](https://effetch.monarcode.dev/docs/platforms)
+[![Deno](https://img.shields.io/badge/Deno-20232a?logo=deno&logoColor=white)](https://effetch.monarcode.dev/docs/platforms)
 
 **Typed HTTP calls for [Effect](https://effect.website), without the
 boilerplate.**
@@ -58,7 +58,7 @@ export const getTodo = (id: number) =>
 ## Documentation
 
 The guides and the API reference are at
-**[effetch.pages.dev/docs](https://effetch.pages.dev/docs)**.
+**[effetch.monarcode.dev/docs](https://effetch.monarcode.dev/docs)**.
 
 ## Install
 
@@ -72,7 +72,7 @@ You'll need:
 - an ESM project, since the package is ESM only;
 - TypeScript 5.7 or newer.
 
-[Compatibility](https://effetch.pages.dev/docs/reference/compatibility)
+[Compatibility](https://effetch.monarcode.dev/docs/reference/compatibility)
 lists the runtimes Effetch is built for, and which of them CI tests.
 
 ## Quick start
@@ -120,36 +120,36 @@ await Effect.runPromise(program.pipe(Effect.provide(ApiLive)));
 `Api` is your client, declared once for the whole app. `api.get` fills in
 `:id` from `params`, sends the request and decodes the body with `Todo`.
 `Api.layer` builds the client, with the `HttpClient` that sends the
-requests. [Getting started](https://effetch.pages.dev/docs/getting-started)
+requests. [Getting started](https://effetch.monarcode.dev/docs/getting-started)
 walks through each part.
 
 Calling an API from a web page on another origin? Read
-[Platform notes](https://effetch.pages.dev/docs/platforms) first.
+[Platform notes](https://effetch.monarcode.dev/docs/platforms) first.
 
 ## Guides
 
-- [Clients](https://effetch.pages.dev/docs/clients): declare a client, configure it and
+- [Clients](https://effetch.monarcode.dev/docs/clients): declare a client, configure it and
   provide it.
-- [Calls](https://effetch.pages.dev/docs/calls): methods, parameters, bodies, uploads and
+- [Calls](https://effetch.monarcode.dev/docs/calls): methods, parameters, bodies, uploads and
   responses.
-- [Errors](https://effetch.pages.dev/docs/errors): what a call can fail with, and how to
+- [Errors](https://effetch.monarcode.dev/docs/errors): what a call can fail with, and how to
   catch and type each error.
-- [Endpoints](https://effetch.pages.dev/docs/endpoints): save routes with their schemas and
+- [Endpoints](https://effetch.monarcode.dev/docs/endpoints): save routes with their schemas and
   share them as a service.
-- [Plugins](https://effetch.pages.dev/docs/plugins): auth, retries, timeouts and logging, and
+- [Plugins](https://effetch.monarcode.dev/docs/plugins): auth, retries, timeouts and logging, and
   writing your own.
-- [Streaming responses](https://effetch.pages.dev/docs/streaming) and
-  [Pagination](https://effetch.pages.dev/docs/pagination).
-- [Structure an app](https://effetch.pages.dev/docs/structuring-an-app).
-- [Testing](https://effetch.pages.dev/docs/testing): test calls against a fake backend made
+- [Streaming responses](https://effetch.monarcode.dev/docs/streaming) and
+  [Pagination](https://effetch.monarcode.dev/docs/pagination).
+- [Structure an app](https://effetch.monarcode.dev/docs/structuring-an-app).
+- [Testing](https://effetch.monarcode.dev/docs/testing): test calls against a fake backend made
   from your endpoints.
-- [Platform notes](https://effetch.pages.dev/docs/platforms): browsers and React Native.
-- [Coming from axios or ky](https://effetch.pages.dev/docs/coming-from-axios-or-ky).
-- [Upgrade from 0.1.0-rc.3](https://effetch.pages.dev/docs/upgrading).
-- [Reference](https://effetch.pages.dev/docs/reference): every export of
+- [Platform notes](https://effetch.monarcode.dev/docs/platforms): browsers and React Native.
+- [Coming from axios or ky](https://effetch.monarcode.dev/docs/coming-from-axios-or-ky).
+- [Upgrade from 0.1.0-rc.3](https://effetch.monarcode.dev/docs/upgrading).
+- [Reference](https://effetch.monarcode.dev/docs/reference): every export of
   `Fetch`, the plugins and `FetchTest`, with
-  [Compatibility](https://effetch.pages.dev/docs/reference/compatibility) and
-  [Limitations](https://effetch.pages.dev/docs/reference/limitations).
+  [Compatibility](https://effetch.monarcode.dev/docs/reference/compatibility) and
+  [Limitations](https://effetch.monarcode.dev/docs/reference/limitations).
 
 ## Examples
 

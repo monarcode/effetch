@@ -55,7 +55,7 @@ the API's error body is decoded onto `HttpError`, and the client's plugins
   from the built package.
 - One docs version per release line. The current line is at `/docs/…`;
   older lines are snapshots at `/docs/<line>/…`. The live site
-  (https://effetch.pages.dev) deploys from the `site` branch at each
+  (https://effetch.monarcode.dev) deploys from the `site` branch at each
   release; `main` deploys as a preview.
 
 ## Capabilities and Constraints
@@ -72,7 +72,8 @@ the API's error body is decoded onto `HttpError`, and the client's plugins
   and `@monarcode/effetch/test` (`FetchTest`, a fake backend for tests).
 - Terminology: the product is **Effetch** in prose; `effetch` only as an
   identifier (npm name, repo, URLs).
-- Undecided: a custom domain. `https://effetch.pages.dev` until then.
+- Domain: `https://effetch.monarcode.dev`. The Cloudflare Pages address,
+  `https://effetch.pages.dev`, still serves the same site.
 
 ## Brand Commitments
 

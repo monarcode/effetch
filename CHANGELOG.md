@@ -2,6 +2,13 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
+## Unreleased
+
+### Changed
+
+- The documentation site moved to https://effetch.monarcode.dev. The old
+  address, https://effetch.pages.dev, still serves it.
+
 ## 0.1.0-rc.5
 
 ### Added
