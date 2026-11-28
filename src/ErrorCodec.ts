@@ -1,11 +1,15 @@
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Headers from "effect/http/Headers";
 import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
+import * as SchemaIssue from "effect/SchemaIssue";
+import * as SchemaParser from "effect/SchemaParser";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
 import { DecodeError, HttpError, NetworkError } from "./Errors.js";
 import { parseErrorBody, readErrorBody } from "./internal/response.js";
-import { joinStatusErrors, tagOf } from "./internal/statusErrors.js";
+import { joinStatusErrors, sentTagOf, tagOf } from "./internal/statusErrors.js";
 import type {
 	AnySchema,
 	CallError,
@@ -214,7 +218,7 @@ const httpErrorFromText = (body: AnySchema | undefined) =>
 		text: Schema.String,
 	}).pipe(
 		Schema.decodeTo(
-			Schema.instanceOf(HttpError),
+			Schema.instanceOf(HttpError, { expected: "an HttpError" }),
 			SchemaTransformation.transformEffect({
 				decode: ({ method, url, status, text }) =>
 					Effect.map(
@@ -241,32 +245,341 @@ const httpErrorFromText = (body: AnySchema | undefined) =>
 		),
 	);
 
-/** The `_tag` that sets apart the errors whose schemas have no `_tag`. */
+/** The `_tag` that sets apart the errors whose schemas send no `_tag`. */
 const untaggedTag = "effetch/UntaggedError";
 
 /**
- * An error whose schema has no literal `_tag`, sent with its place among
- * them, `index`, so it decodes with its own schema. Without that, two such
- * schemas with the same fields would decode as whichever comes first.
+ * What an error whose schema sends no `_tag` goes with, so the other side
+ * decodes it with the same schema: the `_tag` its schema leaves out, as
+ * with `Schema.tagDefaultOmit`, else its schema's identifier, such as a
+ * class's name, when no other schema has the same; else its schema's place
+ * among the rest.
  */
-const untagged = (schema: AnySchema, index: number) =>
-	Schema.Struct({
+type UntaggedKey =
+	| { readonly tag: string }
+	| { readonly identifier: string }
+	| { readonly index: number };
+
+/** An error schema that sends no `_tag`. */
+interface Untagged {
+	/** Its JSON codec. The services it needs are the codec's, as its type says. */
+	readonly json: Schema.Codec<unknown, unknown>;
+	readonly key: UntaggedKey;
+	/** Whether its type takes `value`, extra fields and all. */
+	readonly is: (value: unknown) => boolean;
+	/** Whether its type takes `value` without leaving out any of its fields. */
+	readonly isExact: (value: unknown) => boolean;
+	/** Its type is a declaration, such as a class, rather than a struct. */
+	readonly declaration: boolean;
+	readonly schema: AnySchema;
+	/** Its type's identifier, such as a class's name. */
+	readonly identifier: string | undefined;
+	/** Its type's keys, when it's a struct. */
+	readonly keys: ReadonlySet<PropertyKey> | undefined;
+}
+
+const exactly: SchemaAST.ParseOptions = { onExcessProperty: "error" };
+
+/** A struct's keys, or `undefined` for anything else. */
+const structKeys = (ast: SchemaAST.AST) =>
+	SchemaAST.isObjects(ast) && ast.indexSignatures.length === 0
+		? new Set(ast.propertySignatures.map((signature) => signature.name))
+		: undefined;
+
+/**
+ * The schemas that send no `_tag`, each with its key. A name, the `_tag`
+ * a schema leaves out or its identifier, is a key only when no other
+ * schema has it: schemas that share one, such as two classes named
+ * `ApiError`, go by place instead, as the other side couldn't tell them
+ * apart by name.
+ */
+const untaggedEntries = (
+	schemas: ReadonlyArray<AnySchema>,
+): ReadonlyArray<Untagged> => {
+	const named = schemas.map((schema) => {
+		const type = Schema.toType(schema as Schema.Top);
+		const tag = tagOf(schema);
+		const identifier = SchemaAST.resolveIdentifier(type.ast);
+		const name =
+			tag !== undefined
+				? `_tag ${tag}`
+				: identifier !== undefined
+					? `identifier ${identifier}`
+					: undefined;
+		return { schema, type, tag, identifier, name };
+	});
+	const counts = new Map<string, number>();
+	for (const { name } of named) {
+		if (name !== undefined) {
+			counts.set(name, (counts.get(name) ?? 0) + 1);
+		}
+	}
+	let index = 0;
+	return named.map(({ schema, type, tag, identifier, name }): Untagged => {
+		const unique = name !== undefined && counts.get(name) === 1;
+		const key: UntaggedKey =
+			unique && tag !== undefined
+				? { tag }
+				: unique && identifier !== undefined
+					? { identifier }
+					: { index: index++ };
+		const validate = SchemaParser.decodeUnknownExit(type);
+		return {
+			json: Schema.toCodecJson(
+				schema as Schema.Top,
+			) as unknown as Schema.Codec<unknown, unknown>,
+			key,
+			is: Schema.is(type),
+			isExact: (value) => {
+				try {
+					return Exit.isSuccess(validate(value, exactly));
+				} catch {
+					return false;
+				}
+			},
+			declaration: SchemaAST.isDeclaration(type.ast),
+			schema,
+			identifier,
+			keys: structKeys(type.ast),
+		};
+	});
+};
+
+/**
+ * How well a struct's `keys` fit `value`: whether they cover all of its
+ * own keys, then how many of them they cover.
+ */
+const fit = (
+	keys: ReadonlySet<PropertyKey> | undefined,
+	value: unknown,
+): ReadonlyArray<number> => {
+	if (keys === undefined || typeof value !== "object" || value === null) {
+		return [0, 0];
+	}
+	const own = Object.keys(value);
+	const covered = own.filter((key) => keys.has(key)).length;
+	return [covered === own.length ? 1 : 0, covered];
+};
+
+/**
+ * How far up `value`'s prototype chain the entry's class is: 0 for the
+ * value's own class. A class matches itself; a copy of one, such as
+ * `Conflict.annotate(…)`, matches by the `identifier` a `Schema.Class`
+ * has, a half step further, so two classes with the same name aren't
+ * taken for each other.
+ */
+const classDistance = (value: object, entry: Untagged) => {
+	let found = Number.POSITIVE_INFINITY;
+	let distance = 0;
+	for (
+		let proto: unknown = Object.getPrototypeOf(value);
+		typeof proto === "object" && proto !== null && proto !== Object.prototype;
+		proto = Object.getPrototypeOf(proto)
+	) {
+		const { constructor } = proto as { readonly constructor?: unknown };
+		if (constructor === entry.schema) {
+			return Math.min(found, distance);
+		}
+		if (
+			found === Number.POSITIVE_INFINITY &&
+			entry.identifier !== undefined &&
+			typeof constructor === "function" &&
+			(constructor as { readonly identifier?: unknown }).identifier ===
+				entry.identifier
+		) {
+			found = distance + 0.5;
+		}
+		distance++;
+	}
+	return found;
+};
+
+/** Whether `a` ranks above `b`, comparing each place in turn. */
+const ranksAbove = (a: ReadonlyArray<number>, b: ReadonlyArray<number>) => {
+	for (let i = 0; i < a.length; i++) {
+		if (a[i] !== b[i]) {
+			return a[i]! > b[i]!;
+		}
+	}
+	return false;
+};
+
+/**
+ * The schemas that take `value`: those that keep all its fields, so
+ * `{ message, id }` doesn't go as a `{ message }` struct, else those that
+ * take it with fields to spare.
+ */
+const takersOf = (entries: ReadonlyArray<Untagged>, value: unknown) => {
+	const exact = entries.filter((entry) => entry.isExact(value));
+	return exact.length > 0 ? exact : entries.filter((entry) => entry.is(value));
+};
+
+/**
+ * The schema `value` goes as, of those that take it: a class instance's
+ * nearest class, then the struct that covers most of its fields. Ties go
+ * to the first listed.
+ */
+const schemaFor = (entries: ReadonlyArray<Untagged>, value: unknown) => {
+	const takers = takersOf(entries, value);
+	const instance =
+		typeof value === "object" &&
+		value !== null &&
+		Object.getPrototypeOf(value) !== Object.prototype &&
+		Object.getPrototypeOf(value) !== null;
+	let found: Untagged | undefined;
+	let top: ReadonlyArray<number> = [];
+	for (const entry of takers) {
+		const asClass = instance && entry.declaration;
+		const rank = [
+			asClass ? 1 : 0,
+			asClass ? -classDistance(value, entry) : 0,
+			...fit(entry.keys, value),
+		];
+		if (found === undefined || ranksAbove(rank, top)) {
+			found = entry;
+			top = rank;
+		}
+	}
+	return found;
+};
+
+/** The key the wire names, or why it names none. */
+const keyOf = (wire: {
+	readonly tag?: string;
+	readonly identifier?: string;
+	readonly index?: number;
+}): UntaggedKey | undefined => {
+	const { tag, identifier, index } = wire;
+	const given = [tag, identifier, index].filter((key) => key !== undefined);
+	if (given.length !== 1) {
+		return undefined;
+	}
+	return tag !== undefined
+		? { tag }
+		: identifier !== undefined
+			? { identifier }
+			: { index: index! };
+};
+
+/**
+ * The errors whose schemas send no `_tag`, as one member. Each goes as
+ * `{ _tag: "effetch/UntaggedError", error }` with its key, `tag`,
+ * `identifier` or `index`, and decodes with only the schema that has it.
+ * One the other side doesn't know fails to decode, rather than decoding as
+ * another.
+ */
+const untaggedErrors = (entries: ReadonlyArray<Untagged>) => {
+	const byKey = new Map(
+		entries.map((entry) => [JSON.stringify(entry.key), entry] as const),
+	);
+	/** The schema the wire's key names, or why none does. */
+	const find = (
+		wire: Parameters<typeof keyOf>[0],
+		options: SchemaAST.ParseOptions,
+	): Untagged | SchemaIssue.Issue => {
+		const key = keyOf(wire);
+		if (key === undefined) {
+			return new SchemaIssue.InvalidValue(
+				{
+					message:
+						"an error without a _tag goes with an identifier, a tag or an index",
+				},
+				wire,
+				options,
+			);
+		}
+		const entry = byKey.get(JSON.stringify(key));
+		if (entry !== undefined) {
+			return entry;
+		}
+		const [name, value] = Object.entries(key)[0]!;
+		return new SchemaIssue.Pointer(
+			[name],
+			new SchemaIssue.InvalidValue(
+				{
+					message:
+						"index" in key
+							? `no error schema without an identifier is at index ${key.index}`
+							: `no error schema has the ${"tag" in key ? "_tag" : "identifier"} ${JSON.stringify(value)}`,
+				},
+				value,
+				options,
+			),
+		);
+	};
+
+	return Schema.Struct({
 		_tag: Schema.Literal(untaggedTag),
-		index: Schema.Literal(index),
-		error: schema as Schema.Top,
+		tag: Schema.optionalKey(Schema.String),
+		identifier: Schema.optionalKey(Schema.String),
+		index: Schema.optionalKey(Schema.Int),
+		error: Schema.Unknown,
 	}).pipe(
 		Schema.decodeTo(
-			Schema.toType(schema as Schema.Top),
-			SchemaTransformation.transform({
-				decode: ({ error }) => error,
-				encode: (error) => ({
-					_tag: untaggedTag as typeof untaggedTag,
-					index,
-					error,
-				}),
+			Schema.declare(
+				(value): value is unknown => takersOf(entries, value).length > 0,
+				{ expected: "an error one of the error schemas takes" },
+			),
+			SchemaTransformation.transformEffect({
+				decode: (wire, options) => {
+					const found = find(wire, options);
+					return "json" in found
+						? SchemaParser.decodeUnknownEffect(found.json)(
+								wire.error,
+								options,
+							).pipe(
+								Effect.mapError(
+									(issue) => new SchemaIssue.Pointer(["error"], issue),
+								),
+							)
+						: Effect.fail(found);
+				},
+				encode: (value, options) => {
+					// The declaration above only lets through values some schema takes.
+					const entry = schemaFor(entries, value)!;
+					return SchemaParser.encodeUnknownEffect(entry.json)(
+						value,
+						options,
+					).pipe(
+						Effect.map((error) => ({
+							_tag: untaggedTag as typeof untaggedTag,
+							...entry.key,
+							error,
+						})),
+						Effect.mapError(
+							(issue) => new SchemaIssue.Pointer(["error"], issue),
+						),
+					);
+				},
 			}),
 		),
 	);
+};
+
+/**
+ * Whether the schema is a plain `Schema.Union`, with no checks,
+ * transformation or identifier of its own, whose members can go as
+ * themselves.
+ */
+const isPlainUnion = (
+	schema: AnySchema,
+): schema is AnySchema & { readonly members: ReadonlyArray<AnySchema> } => {
+	const { ast } = schema;
+	return (
+		SchemaAST.isUnion(ast) &&
+		Array.isArray((schema as { readonly members?: unknown }).members) &&
+		ast.checks === undefined &&
+		ast.encoding === undefined &&
+		(ast as { readonly encodingChecks?: unknown }).encodingChecks ===
+			undefined &&
+		ast.options?.mode !== "oneOf" &&
+		SchemaAST.resolveIdentifier(ast) === undefined
+	);
+};
+
+/** A plain union's members, in turn, or the schema itself. */
+const membersOf = (schema: AnySchema): ReadonlyArray<AnySchema> =>
+	isPlainUnion(schema) ? schema.members.flatMap(membersOf) : [schema];
 
 /**
  * Builds a codec for every error a call can fail with: a schema whose JSON
@@ -292,8 +605,13 @@ const untagged = (schema: AnySchema, index: number) =>
  * - A `NetworkError` goes without its `cause`, and a `DecodeError` without
  *   its `issue`. Both decode as `undefined`.
  * - The `statusErrors` errors, and the `errors` you add, go as their own
- *   schemas encode them. One whose schema has no `_tag` goes with its place
- *   in the list, so it decodes with its own schema.
+ *   schemas encode them. One whose schema sends no `_tag` goes with its
+ *   schema's name: the `_tag` it leaves out, as with
+ *   `Schema.tagDefaultOmit`, or its identifier, such as a class's name. It
+ *   decodes with the schema that has that name, wherever the other side
+ *   lists it. A schema without a name of its own, such as a plain struct,
+ *   goes by its place among those, so both sides must list them in the
+ *   same order. A plain `Schema.Union`'s members each count as a schema.
  *
  * Plugins' errors aren't on an endpoint or a client, so add the ones a call
  * can fail with as `errors`, such as `TimeoutError`.
@@ -376,26 +694,38 @@ export function errorCodec(
 ): unknown {
 	const config = options?.client?.config;
 	// The schemas statuses turn into, read as calls read them (the source's,
-	// then the client's), then the errors added. Each once.
+	// then the client's), then the errors added, each once. A plain union's
+	// members come after the schemas listed themselves, so a member doesn't
+	// take the place of a schema listed with the same `_tag`.
+	const listed = [
+		...new Set<AnySchema>([
+			...Object.values(
+				joinStatusErrors([source.statusErrors, config?.statusErrors]),
+			).flat(),
+			...(options?.errors ?? []),
+		]),
+	];
 	const others = new Set<AnySchema>([
-		...Object.values(
-			joinStatusErrors([source.statusErrors, config?.statusErrors]),
-		).flat(),
-		...(options?.errors ?? []),
+		...listed.filter((schema) => !isPlainUnion(schema)),
+		...listed.filter(isPlainUnion).flatMap(membersOf),
 	]);
-	const tagged = [...others].filter((schema) => tagOf(schema) !== undefined);
-	const rest = [...others].filter((schema) => tagOf(schema) === undefined);
+	const tagged = [...others].filter(
+		(schema) => sentTagOf(schema) !== undefined,
+	);
+	const rest = untaggedEntries(
+		[...others].filter((schema) => sentTagOf(schema) === undefined),
+	);
 	// Effetch's own errors first, then the other tagged ones, then the rest,
-	// each under its index: a schema without a `_tag` can then neither take
-	// another's value when encoding, nor its JSON when decoding. A
-	// `DecodeError` is always decoded, though the type leaves it out for a
-	// call that can't fail with one.
+	// as one member that names each error's schema: a schema that sends no
+	// `_tag` can then neither take another's value when encoding, nor its
+	// JSON when decoding. A `DecodeError` is always decoded, though the type
+	// leaves it out for a call that can't fail with one.
 	const members: ReadonlyArray<AnySchema> = [
 		httpErrorFromText(source.error ?? config?.defaultError),
 		NetworkError,
 		DecodeError,
 		...tagged,
-		...rest.map(untagged),
+		...(rest.length === 0 ? [] : [untaggedErrors(rest)]),
 	];
 	return Schema.Union(members as unknown as ReadonlyArray<Schema.Top>);
 }

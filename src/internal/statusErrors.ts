@@ -81,19 +81,17 @@ export const joinStatusErrors = (
 	return Object.freeze(joined);
 };
 
-/** The `_tag` of each schema seen, or `null` for a schema without one. */
-const tags = new WeakMap<AnySchema, string | null>();
+/** The literal `_tag` of each schema seen, or `null` for a schema without one. */
+const tags = new WeakMap<
+	AnySchema,
+	{ readonly tag: string; readonly optional: boolean } | null
+>();
 
-/**
- * The literal `_tag` the schema's JSON form has, such as `"InvalidRole"`
- * for a `Schema.TaggedError` class, or `undefined` without one. It's read
- * from the encoded side, so it also works through `Schema.encodeKeys` and
- * `Schema.tagDefaultOmit`.
- */
-export const tagOf = (schema: AnySchema): string | undefined => {
-	let tag = tags.get(schema);
-	if (tag === undefined) {
-		tag = null;
+/** The literal `_tag` property of the schema's JSON form, if it has one. */
+const tagProperty = (schema: AnySchema) => {
+	let found = tags.get(schema);
+	if (found === undefined) {
+		found = null;
 		const encoded = SchemaAST.toEncoded(Schema.toCodecJson(schema).ast);
 		if (SchemaAST.isObjects(encoded)) {
 			const property = encoded.propertySignatures.find(
@@ -104,12 +102,34 @@ export const tagOf = (schema: AnySchema): string | undefined => {
 				SchemaAST.isLiteral(property.type) &&
 				typeof property.type.literal === "string"
 			) {
-				tag = property.type.literal;
+				found = {
+					tag: property.type.literal,
+					optional: SchemaAST.isOptional(property.type),
+				};
 			}
 		}
-		tags.set(schema, tag);
+		tags.set(schema, found);
 	}
-	return tag ?? undefined;
+	return found ?? undefined;
+};
+
+/**
+ * The literal `_tag` the schema's JSON form has, such as `"InvalidRole"`
+ * for a `Schema.TaggedError` class, even when it may be left out.
+ */
+export const tagOf = (schema: AnySchema): string | undefined =>
+	tagProperty(schema)?.tag;
+
+/**
+ * The literal `_tag` the schema's JSON form always has: none when it may
+ * be left out, as with `Schema.tagDefaultOmit`, whose JSON can then be
+ * any other schema's.
+ */
+export const sentTagOf = (schema: AnySchema): string | undefined => {
+	const property = tagProperty(schema);
+	return property === undefined || property.optional
+		? undefined
+		: property.tag;
 };
 
 /**

@@ -157,30 +157,29 @@ schemas. There, the client becomes shared infrastructure, and it imports
 nothing from the modules. Each module defines its endpoints next to its
 schemas, with no client, and binds them to the client in its data layer.
 
-[`examples/app`](https://github.com/monarcode/effetch/tree/main/examples/app)
-is a complete app in this layout, with two modules and two backends. Here
-are its files:
+[`examples/store`](https://github.com/monarcode/effetch/tree/main/examples/store)
+is a complete app in this layout: a shop with a products module and a cart
+module, which you can run against a free fake store. Here are its files:
 
 ```text
-examples/app/
+examples/store/
 ├── infrastructure/http/
-│   ├── app-api-client.ts     the main backend's client
-│   ├── wallet-api-client.ts  the wallet backend's client
-│   └── plugins.ts            plugins both clients use
+│   └── store-api-client.ts     the backend's client
 ├── modules/
-│   ├── todos/
-│   │   ├── contract/todos.ts schemas, and endpoints from Fetch.endpoint
-│   │   ├── data/todo.api.ts  the endpoints, bound to AppApiClient
-│   │   ├── todo.layer.ts     the module's layers, merged
-│   │   └── public.ts         what other code may import
-│   └── wallet/
-│       ├── application/      workflows that take more than one call
+│   ├── products/
+│   │   ├── contract/products.ts schemas, and endpoints from Fetch.endpoint
+│   │   ├── data/product.api.ts  the endpoints, bound to StoreApiClient
+│   │   ├── products.layer.ts    the module's layers, merged
+│   │   └── public.ts            what other code may import
+│   └── cart/
+│       ├── application/         workflows that take more than one call
 │       ├── contract/
 │       ├── data/
-│       ├── wallet.layer.ts
+│       ├── cart.test.ts         a workflow's tests, against a fake backend
+│       ├── cart.layer.ts
 │       └── public.ts
-├── runtime.ts                modules, over the clients, over HttpClient
-└── main.ts                   the program: imports modules only through public.ts
+├── runtime.ts                   modules, over the client, over HttpClient
+└── main.ts                      the program: imports modules only through public.ts
 ```
 
 <Callout>
@@ -191,9 +190,14 @@ examples/app/
   layer.
 </Callout>
 
-The following code puts the `todos` module's files in one block, each
+The same modules also run behind a React app:
+[`examples/store-react`](https://github.com/monarcode/effetch/tree/main/examples/store-react)
+routes them with TanStack Router, and its loaders run their calls with the
+store's `ManagedRuntime`, so leaving a page cancels its request.
+
+The following code puts the `products` module's files in one block, each
 under a comment with its path. It's shortened from the example, which has
-more fields, endpoints and errors:
+more fields and errors:
 
 ```ts
 import * as Config from "effect/Config";
@@ -204,50 +208,54 @@ import * as Schema from "effect/Schema";
 
 import { Fetch } from "@monarcode/effetch";
 
-// infrastructure/http/app-api-client.ts: how to reach the backend
-export class AppApiClient extends Fetch.Service<AppApiClient>()(
-  "AppApiClient",
-  { baseUrl: Config.String("APP_API_URL") },
+// infrastructure/http/store-api-client.ts: how to reach the backend
+export class StoreApiClient extends Fetch.Service<StoreApiClient>()(
+  "StoreApiClient",
+  { baseUrl: Config.String("STORE_API_URL") },
 ) {}
 
-// modules/todos/contract/todos.ts: schemas and endpoints, no client
-const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
-const NewTodo = Schema.Struct({ title: Schema.String });
-
-export const listTodos = Fetch.endpoint("GET /todos", {
-  output: Schema.Array(Todo),
+// modules/products/contract/products.ts: schemas and endpoints, no client
+const Product = Schema.Struct({
+  id: Schema.Finite,
+  title: Schema.String,
+  price: Schema.Finite,
 });
-export const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
-export const createTodo = Fetch.endpoint("POST /todos", {
-  input: NewTodo,
-  output: Todo,
-});
+const ProductPage = Schema.Struct({ products: Schema.Array(Product) });
 
-// modules/todos/data/todo.api.ts: the endpoints, bound, as a service
-export class TodoApi extends Fetch.Endpoints<TodoApi>()(
-  "TodoApi",
-  AppApiClient,
+export const getProduct = Fetch.endpoint("GET /products/:id", {
+  output: Product,
+});
+export const productsInCategory = Fetch.endpoint(
+  "GET /products/category/:category",
+  { output: ProductPage },
+);
+
+// modules/products/data/product.api.ts: the endpoints, bound, as a service
+export class ProductApi extends Fetch.Endpoints<ProductApi>()(
+  "ProductApi",
+  StoreApiClient,
   {
-    list: listTodos,
-    get: getTodo,
-    create: createTodo,
+    get: getProduct,
+    inCategory: productsInCategory,
   },
 ) {}
 
-// modules/todos/todo.layer.ts: every layer the module has
-export const TodoModuleLive = Layer.mergeAll(TodoApi.layer);
+// modules/products/products.layer.ts: every layer the module has
+export const ProductModuleLive = Layer.mergeAll(ProductApi.layer);
 
 // runtime.ts: the modules, on top of the client, on top of HttpClient
-export const AppLayer = TodoModuleLive.pipe(
-  Layer.provideMerge(AppApiClient.layer),
+export const AppLayer = ProductModuleLive.pipe(
+  Layer.provideMerge(StoreApiClient.layer),
   Layer.provide(FetchHttpClient.layer),
 );
 
 // anywhere
 export const program = Effect.gen(function* () {
-  const todos = yield* TodoApi;
-  const todo = yield* todos.create({ body: { title: "Write docs" } });
-  return yield* todos.get({ params: { id: todo.id } });
+  const products = yield* ProductApi;
+  const page = yield* products.inCategory({
+    params: { category: "smartphones" },
+  });
+  return page.products.map((product) => product.title);
 });
 ```
 
@@ -262,12 +270,12 @@ Each part of the app grows in its own place:
   folder, beside their schemas, and 20 one-line entries in its
   `Fetch.Endpoints` class in `data/`. When they serve separate concerns,
   split them into several services, each in its own file.
-- **Every module's data service is its endpoints,** as `TodoApi` is here.
+- **Every module's data service is its endpoints,** as `ProductApi` is here.
   There's one line per operation and every type is inferred, so every
   module's `data/` folder looks the same.
 - **An operation that isn't one HTTP call** (it combines calls, reshapes a
   response or adds a domain error) is a workflow over those endpoints, in
-  the module's `application/` folder, as `wallet` has.
+  the module's `application/` folder, as the cart's `buyCheapest` is.
 - **Declare a service's interface by hand only when you need another
   implementation,** such as an offline one or a fake for UI work, and
   implement it with the endpoints.
@@ -279,10 +287,9 @@ import only the schemas from `contract/`. Define them with `Fetch.endpoint`
 instead when something has to read the routes and schemas without a
 client, such as a test's fake backend.
 
-The example app does both. `todos` defines its endpoints with
-`Fetch.endpoint` in `contract/`, and binds them with `Fetch.Endpoints` in
-`data/`. `wallet` makes its endpoints with its client's `endpoint` method
-in `data/`, and shares them as a service the way
+The example app uses `Fetch.endpoint` in both modules, because
+`cart.test.ts` serves the endpoints from a fake backend. With `api.endpoint`,
+share them as a service the way
 [Endpoints made with api.endpoint](#endpoints-made-with-apiendpoint) shows.
 
 ## Several backends
@@ -342,10 +349,9 @@ Keep the following in mind:
 - **Catch a backend's `HttpError` next to its calls,** where `body` has
   that backend's error shape.
 
-[`examples/backends.ts`](https://github.com/monarcode/effetch/blob/main/examples/backends.ts)
-does this in one file, and
-[`examples/app`](https://github.com/monarcode/effetch/tree/main/examples/app)
-across modules.
+[`examples/live`](https://github.com/monarcode/effetch/tree/main/examples/live)
+has two clients for two backends, Wikimedia and Lichess, on one
+`HttpClient`.
 
 ## What's next
 

@@ -20,6 +20,11 @@ All notable changes to `@monarcode/effetch`, newest first.
   - Add plugins' errors, such as `TimeoutError`, as `errors`.
   - Headers, a `NetworkError`'s `cause` and a `DecodeError`'s `issue` stay
     behind.
+  - An error whose schema sends no `_tag` goes with its schema's name,
+    the `_tag` it leaves out or its identifier, such as a class's name, so
+    it decodes with its own schema, even when the other side lists its
+    errors in another order. A schema without a name of its own goes by
+    its place among those, so both sides must list them in the same order.
 
   It comes with the types `ErrorCodec`, `ErrorCodecErrors`,
   `ErrorCodecSource`, `ErrorCodecClient` and `ErrorCodecOptions`. A new
@@ -53,6 +58,27 @@ All notable changes to `@monarcode/effetch`, newest first.
   tests against the newest Effect 4.x. The
   [Compatibility](https://effetch.monarcode.dev/docs/reference/compatibility)
   page lists what each job covers.
+
+### Documentation
+
+- The examples are new. Each one does a real task against a free public
+  API that needs no key, and runs with `pnpm example <name>`:
+  - `github/` shows a repository and its open issues;
+  - `sign-in/` signs in and renews the access token;
+  - `live/` reads Wikipedia's edits and Lichess TV's moves as they stream;
+  - `upload/` sends a multipart body;
+  - `bff/` sends a server's call errors to the browser with
+    `Fetch.errorCodec`;
+  - `store/` is an app in feature modules. It replaces `app/`, with the
+    same layout;
+  - `store-react/` puts `store/`'s modules behind a React app routed with
+    TanStack Router. Its loaders cancel their requests when you leave the
+    page, and `pnpm example store-react` starts its dev server.
+
+  Their tests run offline against `FetchTest`, as part of the test suite.
+  The old examples, which called an API that doesn't exist and were only
+  typechecked, are gone. See
+  [Examples](https://effetch.monarcode.dev/docs/examples).
 
 ## 0.1.0-rc.5
 

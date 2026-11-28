@@ -1,0 +1,113 @@
+:root {
+	--text: #1d1d1f;
+	--muted: #6e6e73;
+	--surface: #ffffff;
+	--line: #e3e3e6;
+	--accent: #2459d6;
+	color-scheme: light dark;
+	font-family: system-ui, sans-serif;
+	line-height: 1.5;
+	color: var(--text);
+	background: var(--surface);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--text: #f2f2f4;
+		--muted: #a1a1a6;
+		--surface: #161618;
+		--line: #2f2f33;
+		--accent: #7aa2ff;
+	}
+}
+
+body {
+	margin: 0;
+}
+
+header,
+main {
+	max-width: 44rem;
+	margin: 0 auto;
+	padding: 1rem;
+}
+
+header {
+	border-bottom: 1px solid var(--line);
+}
+
+a {
+	color: var(--accent);
+}
+
+.brand {
+	font-weight: 600;
+	text-decoration: none;
+}
+
+h1 {
+	text-transform: capitalize;
+}
+
+.categories {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+	gap: 0.5rem;
+	padding: 0;
+	list-style: none;
+}
+
+.products {
+	padding: 0;
+	list-style: none;
+}
+
+.products li {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.5rem 0;
+	border-bottom: 1px solid var(--line);
+}
+
+.products span,
+.pages span,
+.notice {
+	color: var(--muted);
+}
+
+.pages {
+	display: flex;
+	gap: 1rem;
+	align-items: center;
+	margin-top: 1rem;
+}
+
+.buy {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	align-items: center;
+	padding: 0.75rem;
+	border: 1px solid var(--line);
+	border-radius: 0.5rem;
+}
+
+.buy label {
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.buy input {
+	width: 5rem;
+}
+
+.buy p {
+	flex-basis: 100%;
+	margin: 0;
+}
+
+.price {
+	font-size: 1.5rem;
+}

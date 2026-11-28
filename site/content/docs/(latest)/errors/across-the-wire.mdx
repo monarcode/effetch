@@ -142,9 +142,27 @@ The URL and the response text do go, and so does a `DecodeError`'s
 of the URLs your server calls and out of the backend's responses, or catch
 the error and send one of your own.
 
-A `statusErrors` error, or one of `errors`, whose schema has no `_tag` goes
-with its place in the list, so it decodes with its own schema even when
-another has the same fields.
+A `statusErrors` error, or one of `errors`, whose schema sends no `_tag`
+goes with its schema's name: the `_tag` it leaves out, as
+`Schema.tagDefaultOmit` does, or else its identifier, such as a
+`Schema.Class`'s name. It decodes with the schema that has that name,
+wherever each side lists it. So when the server and the browser run
+different versions, an error both know still decodes, and one the browser
+doesn't know fails to decode, rather than turning into another.
+
+A schema without a name of its own, such as a plain struct or a second
+class named like another, goes by its place among those, so it only
+decodes as itself when both sides list them in the same order. The members
+of a plain `Schema.Union` each count as a schema. Give errors that cross a
+`_tag`, with `Schema.TaggedError`, or at least an identifier of their own:
+
+```ts
+import * as Schema from "effect/Schema";
+
+export const ApiProblem = Schema.Struct({ code: Schema.String }).annotate({
+  identifier: "ApiProblem",
+});
+```
 
 ## Use the error classes on their own
 

@@ -153,29 +153,27 @@ Calling an API from a web page on another origin? Read
 
 ## Examples
 
-[`examples/`](examples) has complete programs, typechecked with the package so
-they always match the current API:
+[`examples/`](examples) has programs that use Effetch for a real task,
+against free public APIs, with no key needed. Run one with
+`pnpm example <name>`:
 
-- [`basic.ts`](examples/basic.ts): a client in a service, the methods, and
-  handling each error.
-- [`builtins.ts`](examples/builtins.ts): the built-in plugins, and changing
-  them for one call.
-- [`plugins.ts`](examples/plugins.ts): writing plugins, from auth with a
-  service to a `wrap` with its own error.
-- [`endpoints.ts`](examples/endpoints.ts): the same app as `builtins.ts`, with
-  endpoints.
-- [`backends.ts`](examples/backends.ts): two backends in one file, with shared
-  plugins.
-- [`status-errors.ts`](examples/status-errors.ts): your own errors by status,
-  for every call, per endpoint and for one call.
-- [`streams.ts`](examples/streams.ts): Server-Sent Events, newline-delimited
-  JSON, and a list paged through by its `Link` header.
-- [`testing.ts`](examples/testing.ts): tests for the `app/` todos module,
-  against a fake backend made from its endpoints.
-- [`app/`](examples/app): a feature-sliced app, with clients as shared
-  infrastructure and each module defining its own endpoints.
+- [`github/`](examples/github): a repository and its open issues, with
+  endpoints, errors of your own, paging and a plugin.
+- [`sign-in/`](examples/sign-in): signing in, and renewing the access token
+  when it's refused.
+- [`live/`](examples/live): Wikipedia's edits and Lichess TV's moves, read
+  as they stream in.
+- [`upload/`](examples/upload): a file and form fields, as a multipart body.
+- [`bff/`](examples/bff): a server's call errors sent to the browser over
+  Effect RPC, with `Fetch.errorCodec`.
+- [`store/`](examples/store): an app in feature modules, with a workflow and
+  its tests.
+- [`store-react/`](examples/store-react): the same modules behind a React
+  app, whose TanStack Router loaders cancel their requests when you leave
+  the page.
 
-Its [README](examples/README.md) walks through each one.
+Each one has tests that run offline, against a fake backend. Its
+[README](examples/README.md) says how to run them, and what each shows.
 
 ## Development
 

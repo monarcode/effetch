@@ -102,7 +102,8 @@ the API's error body is decoded onto `HttpError`, and the client's plugins
 - Runtime support, as above.
 - Release status: `0.1.0` release candidate, API settled; the changelog
   lists anything that needs a change in your code.
-- Runnable programs in `examples/`.
+- Runnable programs in `examples/`, against free public APIs, each with
+  offline tests.
 
 Absent, and not to be invented: users, adopters or company logos,
 testimonials, download or adoption numbers, benchmarks, and claims of

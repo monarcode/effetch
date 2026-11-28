@@ -77,6 +77,22 @@
 			}
 		},
 		{
+			"files": ["examples/store-react/**"],
+			"plugins": [
+				"import",
+				"promise",
+				"typescript",
+				"unicorn",
+				"react",
+				"jsx-a11y"
+			],
+			"env": { "browser": true, "node": true },
+			"rules": {
+				"react/exhaustive-deps": "warn",
+				"jsx-a11y/alt-text": "error"
+			}
+		},
+		{
 			"files": ["site/**"],
 			"plugins": [
 				"import",
