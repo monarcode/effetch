@@ -2,7 +2,12 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
-## Unreleased
+## 0.1.0
+
+The first stable release. From here, an update within 0.1.x doesn't break
+code written for 0.1.0, apart from the few exceptions that
+[Versioning](https://effetch.monarcode.dev/docs/reference/compatibility#versioning)
+lists. The changes since 0.1.0-rc.5:
 
 ### Added
 
