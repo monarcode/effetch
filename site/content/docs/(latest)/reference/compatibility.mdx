@@ -12,13 +12,14 @@ CI tests separate from what Effetch is built for but CI doesn't test.
 Effetch has one peer dependency, `effect`, in the range `^4.0.0`. Install it
 next to Effetch, as [Installation](/docs/installation) shows.
 
-CI tests two versions in that range:
+CI tests three versions in that range:
 
 - **The full check** runs with the `effect` version pinned in Effetch's own
   `devDependencies`, which can be older than the newest 4.x. It covers
   types, tests, the build and the installed package.
-- **A second job** typechecks, tests and builds with `effect` 4.0.0, the
-  oldest version in the range.
+- **Two more jobs** typecheck, test and build with `effect` 4.0.0, the
+  oldest version in the range, and with the newest 4.x on npm, which is
+  what a new install gets.
 
 One feature needs Effect 4.1. From 4.1 on, a query value can be `Redacted`:
 it's sent as its value, and Effect keeps it out of its own logs. On 4.0,
@@ -38,10 +39,16 @@ CI tests:
 | Runtime                             | Tested in CI                               |
 | ----------------------------------- | ------------------------------------------ |
 | Node.js 24                          | Yes: the tests and the installed package   |
-| Node.js 20 and 22                   | No. The build targets ES2020.              |
+| Node.js 20 and 22                   | Yes: the installed package                 |
+| Bun 1 and Deno 2                    | Yes: the installed package                 |
 | Browsers                            | No. See [Platform notes](/docs/platforms). |
 | React Native, with Hermes and Metro | No. See [Platform notes](/docs/platforms). |
-| Bun and Deno                        | No                                         |
+
+"The installed package" is a test program in a project of its own, which
+installs Effetch from its packed tarball, as npm would install it. It makes
+calls, streams and pages through clients that answer in memory, including
+`FetchTest`. Effetch's own tests run on Node.js 24 only. Neither sends a
+real request, so CI doesn't test a runtime's own `fetch`.
 
 Effetch builds every URL as a string and never calls `new URL()` itself,
 since React Native's `URL` is incomplete. Effect's `HttpClient` does use
@@ -54,6 +61,9 @@ what that means on React Native, see
 The package is ESM only. It marks itself as free of side effects
 (`"sideEffects": false`), so bundlers drop what you don't import, and its
 `exports` map has a `types` and a `default` condition for each entry point.
+
+The JavaScript targets ES2020, so it runs without transpiling on any runtime
+that supports ES2020.
 
 ## TypeScript
 
@@ -73,6 +83,10 @@ CI checks the types with TypeScript 6.0.3, in three ways:
 - Effetch's tests and examples, and the examples in these docs, compile
   with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` on. The
   installed-package project compiles with them off.
+
+Two more jobs compile the installed-package project, under `NodeNext` and
+`Bundler`, with TypeScript 5.7, the oldest supported version, and with the
+newest TypeScript 7.
 
 ## What's next
 

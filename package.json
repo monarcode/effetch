@@ -80,6 +80,7 @@
 		"test:watch": "vitest",
 		"check:package": "publint --strict && attw --pack . --profile esm-only",
 		"smoke": "bash scripts/smoke.sh",
+		"compat": "bash scripts/compat.sh",
 		"check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run check:docs && pnpm run lint:effect && pnpm test && pnpm run build && pnpm run check:package && pnpm run smoke",
 		"prepublishOnly": "pnpm run check"
 	},

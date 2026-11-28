@@ -7,6 +7,11 @@ on:
    push:
       branches: [main]
    pull_request:
+   # Weekly, so a new Effect 4.x or TypeScript 7.x that breaks Effetch shows
+   # up without waiting for a push: those jobs install the newest versions.
+   schedule:
+      - cron: "0 6 * * 1"
+   workflow_dispatch:
 
 permissions:
    contents: read
@@ -67,6 +72,130 @@ jobs:
 
          - name: Build and test
            run: pnpm run typecheck && pnpm test && pnpm run build
+
+   newest-effect:
+      name: check (newest effect)
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+      steps:
+         - name: Check out repository
+           uses: actions/checkout@v7
+
+         - name: Set up pnpm
+           uses: pnpm/action-setup@v6
+           with:
+              version: 10.12.1
+
+         - name: Set up Node.js
+           uses: actions/setup-node@v7
+           with:
+              node-version: 24
+              cache: pnpm
+
+         - name: Install dependencies
+           run: pnpm install --frozen-lockfile
+
+         # The peer range is `^4.0.0`, so a new 4.x reaches users without a
+         # release of Effetch. The versions are looked up, because pnpm keeps
+         # the lockfile's version for a range it already satisfies.
+         # npm lists versions in publish order, so a backport can come last:
+         # sort them first.
+         - name: Install newest effect 4.x
+           shell: bash
+           run: |
+              set -euo pipefail
+              newest() {
+                npm view "$1@^4" version --json |
+                  node -p '[].concat(JSON.parse(require("fs").readFileSync(0, "utf8"))).sort((a, b) => a.localeCompare(b, "en", { numeric: true })).pop()'
+              }
+              effect="$(newest effect)"
+              vitest="$(newest @effect/vitest)"
+              for version in "$effect" "$vitest"; do
+                if ! [[ "$version" =~ ^4\.[0-9]+\.[0-9]+$ ]]; then
+                  echo "::error::Couldn't look up the newest 4.x version (got '$version')"
+                  exit 1
+                fi
+              done
+              echo "Testing effect@$effect with @effect/vitest@$vitest"
+              pnpm add --workspace-root --save-dev --save-exact \
+                "effect@$effect" "@effect/vitest@$vitest"
+
+         - name: Build and test
+           run: pnpm run typecheck && pnpm test && pnpm run build
+
+   # The installed package against the TypeScript versions and runtimes the
+   # docs name, beyond the `check` job's TypeScript 6 and Node.js 24. Each
+   # reuses the smoke test's consumer program (scripts/compat.sh).
+   compatibility:
+      name: ${{ matrix.name }}
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+      strategy:
+         fail-fast: false
+         matrix:
+            include:
+               - name: typescript 5.7 (oldest supported)
+                 mode: typescript
+                 target: "5.7"
+               - name: typescript 7
+                 mode: typescript
+                 target: "7"
+               - name: node.js 20
+                 mode: runtime
+                 target: node
+                 node: 20
+               - name: node.js 22
+                 mode: runtime
+                 target: node
+                 node: 22
+               - name: bun
+                 mode: runtime
+                 target: bun
+               - name: deno
+                 mode: runtime
+                 target: deno
+      steps:
+         - name: Check out repository
+           uses: actions/checkout@v7
+
+         - name: Set up pnpm
+           uses: pnpm/action-setup@v6
+           with:
+              version: 10.12.1
+
+         - name: Set up Node.js
+           uses: actions/setup-node@v7
+           with:
+              node-version: 24
+              cache: pnpm
+
+         - name: Install dependencies
+           run: pnpm install --frozen-lockfile
+
+         # Builds, packs and writes the consumer program the check reuses.
+         - name: Smoke test
+           run: pnpm run smoke
+
+         - name: Set up Node.js ${{ matrix.node }}
+           if: matrix.node
+           uses: actions/setup-node@v7
+           with:
+              node-version: ${{ matrix.node }}
+
+         - name: Set up Bun
+           if: matrix.target == 'bun'
+           uses: oven-sh/setup-bun@v2
+           with:
+              bun-version: 1.x
+
+         - name: Set up Deno
+           if: matrix.target == 'deno'
+           uses: denoland/setup-deno@v2
+           with:
+              deno-version: 2.x
+
+         - name: Check ${{ matrix.mode }} ${{ matrix.target }}
+           run: bash scripts/compat.sh ${{ matrix.mode }} ${{ matrix.target }}
 
    site:
       name: build docs site

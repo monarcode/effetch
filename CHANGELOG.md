@@ -8,6 +8,11 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 - The documentation site moved to https://effetch.monarcode.dev. The old
   address, https://effetch.pages.dev, still serves it.
+- CI now runs the installed package on Node.js 20 and 22, Bun 1 and Deno 2,
+  compiles it with TypeScript 5.7 (the oldest supported) and 7, and runs the
+  tests against the newest Effect 4.x. The
+  [Compatibility](https://effetch.monarcode.dev/docs/reference/compatibility)
+  page lists what each job covers.
 
 ## 0.1.0-rc.5
 

@@ -527,7 +527,8 @@ export function Specifications({ version }: { version: string }) {
 						<code className="spec-mono text-[0.92em] text-paper">
 							new URL()
 						</code>
-						, so it runs on Hermes too. CI tests on Node.js 24.
+						, so it runs on Hermes too. CI runs it on Node.js 20 to 24,
+						Bun and Deno.
 					</p>
 				</Spec>
 				<Spec term="Built on">Effect v4's HttpClient and Schema.</Spec>
