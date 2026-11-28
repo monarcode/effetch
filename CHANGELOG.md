@@ -61,6 +61,16 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ### Documentation
 
+- Effetch has a versioning policy, in the README and on the
+  [Compatibility](https://effetch.monarcode.dev/docs/reference/compatibility#versioning)
+  page. An update within 0.1.x doesn't break code written for 0.1.0: the
+  API, the fields errors encode to and the supported TypeScript versions
+  and runtimes stay as they are, and breaking changes wait for 0.2.0. The
+  exceptions follow Effect, which marks its HTTP modules and `encoding/Sse`
+  unstable: when they change, a 0.1.x update can change the types that come
+  from them, how Server-Sent Events behave, or the oldest `effect` it
+  supports. In 0.2.0, `retry` waits as a `Retry-After` header asks by
+  default. The "release candidate" notes are gone.
 - The examples are new. Each one does a real task against a free public
   API that needs no key, and runs with `pnpm example <name>`:
   - `github/` shows a repository and its open issues;

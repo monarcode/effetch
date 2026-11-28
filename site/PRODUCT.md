@@ -100,8 +100,11 @@ the API's error body is decoded onto `HttpError`, and the client's plugins
   compiles against the package (`scripts/check-docs.mjs`); 955 tests and
   246 checked examples at the time of writing.
 - Runtime support, as above.
-- Release status: `0.1.0` release candidate, API settled; the changelog
-  lists anything that needs a change in your code.
+- Release status: `0.1.0`. An update within 0.1.x doesn't break code
+  written for 0.1.0, and breaking changes wait for 0.2.0. The exceptions
+  follow Effect's unstable modules (its HTTP modules and `encoding/Sse`);
+  the Compatibility page's Versioning section has them, with the decided
+  `Retry-After` default for 0.2.0.
 - Runnable programs in `examples/`, against free public APIs, each with
   offline tests.
 

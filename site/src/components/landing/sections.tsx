@@ -533,10 +533,19 @@ export function Specifications({ version }: { version: string }) {
 				</Spec>
 				<Spec term="Built on">Effect v4's HttpClient and Schema.</Spec>
 				<Spec term="Status">
-					A release candidate,{" "}
-					<span className="spec-mono text-[0.9em]">{version}</span>, on the
-					way to 0.1.0. When a release candidate changes the API, the
-					changelog says what to change in your code.
+					<span className="spec-mono text-[0.9em]">{version}</span>. An
+					update within 0.1.x doesn't break your code, and a breaking
+					change waits for 0.2.0. The exceptions follow Effect's own
+					unstable modules:{" "}
+					<Link
+						to="/docs/$"
+						params={{ _splat: "reference/compatibility" }}
+						hash="versioning"
+						className="underline decoration-rule decoration-1 underline-offset-[0.3em] transition-colors duration-150 hover:decoration-paper"
+					>
+						Versioning
+					</Link>
+					.
 				</Spec>
 				<Spec term="Checked">
 					Every example in the docs and the README is compiled against the

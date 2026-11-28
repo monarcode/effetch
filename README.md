@@ -50,10 +50,12 @@ export const getTodo = (id: number) =>
 //        NetworkError | DecodeError | HttpError, Api>
 ```
 
-> **Release candidate.** Effetch is in release candidates (`0.1.0-rc.N`)
-> on the way to `0.1.0`. A release candidate can still change the API, and
-> when one does, the [changelog](./CHANGELOG.md) says what to change in your
-> code.
+> **Versioning.** An update within 0.1.x doesn't break code written for
+> 0.1.0, and breaking changes wait for 0.2.0, with notes in the
+> [changelog](./CHANGELOG.md). The exceptions follow Effect, which marks its
+> HTTP modules and Server-Sent Events parser unstable.
+> [Versioning](https://effetch.monarcode.dev/docs/reference/compatibility#versioning)
+> has the details.
 
 ## Documentation
 
