@@ -26,7 +26,9 @@ export class Api extends Fetch.Service<Api>()("Api", {
 ```
 
 `retryAfter: true` waits up to 1 minute, and `{ max }` up to `max`. It's
-off by default, so a server can't make your calls wait unless you allow it.
+off by default in 0.1.x, and
+[Versioning](/docs/reference/compatibility#versioning) says what 0.2.0
+changes.
 
 `retry` reads the header from a response it's about to retry, such as a
 `429` or `503`. The header can hold whole seconds (`Retry-After: 120`) or an

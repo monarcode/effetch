@@ -50,15 +50,17 @@ export const getTodo = (id: number) =>
 //        NetworkError | DecodeError | HttpError, Api>
 ```
 
-> **Release candidate.** Effetch is in release candidates (`0.1.0-rc.N`)
-> on the way to `0.1.0`. A release candidate can still change the API, and
-> when one does, the [changelog](./CHANGELOG.md) says what to change in your
-> code.
+> **Versioning.** An update within 0.1.x doesn't break code written for
+> 0.1.0, and breaking changes wait for 0.2.0, with notes in the
+> [changelog](./CHANGELOG.md). The exceptions follow Effect, which marks its
+> HTTP modules and Server-Sent Events parser unstable.
+> [Versioning](https://effetch.monarcode.dev/docs/reference/compatibility#versioning)
+> has the details.
 
 ## Documentation
 
-The guides and the API reference are at
-**[effetch.monarcode.dev/docs](https://effetch.monarcode.dev/docs)**.
+The guides and the API reference are in the
+**[Effetch website](https://effetch.monarcode.dev/)**.
 
 ## Install
 
@@ -153,29 +155,27 @@ Calling an API from a web page on another origin? Read
 
 ## Examples
 
-[`examples/`](examples) has complete programs, typechecked with the package so
-they always match the current API:
+[`examples/`](examples) has programs that use Effetch for a real task,
+against free public APIs, with no key needed. Run one with
+`pnpm example <name>`:
 
-- [`basic.ts`](examples/basic.ts): a client in a service, the methods, and
-  handling each error.
-- [`builtins.ts`](examples/builtins.ts): the built-in plugins, and changing
-  them for one call.
-- [`plugins.ts`](examples/plugins.ts): writing plugins, from auth with a
-  service to a `wrap` with its own error.
-- [`endpoints.ts`](examples/endpoints.ts): the same app as `builtins.ts`, with
-  endpoints.
-- [`backends.ts`](examples/backends.ts): two backends in one file, with shared
-  plugins.
-- [`status-errors.ts`](examples/status-errors.ts): your own errors by status,
-  for every call, per endpoint and for one call.
-- [`streams.ts`](examples/streams.ts): Server-Sent Events, newline-delimited
-  JSON, and a list paged through by its `Link` header.
-- [`testing.ts`](examples/testing.ts): tests for the `app/` todos module,
-  against a fake backend made from its endpoints.
-- [`app/`](examples/app): a feature-sliced app, with clients as shared
-  infrastructure and each module defining its own endpoints.
+- [`github/`](examples/github): a repository and its open issues, with
+  endpoints, errors of your own, paging and a plugin.
+- [`sign-in/`](examples/sign-in): signing in, and renewing the access token
+  when it's refused.
+- [`live/`](examples/live): Wikipedia's edits and Lichess TV's moves, read
+  as they stream in.
+- [`upload/`](examples/upload): a file and form fields, as a multipart body.
+- [`bff/`](examples/bff): a server's call errors sent to the browser over
+  Effect RPC, with `Fetch.errorCodec`.
+- [`store/`](examples/store): an app in feature modules, with a workflow and
+  its tests.
+- [`store-react/`](examples/store-react): the same modules behind a React
+  app, whose TanStack Router loaders cancel their requests when you leave
+  the page.
 
-Its [README](examples/README.md) walks through each one.
+Each one has tests that run offline, against a fake backend. Its
+[README](examples/README.md) says how to run them, and what each shows.
 
 ## Development
 
@@ -197,6 +197,7 @@ pnpm run check
 | `pnpm run check:docs`     | Checks every public export has a description, `@example` and `@since`, compiles every example in the JSDoc, this README and the docs site's pages, and checks the site's API reference matches the JSDoc. |
 | `pnpm run smoke`          | Packs the package, installs it in a fresh project, typechecks and runs a consumer, and checks go-to-definition, hovers and completions.                                                                   |
 | `pnpm run check`          | All of the above, plus publint and attw. CI runs it on every push to `main` and every pull request.                                                                                                       |
+| `pnpm run compat`         | After `smoke`, checks the installed package (not part of `check`; CI runs it) with another TypeScript version or runtime: `pnpm run compat typescript 5.7`, or `runtime node`, `bun` or `deno`.           |
 | `pnpm run build:site`     | Builds the package, then prerenders the docs site in `site/` to `site/dist/client`, failing on a type error in an example. `check` doesn't build the site; CI does.                                       |
 | `pnpm run docs:reference` | Writes the site's API reference pages from the JSDoc. Run it after changing a public export or its docs.                                                                                                  |
 | `pnpm run docs:snapshot`  | Freezes an older release line's docs into the site, such as `pnpm run docs:snapshot 0.1` when `0.2` starts.                                                                                               |

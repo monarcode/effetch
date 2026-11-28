@@ -24,7 +24,8 @@
    inline conditional types. One exception: `CallEffect` and the call
    signatures (`NoBodyMethod`, `BodyMethod`, `RequestMethod`, `Endpoint`)
    write out the members of `CallError` and `CallServices`, so hovers show
-   the errors rather than the alias. Keep them in sync; the type tests check
+   the errors rather than the alias, and `Fetch.errorCodec` writes out
+   those of `ErrorCodecErrors`. Keep them in sync; the type tests check
    each one against the aliases.
 4. **Runtime targets: browsers, React Native (Hermes/Metro), Node ≥ 20, Bun,
    Deno.** No `node:` imports, no Node globals, **no `new URL()`** (React

@@ -1,0 +1,20 @@
+{
+	// The app imports the store example's modules, which import each other
+	// with `.ts` extensions, and Effetch from `src`, as the tests do. Effect
+	// comes from the repository's root, so the app and the modules share one
+	// copy of it, whichever version the root has.
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"jsx": "react-jsx",
+		"allowImportingTsExtensions": true,
+		"types": ["vite/client", "node"],
+		"paths": {
+			"@monarcode/effetch": ["../../src/index.ts"],
+			"@monarcode/effetch/plugins": ["../../src/plugins/index.ts"],
+			"@monarcode/effetch/test": ["../../src/test/index.ts"]
+		}
+	},
+	"include": ["src", "vite.config.ts"]
+}

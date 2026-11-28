@@ -1,0 +1,10 @@
+{
+	// The examples import each other with `.ts` extensions, so Node.js runs
+	// them as they are, with no build step. Their `main.ts` files read
+	// `process.argv`.
+	"extends": "../tsconfig.json",
+	"compilerOptions": { "allowImportingTsExtensions": true, "types": ["node"] },
+	"include": ["."],
+	// A package of its own, with its own tsconfig.json.
+	"exclude": ["store-react"]
+}

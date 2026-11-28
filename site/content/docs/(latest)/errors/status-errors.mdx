@@ -178,10 +178,11 @@ need to repeat it on the endpoint. See
 
 ## See it in a full program
 
-[`examples/status-errors.ts`](https://github.com/monarcode/effetch/blob/main/examples/status-errors.ts)
-puts all of this in one program, and
-[`examples/app`](https://github.com/monarcode/effetch/tree/main/examples/app)
-uses it across modules.
+[`examples/github`](https://github.com/monarcode/effetch/tree/main/examples/github)
+turns GitHub's `404` into an error of its own on each endpoint, and tells a
+rate limit apart from other `403`s by its message, for every call.
+[`examples/store`](https://github.com/monarcode/effetch/tree/main/examples/store)
+uses them across modules.
 
 ## What's next
 

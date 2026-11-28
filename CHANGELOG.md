@@ -2,12 +2,98 @@
 
 All notable changes to `@monarcode/effetch`, newest first.
 
-## Unreleased
+## 0.1.0
+
+The first stable release. From here, an update within 0.1.x doesn't break
+code written for 0.1.0, apart from the few exceptions that
+[Versioning](https://effetch.monarcode.dev/docs/reference/compatibility#versioning)
+lists. The changes since 0.1.0-rc.5:
+
+### Added
+
+- `Fetch.errorCodec` builds a codec (a schema with a JSON encoding) for
+  every error a call can fail with, to send its failures where only data
+  goes: an Effect RPC's `error`, a server-rendered page, a worker. The
+  other side gets the same errors back, typed as on the server: an
+  `HttpError`'s body is decoded again from the response text with the
+  call's error schema, and the `statusErrors` errors come back as their own
+  classes.
+  - Give it a bound endpoint (`Fetch.errorCodec(todos.get)`), a definition
+    and its client (`Fetch.errorCodec(getTodo, { client: Api })`), or the
+    schemas of a plain method call
+    (`Fetch.errorCodec({ error: ApiError, statusErrors: { 404: NotFound } })`).
+  - Add plugins' errors, such as `TimeoutError`, as `errors`.
+  - Headers, a `NetworkError`'s `cause` and a `DecodeError`'s `issue` stay
+    behind.
+  - An error whose schema sends no `_tag` goes with its schema's name,
+    the `_tag` it leaves out or its identifier, such as a class's name, so
+    it decodes with its own schema, even when the other side lists its
+    errors in another order. A schema without a name of its own goes by
+    its place among those, so both sides must list them in the same order.
+
+  It comes with the types `ErrorCodec`, `ErrorCodecErrors`,
+  `ErrorCodecSource`, `ErrorCodecClient` and `ErrorCodecOptions`. A new
+  page,
+  [Send errors across the wire](https://effetch.monarcode.dev/docs/errors/across-the-wire),
+  shows it with an RPC.
+
+### Fixed
+
+- `HttpError`, `NetworkError` and `DecodeError` now encode to JSON and
+  decode back into the same classes, so they can be an Effect RPC's `error`
+  or cross from the server to the browser. Before,
+  `Schema.toCodecJson(Fetch.HttpError)` couldn't decode any `HttpError`, and
+  the other two couldn't be encoded. What's sent:
+  - an `HttpError` goes without its headers, which decode as empty, so
+    `set-cookie` and the like stay where they were. Its `body` goes when
+    it's JSON. A body decoded into something else, such as a class,
+    doesn't, and decodes as `undefined`.
+  - a `NetworkError` goes without its `cause`, and a `DecodeError` without
+    its `issue`. Both decode as `undefined`.
+
+  Constructing the errors and reading their fields are unchanged. Their
+  schemas' `Encoded` types now match what's sent.
 
 ### Changed
 
 - The documentation site moved to https://effetch.monarcode.dev. The old
   address, https://effetch.pages.dev, still serves it.
+- CI now runs the installed package on Node.js 20 and 22, Bun 1 and Deno 2,
+  compiles it with TypeScript 5.7 (the oldest supported) and 7, and runs the
+  tests against the newest Effect 4.x. The
+  [Compatibility](https://effetch.monarcode.dev/docs/reference/compatibility)
+  page lists what each job covers.
+
+### Documentation
+
+- Effetch has a versioning policy, in the README and on the
+  [Compatibility](https://effetch.monarcode.dev/docs/reference/compatibility#versioning)
+  page. An update within 0.1.x doesn't break code written for 0.1.0: the
+  API, the fields errors encode to and the supported TypeScript versions
+  and runtimes stay as they are, and breaking changes wait for 0.2.0. The
+  exceptions follow Effect, which marks its HTTP modules and `encoding/Sse`
+  unstable: when they change, a 0.1.x update can change the types that come
+  from them, how Server-Sent Events behave, or the oldest `effect` it
+  supports. In 0.2.0, `retry` waits as a `Retry-After` header asks by
+  default. The "release candidate" notes are gone.
+- The examples are new. Each one does a real task against a free public
+  API that needs no key, and runs with `pnpm example <name>`:
+  - `github/` shows a repository and its open issues;
+  - `sign-in/` signs in and renews the access token;
+  - `live/` reads Wikipedia's edits and Lichess TV's moves as they stream;
+  - `upload/` sends a multipart body;
+  - `bff/` sends a server's call errors to the browser with
+    `Fetch.errorCodec`;
+  - `store/` is an app in feature modules. It replaces `app/`, with the
+    same layout;
+  - `store-react/` puts `store/`'s modules behind a React app routed with
+    TanStack Router. Its loaders cancel their requests when you leave the
+    page, and `pnpm example store-react` starts its dev server.
+
+  Their tests run offline against `FetchTest`, as part of the test suite.
+  The old examples, which called an API that doesn't exist and were only
+  typechecked, are gone. See
+  [Examples](https://effetch.monarcode.dev/docs/examples).
 
 ## 0.1.0-rc.5
 

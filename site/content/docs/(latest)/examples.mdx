@@ -1,49 +1,74 @@
 ---
 title: Examples
-description: Find a complete program that uses Effetch, typechecked with the package.
+description: Run complete programs that use Effetch against free public APIs, and read their tests.
 ---
 
-The guides show one feature at a time. When you want to see several of them
-working together in a whole program, look in the repository's
+The guides show one feature at a time. The repository's
 [`examples/`](https://github.com/monarcode/effetch/tree/main/examples)
-folder.
+folder has programs that use them together for a real task, against free
+public APIs that need no key or account. Each one prints what it did, so
+you can run it, then read its code.
 
-The examples are typechecked with the package on the `main` branch, which
-can be ahead of the latest release. To read them as they were at your
-version, switch GitHub's branch menu to that release's tag, such as
-`v0.1.0-rc.4`.
+## Run an example
 
-The folder has these programs:
+Clone the repository, run `pnpm install`, then name the example:
 
-- [`basic.ts`](https://github.com/monarcode/effetch/blob/main/examples/basic.ts):
-  a client in a service, the methods, and handling each error.
-- [`builtins.ts`](https://github.com/monarcode/effetch/blob/main/examples/builtins.ts):
-  the built-in plugins, and changing them for one call.
-- [`plugins.ts`](https://github.com/monarcode/effetch/blob/main/examples/plugins.ts):
-  writing plugins, from auth with a service to a `wrap` with its own error.
-- [`endpoints.ts`](https://github.com/monarcode/effetch/blob/main/examples/endpoints.ts):
-  the same app as `builtins.ts`, with endpoints.
-- [`backends.ts`](https://github.com/monarcode/effetch/blob/main/examples/backends.ts):
-  two backends in one file, with shared plugins.
-- [`status-errors.ts`](https://github.com/monarcode/effetch/blob/main/examples/status-errors.ts):
-  your own errors by status, for every call, per endpoint and for one call.
-- [`streams.ts`](https://github.com/monarcode/effetch/blob/main/examples/streams.ts):
-  Server-Sent Events, newline-delimited JSON, and a list paged through by its
-  `Link` header.
-- [`testing.ts`](https://github.com/monarcode/effetch/blob/main/examples/testing.ts):
-  tests for the `app/` todos module, against a fake backend made from its
-  endpoints.
-- [`app/`](https://github.com/monarcode/effetch/tree/main/examples/app): a
-  feature-sliced app, with clients as shared infrastructure and each module
-  defining its own endpoints.
+```sh
+pnpm example github
+```
+
+This builds the package if its source has changed, then runs the
+example's `main.ts`. It needs Node.js 22.18 or later, which runs TypeScript
+files as they are. `pnpm example store-react` starts that app's dev server
+instead.
+
+The public APIs can be slow, rate-limited or down. The examples' tests
+don't call them: each one runs against a fake backend made with
+`FetchTest`, offline. Run them with `pnpm vitest run examples`.
+
+The examples on the `main` branch can be ahead of the latest release. To
+read them as they were at your version, switch GitHub's branch menu to that
+release's tag, such as `v0.1.0`.
+
+## The examples
+
+Read them in this order, since each builds on the ones before it:
+
+- [`github/`](https://github.com/monarcode/effetch/tree/main/examples/github):
+  shows a repository and its open issues, with a client as a service,
+  endpoints, errors of your own for a `404` and a rate limit, paging by the
+  `Link` header, `Retry-After` and a plugin of your own.
+- [`sign-in/`](https://github.com/monarcode/effetch/tree/main/examples/sign-in):
+  signs in, renews the access token with `bearer`'s `refresh` when the
+  server refuses it, and signs out. The session is an Effect service.
+- [`live/`](https://github.com/monarcode/effetch/tree/main/examples/live):
+  prints Wikipedia's edits as Server-Sent Events, and the moves of Lichess
+  TV's game as newline-delimited JSON, with a client for each backend.
+- [`upload/`](https://github.com/monarcode/effetch/tree/main/examples/upload):
+  uploads a file and form fields as a multipart body, after checking the
+  file's size.
+- [`bff/`](https://github.com/monarcode/effetch/tree/main/examples/bff): a
+  server calls a backend, and a browser client calls the server over Effect
+  RPC. `Fetch.errorCodec` sends the call's errors across, and the example
+  prints what crossed.
+- [`store/`](https://github.com/monarcode/effetch/tree/main/examples/store):
+  a shop app in feature modules, with a workflow that spans two of them, a
+  `ManagedRuntime` for the UI, and the workflow's tests.
+- [`store-react/`](https://github.com/monarcode/effetch/tree/main/examples/store-react):
+  the same modules behind a React app routed with TanStack Router. Its
+  loaders run their calls with the store's runtime and the route's abort
+  signal, so leaving a page cancels its request. A missing product is the
+  router's not-found page, and the other errors reach the route's error
+  component, typed.
 
 The examples'
 [README](https://github.com/monarcode/effetch/blob/main/examples/README.md)
-walks through each one, and explains how `app/` is laid out.
+lists the APIs each one calls, and explains how `store/` and
+`store-react/` are laid out.
 
 ## What's next
 
-- [Structure an app](/docs/structuring-an-app): see the layout that `app/`
-  follows, and when to use it.
-- [Test with a fake backend](/docs/testing): write tests like the ones in
-  `testing.ts`.
+- [Structure an app](/docs/structuring-an-app): see the layout that
+  `store/` follows, and when to use it.
+- [Test with a fake backend](/docs/testing): write tests like the
+  examples' own.

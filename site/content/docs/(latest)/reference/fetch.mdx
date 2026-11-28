@@ -275,6 +275,10 @@ An empty body (204, HEAD, …) is decoded as JSON `null`, so it only passes sche
 
 A stream (`api.sse`, `api.ndjson` or a `stream` endpoint) fails with a `DecodeError` while it's read: when an event's data or a line doesn't decode (the message names it, as in `Line 3 doesn't match the output schema`), when the body breaks off, and, for `api.sse`, when the response's `Content-Type` isn't `text/event-stream`.
 
+### Fetch.errorCodec [#errorcodec]
+
+Builds a codec for every error a call can fail with: a schema whose JSON encoding (`Schema.toCodecJson`) turns each error into JSON, and decodes it back into the same class, typed as the call types it. Use it to send a call's failures where only data goes: to the browser from a server-rendered page, to an RPC client, to a worker.
+
 ### Fetch.HttpError [#httperror]
 
 The error a call fails with when the server answers with a status outside 200–299. Its fields:
@@ -282,7 +286,7 @@ The error a call fails with when the server answers with a status outside 200–
 - `method`: the request's HTTP method.
 - `url`: the request URL without its query string, so secrets in query parameters stay out of logs.
 - `status`: the response's status code.
-- `headers`: the response headers. They're Effect `Headers`, so sensitive ones (`set-cookie`, `authorization`, …) print as `<redacted>` when the error is logged or serialized.
+- `headers`: the response headers. They're Effect `Headers`, so sensitive ones (`set-cookie`, `authorization`, …) print as `<redacted>` when the error is logged or passed to `JSON.stringify`. The error's JSON encoding leaves them out (see below).
 - `text`: the raw response body, always (`""` if it couldn't be read).
 - `body`: the body decoded with the call's `error` schema (or the client's `defaultError`), or `undefined` if it didn't match. Without an `error` schema, `body` is the parsed JSON when `text` is valid JSON, else `undefined`. An empty body is always `undefined`. Reading `body` never fails the call.
 
@@ -317,6 +321,35 @@ What a call can fail with: `NetworkError`, `HttpError`, `DecodeError` when there
 ### Fetch.CaughtStatus [#caughtstatus]
 
 The error [`catchStatus`](#catchstatus)'s handler gets: an `HttpError` whose `status` is narrowed to the statuses `S` it was given. Its `body` is `unknown`: to read it typed by the `error` schema, use `Effect.catchTag("HttpError", …)`.
+
+### Fetch.ErrorCodec [#errorcodec-type]
+
+What [`errorCodec`](#errorcodec) returns: a codec, the schema for the errors a call can fail with, `E`, whose JSON encoding can cross to a browser, a worker or an RPC client. `RD` and `RE` are the services its schemas need to decode and encode, `never` for most.
+
+### Fetch.ErrorCodecClient [#errorcodecclient]
+
+The client [`errorCodec`](#errorcodec) takes the `defaultError` and `statusErrors` of: a `Fetch.Service` class, or anything with a `config` like one.
+
+### Fetch.ErrorCodecErrors [#errorcodecerrors]
+
+The errors [`errorCodec`](#errorcodec) describes for a source `S`, a client `C` and more errors `Es`: the call's errors, as [`CallError`](#callerror) gives them, without the plugins' errors, plus `Es`.
+
+### Fetch.ErrorCodecOptions [#errorcodecoptions]
+
+Options for [`errorCodec`](#errorcodec).
+
+<auto-type-table
+  path="node_modules/@monarcode/effetch/dist/ErrorCodec.d.ts"
+  name="ErrorCodecOptions"
+/>
+
+### Fetch.ErrorCodecSource [#errorcodecsource]
+
+Where [`errorCodec`](#errorcodec) reads a call's error schemas from: anything with the `output`, `error` and `statusErrors` an endpoint has.
+
+- An endpoint, bound to a client. It already carries the client's `defaultError` and `statusErrors`.
+- A definition made with `Fetch.endpoint`, at module level. It only knows its own schemas, so give the client as `client`.
+- The schemas themselves, for calls made with the plain methods: `{ error: ApiError, statusErrors: { 404: NotFound } }`.
 
 ### Fetch.FetchError [#fetcherror]
 

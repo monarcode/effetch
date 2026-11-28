@@ -1,4 +1,10 @@
 {
 	"title": "Errors",
-	"pages": ["index", "catching", "status-errors", "logging-and-defects"]
+	"pages": [
+		"index",
+		"catching",
+		"status-errors",
+		"logging-and-defects",
+		"across-the-wire"
+	]
 }

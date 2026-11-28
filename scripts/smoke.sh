@@ -494,6 +494,33 @@ if (
 	throw new Error(`Unexpected stream result: ${JSON.stringify(streamed)}`);
 }
 
+// Errors sent as JSON and decoded back: by their own classes, and by
+// Fetch.errorCodec with an endpoint's schemas.
+const sentError = new Fetch.HttpError({
+	method: "GET",
+	url: "https://api.test/todos/9",
+	status: 500,
+	headers: Headers.fromInput({ "set-cookie": "session=secret" }),
+	text: '{"code":"down"}',
+	body: { code: "down" },
+});
+const errorJson = Schema.toCodecJson(Fetch.HttpError);
+const classWire = JSON.stringify(Schema.encodeUnknownSync(errorJson)(sentError));
+const fromClass = Schema.decodeUnknownSync(errorJson)(JSON.parse(classWire));
+const missingErrors = Schema.toCodecJson(Fetch.errorCodec(getMissing));
+const endpointWire = JSON.stringify(
+	Schema.encodeUnknownSync(missingErrors)(new TodoNotFound({ message: "No todo 9" })),
+);
+const fromEndpoint = Schema.decodeUnknownSync(missingErrors)(JSON.parse(endpointWire));
+if (
+	classWire.includes("secret") ||
+	!(fromClass instanceof Fetch.HttpError) ||
+	JSON.stringify(fromClass.body) !== '{"code":"down"}' ||
+	!(fromEndpoint instanceof TodoNotFound)
+) {
+	throw new Error(`Unexpected errors over JSON: ${classWire} ${endpointWire}`);
+}
+
 console.log("smoke: ok");
 TS
 

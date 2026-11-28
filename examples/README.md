@@ -1,34 +1,54 @@
 # Examples
 
-Complete programs using Effetch. They're typechecked with the package
-(`pnpm run typecheck`), so they match the API on the branch you're reading,
-which on `main` can be ahead of the latest release.
+Programs that use Effetch for a real task, against real, free APIs. None of
+them needs a key or an account. Run one, read what it prints, then read its
+code.
 
-| Example                                | What it shows                                                                                                                  |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| [`basic.ts`](basic.ts)                 | A client in a service, the methods (`get`, `post`, `patch`, `del`) and handling each error.                                    |
-| [`builtins.ts`](builtins.ts)           | The built-in plugins (`logger`, `consoleLogger`, `retry`, `timeout`, `bearer`) and per-call overrides.                         |
-| [`plugins.ts`](plugins.ts)             | Writing plugins: auth with a service, a header with options, a `wrap` with its own error, error reporting.                     |
-| [`endpoints.ts`](endpoints.ts)         | The same app as `builtins.ts` with endpoints: defined with `Fetch.endpoint`, shared with `Fetch.Endpoints`.                    |
-| [`backends.ts`](backends.ts)           | Two backends in one file: a client and endpoints for each, shared plugins, and each backend's errors caught next to its calls. |
-| [`status-errors.ts`](status-errors.ts) | Your own errors by status: client-wide, per endpoint, a 400 told apart by its `code`, a renamed field, a one-off call.         |
-| [`streams.ts`](streams.ts)             | Streams and pages: a job's progress as SSE, an NDJSON export, an answer that ends with `[DONE]`, and a list paged by `Link`.   |
-| [`testing.ts`](testing.ts)             | Tests for the `app/` todos module against `FetchTest`: a fake backend from its endpoints, errors by status, and what was sent. |
-| [`app/`](app)                          | A feature-sliced app: clients as shared infrastructure, each module defining its own endpoints next to its schemas.            |
+## Run an example
 
-`endpoints.ts` and `backends.ts` keep everything in one file, which suits a
-small app. `app/` is a layout for an app with many endpoints and modules.
+From the repository, after `pnpm install`:
 
-A client shared as a service is a `Fetch.Service` class, with its layer as
-`.layer`: `Api` in most examples, `UsersClient` and `WalletClient` in
-`backends.ts`, and `AppApiClient` and `WalletApiClient` in `app/`. A record of
-definitions shared as a service is a `Fetch.Endpoints` class: `TodoApi` in
-`endpoints.ts`, `status-errors.ts` and `app/`, `StreamsApi` in `streams.ts`,
-and `UsersApi` and `WalletApi` in `backends.ts`. The one endpoints service
-written by hand is the `WalletApi` of `app/`, which shows `client.endpoint`:
-`makeWalletApi` makes its endpoints from the client.
+```sh
+pnpm example github
+```
 
-## `app/`: endpoints in a feature-sliced app
+`pnpm example` builds the package if `src` has changed since the last
+build, then runs the example's `main.ts` with Node.js. That needs Node.js
+22.18 or later, which runs TypeScript files as they are. Some examples take
+arguments, which their `main.ts` lists, such as
+`pnpm example github facebook/react`.
+
+`pnpm example store-react` starts that app's dev server instead: open the
+address it prints. It's a package of its own in the workspace, so
+`pnpm install` at the root installs React, TanStack Router and Vite for it.
+
+The examples call public services, which can be slow, rate-limited or down.
+Their tests don't: each one runs against a fake backend made with
+`FetchTest`, offline, as part of `pnpm test`. To run only the examples'
+tests, use `pnpm vitest run examples`.
+
+## The examples
+
+Read them in this order. Each one builds on what the ones before it show.
+
+| Example                       | What it does                                                                                                       | What it shows                                                                                                                                                                                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`github/`](github)           | Shows a GitHub repository and its newest open issues.                                                              | A client as a service, endpoints with a typed query, GitHub's error body, `404` and rate-limit errors of your own, paging by the `Link` header, `Retry-After`, an optional token, a plugin of your own.                                                                                         |
+| [`sign-in/`](sign-in)         | Signs in to DummyJSON, renews the access token when it's refused, and signs out.                                   | A session as an Effect service, `bearer` with `refresh`, a second client for the auth calls, `consoleLogger`, and testing the refresh.                                                                                                                                                          |
+| [`live/`](live)               | Prints the next edits to Wikipedia, then the moves of the game Lichess TV is showing.                              | Server-Sent Events and newline-delimited JSON, a union per line, ending a stream, and two clients for two backends.                                                                                                                                                                             |
+| [`upload/`](upload)           | Uploads a file and two form fields to httpbin, which echoes what it received.                                      | A plain `post` call with a multipart body, a list field, a file size check with an error of your own, and retrying a `POST` that's safe to send again.                                                                                                                                          |
+| [`bff/`](bff)                 | A server that calls DummyJSON, and a browser client that calls the server over Effect RPC.                         | `Fetch.errorCodec`: the call's errors cross to the client as JSON, and come back as the same classes. The example prints what crossed.                                                                                                                                                          |
+| [`store/`](store)             | A shop app in modules: products and a cart, with a workflow that buys the cheapest product.                        | A feature-sliced layout, endpoints next to their module's schemas, a workflow with domain errors, a `ManagedRuntime` for the UI, and testing the workflow.                                                                                                                                      |
+| [`store-react/`](store-react) | The `store/` modules behind a React app: categories, pages of products, a product's page, and buying the cheapest. | TanStack Router loaders that run their calls with the store's `ManagedRuntime` and the route's abort signal, `ProductNotFound` as the router's not-found, typed errors in an error component, search params checked by an Effect schema, a form that runs the workflow, and testing the routes. |
+
+Each example's files start with a comment that says what they're for. The
+APIs:
+[GitHub's REST API](https://docs.github.com/en/rest),
+[DummyJSON](https://dummyjson.com/docs),
+[Wikimedia EventStreams](https://wikitech.wikimedia.org/wiki/Event_Platform/EventStreams_HTTP_Service),
+[Lichess](https://lichess.org/api) and [httpbin](https://httpbin.org).
+
+## `store/`: endpoints in a feature-sliced app
 
 > **This folder structure is a personal preference:** the layout Effetch's
 > author uses in their own apps (React Native, with Expo). Effetch doesn't
@@ -37,64 +57,62 @@ written by hand is the `WalletApi` of `app/`, which shows `client.endpoint`:
 > in [the rules it follows](#the-rules-it-follows).
 
 ```text
-app/
+store/
 ├── infrastructure/
 │   └── http/
-│       ├── plugins.ts               shared plugins and errors: auth, SessionExpired
-│       ├── app-api-client.ts        AppApiClient: the main backend's client
-│       └── wallet-api-client.ts     WalletApiClient: a second backend's client
+│       └── store-api-client.ts    StoreApiClient: how to reach the backend
 ├── modules/
-│   ├── todos/
+│   ├── products/
 │   │   ├── contract/
-│   │   │   └── todos.ts             schemas, errors, endpoints: Todo, TodoNotFound, getTodo, …
+│   │   │   └── products.ts        schemas, errors, endpoints: Product, ProductNotFound, getProduct, …
 │   │   ├── data/
-│   │   │   └── todo.api.ts          TodoApi: the endpoints, bound to a client
-│   │   ├── todo.layer.ts            the module's live layers
-│   │   └── public.ts                what other code may import
-│   └── wallet/
+│   │   │   └── product.api.ts     ProductApi: the endpoints, bound to the client
+│   │   ├── products.layer.ts      the module's live layers
+│   │   └── public.ts              what other code may import
+│   └── cart/
 │       ├── contract/
-│       │   └── wallet.ts            schemas and errors: Balance, Transfer, TransferLimitExceeded
+│       │   └── cart.ts            schemas and endpoints: Cart, NewCart, createCart
 │       ├── data/
-│       │   └── wallet.api.ts        WalletApi: the module's endpoints
+│       │   └── cart.api.ts        CartApi
 │       ├── application/
-│       │   └── send-money.ts        a workflow over WalletApi
-│       ├── wallet.layer.ts
+│       │   └── buy-cheapest.ts    a workflow over ProductApi and CartApi
+│       ├── cart.test.ts           the workflow, tested against a fake backend
+│       ├── cart.layer.ts
 │       └── public.ts
-├── runtime.ts                       composition root: modules, clients, HttpClient
-└── main.ts                          code using the modules
+├── runtime.ts                     composition root: modules, client, HttpClient
+└── main.ts                        code using the modules, as a screen would
 ```
 
-Read it in that order: a client, a module, the runtime, then `main.ts`.
+Read it in that order: the client, a module, the runtime, then `main.ts`.
 
 ### The rules it follows
 
 1. **A client file says how to reach a backend, and nothing else:** its base
-   URL, the body of its errors, what a status means from every endpoint (its
-   `statusErrors`, such as `401: SessionExpired`) and its plugins. It holds
-   no endpoints and no module schemas, and never imports a module, so it
-   stays the same size however many endpoints the app has.
-2. **A module's endpoints sit next to its schemas, and its `data/` folder
-   connects them to the client it talks to.** `todos` defines them in
-   `contract/todos.ts` with `Fetch.endpoint`, which needs no client, and
-   declares them as a service in `data/` with `Fetch.Endpoints`. `wallet` makes them in `data/`
-   with `client.endpoint`, importing the schemas from `contract/`. Both give
-   the same endpoints; use the first when something should read the routes
-   and schemas without a client. Either way, dependencies point one way:
-   module → infrastructure, never back. An endpoint's own `statusErrors`
-   (`404: TodoNotFound`) sit with it, and the module's `public.ts` exports
-   those errors, so other code can catch them.
-3. **Endpoints are bound or made once, when the module's layer is built,**
-   never in code that runs per request.
-4. **Every module's data service is its endpoints** (`TodoApi`,
-   `WalletApi`): one line per operation, and every type inferred, so every
-   `data/` folder looks the same.
-5. **An operation that isn't one HTTP call is a workflow in `application/`.**
-   `sendMoney` reads the balance, fails with `InsufficientFunds` when it's too
-   low, then sends the transfer. The endpoints stay plain; the rules live in
-   the workflow.
-6. **The runtime composes the module layers on top of the client layers, on
-   top of one `HttpClient`.** A new module is one line in `runtime.ts`; a new
-   backend is one client file and one line.
+   URL, the body of its errors, what a status means from every endpoint,
+   and its plugins. It holds no endpoints and no module schemas, and never
+   imports a module, so it stays the same size however many endpoints the
+   app has.
+2. **A module's endpoints sit next to its schemas,** in `contract/`, defined
+   with `Fetch.endpoint`, which needs no client. So anything can read their
+   routes and schemas, such as the fake backend in `cart.test.ts`. An
+   endpoint's own `statusErrors` (`404: ProductNotFound`) sit with it, and
+   the module's `public.ts` exports those errors, so other code can catch
+   them.
+3. **Every module's data service is its endpoints,** bound to the client
+   with `Fetch.Endpoints` in `data/`: one line per operation, and every type
+   inferred, so every `data/` folder looks the same. They're bound once,
+   when the module's layer is built, never in code that runs per request.
+4. **An operation that isn't one HTTP call is a workflow in `application/`.**
+   `buyCheapest` finds the cheapest product in a category, fails with
+   `NothingToBuy` or `OutOfStock`, then makes the cart. The endpoints stay
+   plain; the rules live in the workflow.
+5. **Dependencies point one way:** a module imports the infrastructure,
+   and other modules through their `public.ts`, never the other way. The
+   cart's workflow uses the products module through its `public.ts`.
+6. **The runtime composes the module layers on top of the client layer, on
+   top of one `HttpClient`.** A new module is one line in `runtime.ts`; a
+   new backend is one client file and one line. The UI runs effects with
+   the `ManagedRuntime` it exports.
 7. **Other code imports a module through its `public.ts`,** and never sees a
    route, a schema it doesn't need or a client.
 
@@ -103,8 +121,8 @@ Read it in that order: a client, a module, the runtime, then `main.ts`.
 - A module with 20 or more endpoints still has one definition and one line in
   `data/` per endpoint, inside the module. Nothing outside the module grows.
 - When one module's endpoints serve separate concerns, split them into
-  several services, each in its own file (`wallet.api.ts` and
-  `transaction.api.ts`), and merge their layers in the module's
+  several services, each in its own file (`cart.api.ts` and
+  `checkout.api.ts`), and merge their layers in the module's
   `<module>.layer.ts`.
 - When a module needs another implementation of its data service, such as an
   offline one or a fake for UI work, declare the service's interface by hand
@@ -112,7 +130,56 @@ Read it in that order: a client, a module, the runtime, then `main.ts`.
 - When a capability gets its own screens, consumers and API, make it a module
   of its own.
 
-### With one backend
+### With several backends
 
-Drop `wallet-api-client.ts`: every module uses `AppApiClient`. The layout is
-otherwise the same.
+Add a client file per backend in `infrastructure/http/`, each with its own
+base URL, error body and plugins, and merge their layers in `runtime.ts`.
+Each module uses the client of the backend it talks to. [`live/`](live) has
+two clients for two backends on one `HttpClient`.
+
+## `store-react/`: the modules behind a React app
+
+```text
+store-react/
+├── src/
+│   ├── store.ts          the store's modules, runtime and types, from store/
+│   ├── root.tsx          the root route, with the runtime in the router's context
+│   ├── home.tsx          /: the categories
+│   ├── category.tsx      /categories/$category?page=2: a page of products, and buying
+│   ├── product.tsx       /products/$productId: a product, or the not-found
+│   ├── route-error.tsx   what a route shows when its loader fails
+│   ├── messages.ts       what the screens say about each error
+│   ├── use-action.ts     runs an effect from a form, with its pending state
+│   ├── router.ts         the route tree and the router
+│   ├── main.tsx          the app: the router, on the store's runtime
+│   ├── styles.css
+│   └── app.test.ts       the routes and the messages, against a fake backend
+├── index.html
+├── vite.config.ts
+├── tsconfig.json
+└── package.json
+```
+
+1. **The app adds screens, and nothing else.** What it calls comes from
+   `store/`'s `public.ts` files and its runtime, which `src/store.ts`
+   imports once: the same modules `store/main.ts` uses.
+2. **The runtime is in the router's context,** so each loader runs its
+   effect with `runtime.runPromise(effect, { signal: abortController.signal })`.
+   When the navigation moves on, TanStack Router aborts that signal, which
+   interrupts the effect and cancels its request. The router doesn't preload
+   on hover, as a preloaded loader would go on when the page is left. The
+   tests give the router a runtime on a fake backend instead.
+3. **A loader's errors reach the route as they are.** `ProductNotFound`,
+   and a page past the last one, become the router's `notFound()`, which
+   shows the route's `notFoundComponent`. The rest go to `RouteError`, which tells them apart
+   by class.
+4. **An action the user starts runs with `useAction`.** Its effect has
+   handled every error, so its error type is `never`, and leaving the page
+   while it runs interrupts it.
+5. **Search params are an Effect schema.** `validateSearch` takes it as a
+   Standard Schema, so `?page=0` fails as the schema says, and the route's
+   `search` is typed from it.
+
+Here, Effetch comes from the repository's `src`, and Effect from the root's
+dependencies, so the app and the modules share one copy of each. In your
+own app, install both.

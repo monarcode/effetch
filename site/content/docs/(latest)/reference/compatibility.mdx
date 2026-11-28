@@ -1,24 +1,80 @@
 ---
 title: Compatibility
-description: The Effect versions, runtimes and TypeScript versions Effetch supports, and which of them CI tests.
+description: What an Effetch update can change, the Effect versions, runtimes and TypeScript versions Effetch supports, and which of them CI tests.
 ---
 
-Before you upgrade Effect, or add Effetch to a project on an unusual
-runtime, check here. This page lists what Effetch supports, and keeps what
-CI tests separate from what Effetch is built for but CI doesn't test.
+Before you upgrade Effetch or Effect, or add Effetch to a project on an
+unusual runtime, check here. This page says what an update can change,
+lists what Effetch supports, and keeps what CI tests separate from what
+Effetch is built for but CI doesn't test.
+
+## Versioning
+
+Effetch uses semantic versioning, with the rule most 0.x packages follow:
+while it's at 0.x, the second number marks a breaking change. So an update
+within 0.1.x doesn't break code written for 0.1.0, apart from the
+exceptions below. A breaking change waits for 0.2.0, and the
+[changelog](https://github.com/monarcode/effetch/blob/main/CHANGELOG.md)
+says what to change in your code.
+
+Through 0.1.x, these stay as they are:
+
+- **The API.** What the package's entry points export
+  (`@monarcode/effetch`, `@monarcode/effetch/plugins` and
+  `@monarcode/effetch/test`, and their `Fetch` and `FetchTest` subpaths),
+  their types, and the behavior these docs describe.
+- **What errors send.** The fields of the JSON that `Fetch.errorCodec` and
+  the error classes encode to, so a server and a browser on different 0.1.x
+  versions still read each other's errors.
+- **What Effetch supports.** TypeScript 5.7 and later, and the runtimes on
+  this page. Dropping one of them is a breaking change.
+
+An update can add exports, options and methods. It can also fix a bug, even
+when your code relied on the old behavior, if that behavior contradicted the
+docs. The changelog lists each fix under **Fixed**.
+
+Some things aren't part of the API, so any update can change them. These
+include the wording of error messages, the lines the `logger` and
+`consoleLogger` plugins print, and how a type displays in your editor. An error keeps its fields, but the
+wording of its message can change.
+
+Two exceptions come from Effect, which marks some of the modules Effetch
+builds on as unstable:
+
+- **Effect's HTTP modules.** Effetch's types use `HttpClient`,
+  `HttpClientRequest`, `HttpClientResponse`, `Headers` and the other
+  `effect/http` modules. When an Effect 4.x release changes them, a 0.1.x
+  update of Effetch follows. That can change the types that come from those
+  modules, or raise the oldest `effect` version Effetch supports, and the
+  changelog says when it does.
+- **Server-Sent Events.** `api.sse`, and endpoints with `stream: "sse"`,
+  read events with Effect's `encoding/Sse`. A 0.1.x update can change how
+  these streams behave, to keep up with it. Their JSDoc says
+  `@stability unstable`, which your editor shows on hover. Newline-delimited
+  JSON streams aren't affected: Effetch reads them itself.
+
+You get a newer Effect 4.x by updating `effect` alone, since the peer range,
+`^4.0.0`, takes it. CI tests the newest 4.x every week, and when one needs a
+fix in Effetch, the fix ships as a 0.1.x update.
+
+One change is decided for 0.2.0. In 0.1.x, `retry` waits as a `Retry-After`
+header asks only when you pass `retryAfter`. In 0.2.0, it waits that way by
+default, for up to 1 minute, so an existing `retry` can wait longer. To keep
+the 0.1 behavior, pass `retryAfter: false`, which 0.1.x already accepts.
 
 ## Effect
 
 Effetch has one peer dependency, `effect`, in the range `^4.0.0`. Install it
 next to Effetch, as [Installation](/docs/installation) shows.
 
-CI tests two versions in that range:
+CI tests three versions in that range:
 
 - **The full check** runs with the `effect` version pinned in Effetch's own
   `devDependencies`, which can be older than the newest 4.x. It covers
   types, tests, the build and the installed package.
-- **A second job** typechecks, tests and builds with `effect` 4.0.0, the
-  oldest version in the range.
+- **Two more jobs** typecheck, test and build with `effect` 4.0.0, the
+  oldest version in the range, and with the newest 4.x on npm, which is
+  what a new install gets.
 
 One feature needs Effect 4.1. From 4.1 on, a query value can be `Redacted`:
 it's sent as its value, and Effect keeps it out of its own logs. On 4.0,
@@ -38,10 +94,16 @@ CI tests:
 | Runtime                             | Tested in CI                               |
 | ----------------------------------- | ------------------------------------------ |
 | Node.js 24                          | Yes: the tests and the installed package   |
-| Node.js 20 and 22                   | No. The build targets ES2020.              |
+| Node.js 20 and 22                   | Yes: the installed package                 |
+| Bun 1 and Deno 2                    | Yes: the installed package                 |
 | Browsers                            | No. See [Platform notes](/docs/platforms). |
 | React Native, with Hermes and Metro | No. See [Platform notes](/docs/platforms). |
-| Bun and Deno                        | No                                         |
+
+"The installed package" is a test program in a project of its own, which
+installs Effetch from its packed tarball, as npm would install it. It makes
+calls, streams and pages through clients that answer in memory, including
+`FetchTest`. Effetch's own tests run on Node.js 24 only. Neither sends a
+real request, so CI doesn't test a runtime's own `fetch`.
 
 Effetch builds every URL as a string and never calls `new URL()` itself,
 since React Native's `URL` is incomplete. Effect's `HttpClient` does use
@@ -54,6 +116,9 @@ what that means on React Native, see
 The package is ESM only. It marks itself as free of side effects
 (`"sideEffects": false`), so bundlers drop what you don't import, and its
 `exports` map has a `types` and a `default` condition for each entry point.
+
+The JavaScript targets ES2020, so it runs without transpiling on any runtime
+that supports ES2020.
 
 ## TypeScript
 
@@ -73,6 +138,10 @@ CI checks the types with TypeScript 6.0.3, in three ways:
 - Effetch's tests and examples, and the examples in these docs, compile
   with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` on. The
   installed-package project compiles with them off.
+
+Two more jobs compile the installed-package project, under `NodeNext` and
+`Bundler`, with TypeScript 5.7, the oldest supported version, and with the
+newest TypeScript 7.
 
 ## What's next
 

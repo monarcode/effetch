@@ -1,5 +1,61 @@
 import * as Headers from "effect/http/Headers";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as SchemaGetter from "effect/SchemaGetter";
+
+// The errors encode to JSON, so they can cross to a browser, a worker or an
+// RPC client, and decode back into the same classes. What isn't safe or
+// isn't JSON stays behind: these fields aren't encoded. Decoding never
+// fails on them, so values built in memory still decode as before.
+
+/**
+ * `HttpError.headers`: never sent, so `set-cookie` and the like stay put.
+ * Anything but an Effect `Headers` value decodes as empty, so headers can't
+ * be sent in either.
+ */
+const headersNotSent = Schema.optionalKey(Schema.Unknown).pipe(
+	Schema.decodeTo(Schema.declare(Headers.isHeaders), {
+		decode: SchemaGetter.transformOptional((headers) =>
+			Option.some(
+				Option.isSome(headers) && Headers.isHeaders(headers.value)
+					? headers.value
+					: Headers.empty,
+			),
+		),
+		encode: SchemaGetter.omit(),
+	}),
+);
+
+/**
+ * `NetworkError.cause` and `DecodeError.issue`: platform values, not JSON,
+ * so never sent. They decode as `undefined` when they're missing.
+ */
+const unknownNotSent = Schema.optionalKey(Schema.Unknown).pipe(
+	Schema.decodeTo(Schema.Unknown, {
+		decode: SchemaGetter.transformOptional((value) =>
+			Option.some(Option.getOrUndefined(value)),
+		),
+		encode: SchemaGetter.omit(),
+	}),
+);
+
+const isJson = Schema.is(Schema.Json);
+
+/**
+ * `HttpError.body`: sent when it's JSON, as it is without an error schema.
+ * A body decoded into something else, such as a class, stays behind, and
+ * decodes as `undefined`.
+ */
+const bodyAsJson = Schema.optionalKey(Schema.Unknown).pipe(
+	Schema.decodeTo(Schema.Unknown, {
+		decode: SchemaGetter.transformOptional((body) =>
+			Option.some(Option.getOrUndefined(body)),
+		),
+		encode: SchemaGetter.transformOptional((body) =>
+			Option.filter(body, (value) => value !== undefined && isJson(value)),
+		),
+	}),
+);
 
 /**
  * The error a call fails with when its request gets no response: a DNS
@@ -10,6 +66,10 @@ import * as Schema from "effect/Schema";
  * - `url`: the request URL without its query string, so secrets in query
  *   parameters stay out of logs.
  * - `cause`: the underlying error from the platform's HTTP client.
+ *
+ * It encodes to JSON, as its schema: `Schema.toCodecJson(Fetch.NetworkError)`
+ * sends `method` and `url`, and decodes a `NetworkError` whose `cause` is
+ * `undefined`. So an RPC or a server-rendered page can fail with it.
  *
  * @example
  * ```ts
@@ -32,7 +92,7 @@ export class NetworkError extends Schema.TaggedError<NetworkError>()(
 	{
 		method: Schema.String,
 		url: Schema.String,
-		cause: Schema.Unknown,
+		cause: unknownNotSent,
 	},
 ) {
 	/** `"<method> <url>: network error"`. */
@@ -51,7 +111,8 @@ export class NetworkError extends Schema.TaggedError<NetworkError>()(
  * - `status`: the response's status code.
  * - `headers`: the response headers. They're Effect `Headers`, so
  *   sensitive ones (`set-cookie`, `authorization`, …) print as
- *   `<redacted>` when the error is logged or serialized.
+ *   `<redacted>` when the error is logged or passed to `JSON.stringify`.
+ *   The error's JSON encoding leaves them out (see below).
  * - `text`: the raw response body, always (`""` if it couldn't be read).
  * - `body`: the body decoded with the call's `error` schema (or the
  *   client's `defaultError`), or `undefined` if it didn't match. Without an
@@ -63,6 +124,13 @@ export class NetworkError extends Schema.TaggedError<NetworkError>()(
  * error too: `fetch` follows redirects itself, so a 3xx only reaches you
  * with `redirect: "manual"` or a conditional request answered with
  * `304 Not Modified`. Catch it by `status` if you expect one.
+ *
+ * It encodes to JSON, as its schema, so an RPC or a server-rendered page
+ * can fail with it: `Schema.toCodecJson(Fetch.HttpError)` sends `method`,
+ * `url`, `status`, `text`, and `body` when it's JSON, and decodes an
+ * `HttpError`. The headers are never sent, and decode as empty. A `body`
+ * decoded into something other than JSON, such as a class, isn't sent
+ * either.
  *
  * Use {@link HttpError.With} for the type of an `HttpError` whose `body` was
  * decoded with a known schema. To handle some statuses at a call, use
@@ -94,9 +162,9 @@ export class HttpError extends Schema.TaggedError<HttpError>()("HttpError", {
 	method: Schema.String,
 	url: Schema.String,
 	status: Schema.Finite,
-	headers: Schema.declare(Headers.isHeaders),
+	headers: headersNotSent,
 	text: Schema.String,
-	body: Schema.Unknown,
+	body: bodyAsJson,
 }) {
 	/** `"<method> <url>: HTTP <status>"`. */
 	override get message(): string {
@@ -150,6 +218,10 @@ export declare namespace HttpError {
  *   `HttpClientError` when the body couldn't be read.
  * - `message`: a readable summary of `issue`.
  *
+ * It encodes to JSON, as its schema: `Schema.toCodecJson(Fetch.DecodeError)`
+ * sends every field but `issue`, and decodes a `DecodeError` whose `issue` is
+ * `undefined`.
+ *
  * An empty body (204, HEAD, …) is decoded as JSON `null`, so it only
  * passes schemas that accept nothing, such as `Schema.Void`. With
  * `Fetch.text(schema)`, an empty body fails too.
@@ -182,7 +254,7 @@ export class DecodeError extends Schema.TaggedError<DecodeError>()(
 		method: Schema.String,
 		url: Schema.String,
 		status: Schema.Finite,
-		issue: Schema.Unknown,
+		issue: unknownNotSent,
 		message: Schema.String,
 	},
 ) {}
