@@ -122,6 +122,7 @@ export const /*pages*/pages = Fetch./*paginate*/paginate(typed.bind(listTodos), 
 	request: () => ({}),
 	next: (todos, page) => (todos.length === 0 ? Option.none() : Option.some(page + 1)),
 });
+export const /*errorCodec*/errorCodec = Fetch.errorCodec(getTodo);
 export const namespace = /*fetchTestNamespace*/FetchTest;
 export const fetchNamespace = /*fetchNamespace*/Fetch;
 export const members = Fetch./*fetchMembers*/;
@@ -476,6 +477,24 @@ for (const [marker, errors, services] of [
 		`Hover on ${marker} doesn't show Effect.Effect or Stream<…, ${errors.join(" | ")}, ${services.join(" | ")}>: ${hover}`,
 	);
 }
+
+// Fetch.errorCodec's result hovers with the call's errors, not the
+// alias that computes them.
+const errorCodecHover = ts
+	.displayPartsToString(
+		service.getQuickInfoAtPosition(probe, at("errorCodec"))?.displayParts,
+	)
+	.replace(/\s+/g, " ");
+const errorCodecArgs = /: (Fetch\.)?ErrorCodec<(.*)>$/.exec(errorCodecHover);
+const errorCodecParts =
+	errorCodecArgs === null ? [] : splitTopLevel(errorCodecArgs[2], ",");
+expect(
+	errorCodecParts.length === 3 &&
+		members(errorCodecParts[0]).join(" | ") === callErrors.join(" | ") &&
+		errorCodecParts[1] === "never" &&
+		errorCodecParts[2] === "never",
+	`Hover on Fetch.errorCodec's result doesn't show ErrorCodec<${callErrors.join(" | ")}, never, never>: ${errorCodecHover}`,
+);
 
 // A Fetch.Endpoints service's endpoints hover as Endpoint types.
 const todosGetHover = ts

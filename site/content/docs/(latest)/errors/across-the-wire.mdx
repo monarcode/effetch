@@ -1,0 +1,179 @@
+---
+title: Send errors across the wire
+description: Send a call's errors from the server to the browser, an RPC client or a worker, and get the same typed errors back.
+---
+
+When your server makes the call and something else shows the result, the
+failure has to travel too. An Effect RPC, a server-rendered page and a
+worker only carry data, so each error is encoded to JSON on one side and
+decoded on the other. `Fetch.errorCodec` builds the codec that does that:
+a schema for every error a call can fail with, whose JSON encoding the
+other side decodes, so it catches the same errors, with the same types, as
+the server did.
+
+Before you send one, decide whether you should. An `HttpError` carries the
+URL your server called and the backend's response text. Often the browser
+needs less: catch the error on the server, and send an error of your own.
+
+## Send a call's errors over an RPC
+
+Give `Fetch.errorCodec` the endpoint the call uses, and use what it returns
+as the RPC's `error`. The following app shares one RPC between the server,
+which calls the backend, and the browser, which catches the failures:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Rpc from "effect/rpc/Rpc";
+import * as RpcClient from "effect/rpc/RpcClient";
+import * as RpcGroup from "effect/rpc/RpcGroup";
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+import { TimeoutError, timeout } from "@monarcode/effetch/plugins";
+
+class ApiProblem extends Schema.Class<ApiProblem>("ApiProblem")({
+  code: Schema.String,
+}) {}
+
+class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+  id: Schema.Finite,
+}) {}
+
+const Todo = Schema.Struct({ id: Schema.Finite, title: Schema.String });
+
+export class Api extends Fetch.Service<Api>()("Api", {
+  baseUrl: "https://api.example.com",
+  defaultError: ApiProblem,
+  statusErrors: { 404: TodoNotFound },
+  plugins: [timeout({ duration: "5 seconds" })],
+}) {}
+
+export const getTodo = Fetch.endpoint("GET /todos/:id", { output: Todo });
+
+// Shared: what the RPC takes, returns and fails with.
+export const GetTodo = Rpc.make("GetTodo", {
+  payload: { id: Schema.Finite },
+  success: Todo,
+  error: Fetch.errorCodec(getTodo, { client: Api, errors: [TimeoutError] }),
+});
+export const TodoRpcs = RpcGroup.make(GetTodo);
+
+// The server: the call's failures go to the browser as they are.
+export const handlers = TodoRpcs.toLayer(
+  Effect.gen(function* () {
+    const api = yield* Api;
+    const todos = api.bind(getTodo);
+    return { GetTodo: ({ id }) => todos({ params: { id } }) };
+  }),
+);
+
+// The browser: the same errors come back, typed as on the server.
+export const program = Effect.gen(function* () {
+  const client = yield* RpcClient.make(TodoRpcs);
+  return yield* client.GetTodo({ id: 9 }).pipe(
+    Effect.map((todo) => todo.title),
+    Effect.catchTag("TodoNotFound", (error) =>
+      Effect.succeed(`No todo ${error.id}`),
+    ),
+    Effect.catchTag("HttpError", (error) =>
+      Effect.succeed(error.body?.code ?? `HTTP ${error.status}`),
+    ),
+  );
+});
+```
+
+In the browser, `error.body` is an `ApiProblem` again, decoded from the
+response text as the server's call decoded it. `TodoNotFound` comes back as
+a `TodoNotFound`. When `Api` gains another status error, the RPC's errors
+include it, with nothing else to change.
+
+`getTodo` here is a definition, made at module level so the browser can
+import it. A definition only knows its own schemas, so `client` gives the
+client's `defaultError` and `statusErrors`. An endpoint bound to a client
+already has both, so inside an Effect, `Fetch.errorCodec(todos)` is enough.
+
+The browser then imports `Api` too, and its bundle has the class's config:
+the `baseUrl` and the plugins. If those are for the server only, give the
+schemas themselves instead, as the next section shows, and keep `Api` in a
+module the browser doesn't import.
+
+Plugins' errors aren't listed on an endpoint or a client. Add the ones your
+calls can fail with as `errors`, such as `TimeoutError`.
+
+## Send the errors of a plain method call
+
+A call made with `api.get` or the other methods has no endpoint to read.
+Give `Fetch.errorCodec` the call's schemas instead:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+const ApiProblem = Schema.Struct({ code: Schema.String });
+
+class TodoNotFound extends Schema.TaggedError<TodoNotFound>()("TodoNotFound", {
+  id: Schema.Finite,
+}) {}
+
+export const errors = Fetch.errorCodec({
+  error: ApiProblem,
+  statusErrors: { 404: TodoNotFound },
+});
+```
+
+Without `output`, the errors' type includes a `DecodeError`, as a call
+with an `output` schema can fail with one. An endpoint or a definition that
+has neither `output` nor `stream` can't, so its type leaves it out.
+
+## What's sent
+
+Each error goes as JSON, and some of its fields stay on the server:
+
+| Error                                    | What's sent                             | What stays behind                                                                                                             |
+| ---------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `HttpError`                              | `method`, `url`, `status` and `text`    | The headers, which decode as empty, so `set-cookie` and the like never leave the server. `body` is decoded again from `text`. |
+| `NetworkError`                           | `method` and `url`                      | `cause`, which decodes as `undefined`                                                                                         |
+| `DecodeError`                            | `method`, `url`, `status` and `message` | `issue`, which decodes as `undefined`                                                                                         |
+| Your `statusErrors` errors, and `errors` | What their own schemas encode           | Nothing                                                                                                                       |
+
+The URL and the response text do go, and so does a `DecodeError`'s
+`message`, which can quote values from the response body. Keep secrets out
+of the URLs your server calls and out of the backend's responses, or catch
+the error and send one of your own.
+
+A `statusErrors` error, or one of `errors`, whose schema has no `_tag` goes
+with its place in the list, so it decodes with its own schema even when
+another has the same fields.
+
+## Use the error classes on their own
+
+`Fetch.HttpError`, `Fetch.NetworkError` and `Fetch.DecodeError` are schemas
+that encode to JSON themselves, so you can also list them in a schema of
+your own:
+
+```ts
+import * as Schema from "effect/Schema";
+
+import { Fetch } from "@monarcode/effetch";
+
+export const errors = Schema.Union([
+  Fetch.HttpError,
+  Fetch.NetworkError,
+  Fetch.DecodeError,
+]);
+```
+
+They send what the table shows, with one difference: they don't know the
+call's error schema, so an `HttpError` sends its `body` when it's JSON, and
+the other side reads it as `unknown`. A body decoded into something else,
+such as a class, stays behind and decodes as `undefined`. To get a typed
+body back, use `Fetch.errorCodec`.
+
+## What's next
+
+- [Call errors](/docs/errors): see each error a call can fail with, and its
+  fields.
+- [Errors by status](/docs/errors/status-errors): turn statuses into errors
+  of your own, which the schema sends too.
+- [Endpoints](/docs/endpoints): define the endpoints whose errors you send.

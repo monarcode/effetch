@@ -57,8 +57,8 @@ export const getTodo = (id: number) =>
 
 ## Documentation
 
-The guides and the API reference are at
-**[effetch.monarcode.dev/docs](https://effetch.monarcode.dev/docs)**.
+The guides and the API reference are in the
+**[Effetch website](https://effetch.monarcode.dev/)**.
 
 ## Install
 

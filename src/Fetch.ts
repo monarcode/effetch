@@ -33,6 +33,14 @@ export {
 	NetworkError,
 } from "./Errors.js";
 export type { FetchError } from "./Errors.js";
+export { errorCodec } from "./ErrorCodec.js";
+export type {
+	ErrorCodec,
+	ErrorCodecClient,
+	ErrorCodecErrors,
+	ErrorCodecOptions,
+	ErrorCodecSource,
+} from "./ErrorCodec.js";
 export type {
 	AnySchema,
 	Args,

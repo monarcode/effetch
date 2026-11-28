@@ -4,6 +4,46 @@ All notable changes to `@monarcode/effetch`, newest first.
 
 ## Unreleased
 
+### Added
+
+- `Fetch.errorCodec` builds a codec (a schema with a JSON encoding) for
+  every error a call can fail with, to send its failures where only data
+  goes: an Effect RPC's `error`, a server-rendered page, a worker. The
+  other side gets the same errors back, typed as on the server: an
+  `HttpError`'s body is decoded again from the response text with the
+  call's error schema, and the `statusErrors` errors come back as their own
+  classes.
+  - Give it a bound endpoint (`Fetch.errorCodec(todos.get)`), a definition
+    and its client (`Fetch.errorCodec(getTodo, { client: Api })`), or the
+    schemas of a plain method call
+    (`Fetch.errorCodec({ error: ApiError, statusErrors: { 404: NotFound } })`).
+  - Add plugins' errors, such as `TimeoutError`, as `errors`.
+  - Headers, a `NetworkError`'s `cause` and a `DecodeError`'s `issue` stay
+    behind.
+
+  It comes with the types `ErrorCodec`, `ErrorCodecErrors`,
+  `ErrorCodecSource`, `ErrorCodecClient` and `ErrorCodecOptions`. A new
+  page,
+  [Send errors across the wire](https://effetch.monarcode.dev/docs/errors/across-the-wire),
+  shows it with an RPC.
+
+### Fixed
+
+- `HttpError`, `NetworkError` and `DecodeError` now encode to JSON and
+  decode back into the same classes, so they can be an Effect RPC's `error`
+  or cross from the server to the browser. Before,
+  `Schema.toCodecJson(Fetch.HttpError)` couldn't decode any `HttpError`, and
+  the other two couldn't be encoded. What's sent:
+  - an `HttpError` goes without its headers, which decode as empty, so
+    `set-cookie` and the like stay where they were. Its `body` goes when
+    it's JSON. A body decoded into something else, such as a class,
+    doesn't, and decodes as `undefined`.
+  - a `NetworkError` goes without its `cause`, and a `DecodeError` without
+    its `issue`. Both decode as `undefined`.
+
+  Constructing the errors and reading their fields are unchanged. Their
+  schemas' `Encoded` types now match what's sent.
+
 ### Changed
 
 - The documentation site moved to https://effetch.monarcode.dev. The old

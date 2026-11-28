@@ -17,6 +17,7 @@ describe("public entry points", () => {
 			"bytes",
 			"catchStatus",
 			"endpoint",
+			"errorCodec",
 			"isFetchError",
 			"isService",
 			"make",

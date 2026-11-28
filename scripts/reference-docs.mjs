@@ -59,6 +59,7 @@ const PAGES = [
 			"src/Input.ts": "Uploads",
 			"src/Errors.ts": "Errors",
 			"src/Status.ts": "Errors",
+			"src/ErrorCodec.ts": "Errors",
 			"src/Plugin.ts": "Plugins",
 			"src/Endpoint.ts": "Endpoint definitions",
 			"src/Endpoints.ts": "Endpoint definitions",

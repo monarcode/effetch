@@ -21,7 +21,7 @@ const parseBody = (text: string): unknown =>
 	text.trim() === "" ? undefined : JSON.parse(text);
 
 /** The parsed JSON of an error body, or `undefined` when it's empty or isn't JSON. */
-const parseErrorBody = (text: string): unknown => {
+export const parseErrorBody = (text: string): unknown => {
 	try {
 		return parseBody(text);
 	} catch {
@@ -29,7 +29,7 @@ const parseErrorBody = (text: string): unknown => {
 	}
 };
 
-const readErrorBody = <EB extends AnySchema>(
+export const readErrorBody = <EB extends AnySchema>(
 	json: unknown,
 	schema: EB | undefined,
 ): Effect.Effect<unknown, never, EB["DecodingServices"]> =>
